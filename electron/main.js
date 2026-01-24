@@ -127,8 +127,8 @@ let tray;
 let isPopupMode = false; // 追踪当前是否为弹窗模式
 
 // 窗口尺寸常量 - 调整为更精致紧凑的尺寸
-const DASHBOARD_SIZE = { width: 720, height: 520 };
-const POPUP_SIZE = { width: 620, height: 280 }; // 调整为横向布局尺寸
+const DASHBOARD_SIZE = { width: 722, height: 520 };
+const POPUP_SIZE = { width: 425, height: 200 }; // Updated based on Figma design
 
 // 确保单实例
 const gotTheLock = app.requestSingleInstanceLock();
@@ -153,40 +153,65 @@ if (process.defaultApp) {
 }
 
 function createTray() {
-  // 使用更简洁的图标设计
-  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAWElEQVR4nO3XUQrAMAwF0K5g1i3FqJ0uT0I8e8Qr/ARkG0t+E+Fd03N7o1o8F3c2XQAAAABJRU5ErkJggg==');
-  tray = new Tray(icon.resize({ width: 18, height: 18 }));
+  // 使用本地图标文件
+  const iconPath = path.join(__dirname, '../public/tray_icon.svg');
+  let icon;
   
-  // 添加点击菜单，类似图一的样式
-  tray.on('click', () => {
-    // 点击托盘图标时显示主界面
-    switchToDashboardMode();
-  });
+  if (existsSync(iconPath)) {
+    icon = nativeImage.createFromPath(iconPath);
+    // 设为模板图片，让 macOS 自动处理颜色（自动适配深色/浅色模式）
+    icon.setTemplateImage(true);
+  } else {
+    // Fallback if local icon not found (try png)
+    const pngPath = path.join(__dirname, '../public/icon.png');
+    if (existsSync(pngPath)) {
+        icon = nativeImage.createFromPath(pngPath);
+    } else {
+        icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAWElEQVR4nO3XUQrAMAwF0K5g1i3FqJ0uT0I8e8Qr/ARkG0t+E+Fd03N7o1o8F3c2XQAAAABJRU5ErkJggg==');
+    }
+  }
+  
+  tray = new Tray(icon.resize({ width: 18, height: 18 }));
+  tray.setToolTip('Prism');
   
   // 扩展上下文菜单，添加更多功能选项
   const contextMenu = Menu.buildFromTemplate([
-    { label: '打开控制台', click: () => switchToDashboardMode() },
-    { label: '检查更新', enabled: false, click: () => {} },
-    { label: '偏好设置', enabled: false, click: () => {} },
+    { label: 'Settings', click: () => switchToDashboardMode() },
+    { label: 'Check for Updates', enabled: true, click: () => { /* TODO */ } },
     { type: 'separator' },
-    { label: '帮助与反馈', enabled: false, click: () => {} },
-    { label: '关于 LinkMaster', enabled: false, click: () => {} },
-    { type: 'separator' },
-    { label: '退出 LinkMaster', click: () => {
+    { label: 'Quit Prism', click: () => {
         app.isQuitting = true;
         app.quit();
       } 
     }
   ]);
   
-  tray.setToolTip('LinkMaster Pro');
   tray.setContextMenu(contextMenu);
+
+  // 点击托盘图标显示/隐藏主界面
+  tray.on('click', () => {
+    // 如果是弹窗模式，则忽略点击
+    if (isPopupMode) return;
+    
+    if (mainWindow.isVisible()) {
+      if (mainWindow.isFocused()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } else {
+      switchToDashboardMode();
+    }
+  });
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: DASHBOARD_SIZE.width,
     height: DASHBOARD_SIZE.height,
+    minWidth: 800,
+    minHeight: 600,
     show: false, // 启动时隐藏主界面
     frame: false, // 无边框窗口，去除外轮廓
     transparent: true, // 允许透明，实现圆角
@@ -197,7 +222,9 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false
-    }
+    },
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 34, y: 34 } // Adjusted for p-4 (16px) + padding
   });
   
   // 监听窗口模式变化，动态调整窗口样式
@@ -213,6 +240,7 @@ function createWindow() {
         mainWindow.setWindowButtonVisibility(false);
       }
     } else {
+      mainWindow.setMinimumSize(800, 600);
       // 主界面模式：带边框，可调整大小
       mainWindow.setSize(DASHBOARD_SIZE.width, DASHBOARD_SIZE.height, true);
       mainWindow.setAlwaysOnTop(false);
@@ -237,6 +265,9 @@ function createWindow() {
     // 启动时不显示主界面，只在接收到URL或用户操作时显示
     if (isPopupMode) {
       switchToPopupMode('', '');
+    } else {
+      // 默认显示主界面，方便用户进行配置
+      switchToDashboardMode();
     }
   });
 
@@ -418,6 +449,20 @@ ipcMain.on('close-window', () => {
   mainWindow.hide();
   // 关闭窗口时重置为非弹窗模式
   isPopupMode = false;
+});
+
+ipcMain.on('minimize-window', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('maximize-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
 });
 
 ipcMain.on('resize-me', (event, { width, height }) => {

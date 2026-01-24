@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { BrowserApp } from '../types';
-import { X } from 'lucide-react';
+import { AppWindow } from 'lucide-react';
 
 interface SelectorPopupProps {
   url: string;
@@ -12,9 +12,8 @@ interface SelectorPopupProps {
   isStandalone?: boolean;
 }
 
-const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers, onSelect, onCancel, isStandalone = false }) => {
+const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers, onSelect, onCancel }) => {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
-  const [rememberChoice, setRememberChoice] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   const handleImageError = (browserId: string) => {
@@ -23,87 +22,103 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers,
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      if (e.key === 'ArrowRight') {
         setHighlightedIndex(prev => (prev + 1) % browsers.length);
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowLeft') {
         setHighlightedIndex(prev => (prev - 1 + browsers.length) % browsers.length);
       } else if (e.key === 'Enter') {
-        onSelect(browsers[highlightedIndex].id, rememberChoice);
+        onSelect(browsers[highlightedIndex].id, false);
       } else if (e.key === 'Escape') {
         onCancel();
       } else if (!isNaN(Number(e.key)) && Number(e.key) > 0 && Number(e.key) <= browsers.length) {
-        onSelect(browsers[Number(e.key) - 1].id, rememberChoice);
+        onSelect(browsers[Number(e.key) - 1].id, false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [browsers, highlightedIndex, onSelect, onCancel, rememberChoice]);
+  }, [browsers, highlightedIndex, onSelect, onCancel]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-white/70 backdrop-blur-2xl select-none animate-in zoom-in duration-200 overflow-hidden rounded-3xl border border-white/20">
-      {/* Source App Name */}
-      <div className="mb-8 text-center">
-        <div className="text-sm font-medium text-slate-500 tracking-wide uppercase">
-          {sourceApp || 'Open Link With'}
+    <div className="w-[425px] h-[200px] bg-white rounded-[15px] shadow-[0px_3px_18.5px_-3px_rgba(0,0,0,0.25)] flex flex-col overflow-hidden select-none font-sans relative">
+      
+      {/* Top Header Bar */}
+      <div className="flex gap-[7px] p-[7px] h-[54px] w-full box-border">
+        {/* Source App */}
+        <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
+          <div className="w-[14px] h-[14px] text-black">
+             {/* Placeholder for Source App Icon */}
+             <AppWindow size={14} strokeWidth={2.5} />
+          </div>
+          <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
+            {sourceApp || 'Link'}
+          </span>
+        </div>
+
+        {/* URL Display */}
+        <div className="flex-1 h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center px-3 overflow-hidden">
+          <span className="text-[12px] text-[#5C5C5C] truncate w-full font-normal leading-tight font-sans">
+            {url}
+          </span>
+        </div>
+
+        {/* Cancel Button */}
+        <div 
+          onClick={onCancel}
+          className="w-[79px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center cursor-pointer hover:bg-[#F0F0F0] active:bg-[#E8E8E8] transition-colors shrink-0"
+        >
+          <span className="text-[12px] text-black font-normal font-sans">Cancel</span>
         </div>
       </div>
 
-      {/* Browser Items */}
-      <div className="flex items-center justify-center gap-8 w-full overflow-x-auto px-4 pb-4 no-scrollbar">
-        {browsers.map((browser, idx) => {
-          const isSelected = idx === highlightedIndex;
-          const initial = browser.name.charAt(0).toUpperCase();
-          let bgColor = 'bg-slate-500';
-          
-          switch (browser.type) {
-            case 'arc': bgColor = 'bg-gradient-to-br from-[#FF9696] to-[#FF4D4D]'; break; // Pinkish Red
-            case 'safari': bgColor = 'bg-gradient-to-br from-[#4D94FF] to-[#0066CC]'; break; // Blue
-            case 'chrome': bgColor = 'bg-gradient-to-br from-[#FFD166] to-[#FF9900]'; break; // Yellow/Orange
-            case 'firefox': bgColor = 'bg-gradient-to-br from-[#FF6B6B] to-[#C92A2A]'; break; // Red
-            case 'edge': bgColor = 'bg-gradient-to-br from-[#38D9A9] to-[#087F5B]'; break; // Green/Teal
-            case 'brave': bgColor = 'bg-gradient-to-br from-[#FF922B] to-[#E8590C]'; break; // Orange
-            case 'comet': bgColor = 'bg-gradient-to-br from-[#868E96] to-[#495057]'; break; // Grey
-            default: bgColor = 'bg-gradient-to-br from-[#ADB5BD] to-[#868E96]'; // Light Grey
-          }
-          
-          return (
-            <button
-              key={browser.id}
-              onClick={() => onSelect(browser.id, rememberChoice)}
-              onMouseEnter={() => setHighlightedIndex(idx)}
-              className="flex flex-col items-center gap-4 group focus:outline-none"
-            >
-              <div className={`
-                w-24 h-24 rounded-2xl flex items-center justify-center transition-all duration-300
-                ${!browser.iconDataURL || imageErrors[browser.id] ? bgColor : 'bg-transparent'} 
-                ${isSelected ? 'scale-110 shadow-xl ring-4 ring-white/50' : 'scale-100 shadow-sm opacity-90 hover:opacity-100'}
-              `}>
-                {browser.iconDataURL && !imageErrors[browser.id] ? (
-                  <img 
-                    src={browser.iconDataURL} 
-                    alt={browser.name} 
-                    className="w-full h-full object-contain drop-shadow-md rounded-2xl" 
-                    onError={() => handleImageError(browser.id)}
-                  />
-                ) : (
-                  <span className="text-white font-bold text-5xl drop-shadow-md">{initial}</span>
-                )}
-              </div>
-              <span className={`text-sm font-medium transition-colors duration-200 ${isSelected ? 'text-slate-800' : 'text-slate-500'}`}>
-                {browser.name}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Browser Selection Area */}
+      <div className="mx-[7px] mb-[7px] flex-1 bg-[#F8F8F8] rounded-[10px] relative overflow-hidden flex items-center justify-center">
+        <div className="flex items-center justify-start max-w-full h-full px-2 gap-2 overflow-x-auto no-scrollbar">
+          {browsers.map((browser, idx) => {
+            const isSelected = idx === highlightedIndex;
+            const initial = browser.name.charAt(0).toUpperCase();
+            
+            return (
+              <div
+                key={browser.id}
+                onClick={() => onSelect(browser.id, false)}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                className={`
+                  relative w-[130px] h-[130px] rounded-[10px] flex flex-col items-center justify-center shrink-0 cursor-pointer transition-all duration-200
+                  ${isSelected ? 'bg-[#EEEEEE] border border-[#E1E1E1]' : 'bg-transparent border border-transparent hover:bg-[#F0F0F0]'}
+                `}
+              >
+                {/* Icon */}
+                <div className="w-[45px] h-[45px] mb-2 flex items-center justify-center">
+                  {browser.iconDataURL && !imageErrors[browser.id] ? (
+                    <img 
+                      src={browser.iconDataURL} 
+                      alt={browser.name} 
+                      className="w-full h-full object-contain drop-shadow-sm" 
+                      onError={() => handleImageError(browser.id)}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-slate-200 rounded-xl flex items-center justify-center">
+                       <span className="text-slate-500 font-bold text-xl">{initial}</span>
+                    </div>
+                  )}
+                </div>
 
-      {/* Close Button */}
-      <button 
-        onClick={onCancel} 
-        className="mt-6 p-2 rounded-full hover:bg-black/5 text-slate-400 hover:text-slate-600 transition-all active:scale-95"
-      >
-        <X size={20} />
-      </button>
+                {/* Name */}
+                <span className="text-[12px] font-[590] text-black mb-2 font-sans">
+                  {browser.name}
+                </span>
+
+                {/* Shortcut Key Hint */}
+                <div className="w-[20px] h-[20px] bg-white border border-[#E1E1E1] rounded-[5px] flex items-center justify-center shadow-sm mt-1">
+                  <span className="text-[10px] text-[#5C5C5C] font-normal font-mono leading-none">
+                    {idx + 1}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,0 +1,10 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Vertical -->
+  <path d="M12 4V20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Horizontal -->
+  <path d="M4 12H20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Diagonal TL-BR -->
+  <path d="M6.34 6.34L17.66 17.66" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Diagonal BL-TR -->
+  <path d="M6.34 17.66L17.66 6.34" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

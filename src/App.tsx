@@ -6,27 +6,34 @@ import Sidebar from './components/Sidebar';
 import SelectorPopup from './components/SelectorPopup';
 import RulesView from './components/RulesView';
 import SettingsView from './components/SettingsView';
+import DashboardView from './components/DashboardView';
 
 // 安全地获取ipcRenderer，避免直接使用window.require
 const getIpcRenderer = () => {
   if (typeof window === 'undefined') return null;
   
+  console.log('Checking for ipcRenderer...');
+  
   // 在渲染进程中，electron的ipcRenderer应该通过contextBridge暴露
   // 如果没有配置预加载脚本，尝试使用window.require（仅用于开发环境）
   if ((window as any).electron?.ipcRenderer) {
+    console.log('Found ipcRenderer via contextBridge');
     return (window as any).electron.ipcRenderer;
   }
   
   // 开发环境下的兼容处理
   if ((window as any).require) {
     try {
-      return (window as any).require('electron').ipcRenderer;
+      const electron = (window as any).require('electron');
+      console.log('Found ipcRenderer via window.require');
+      return electron.ipcRenderer;
     } catch (error) {
       console.error('Failed to require electron:', error);
       return null;
     }
   }
   
+  console.warn('ipcRenderer not found!');
   return null;
 };
 
@@ -48,6 +55,16 @@ const App: React.FC = () => {
       return MOCK_RULES;
     }
   });
+
+  const [history, setHistory] = useState<any[]>(() => {
+    try {
+      const savedHistory = localStorage.getItem('routingHistory');
+      return savedHistory ? JSON.parse(savedHistory) : [];
+    } catch (error) {
+      console.error('Failed to load history from localStorage:', error);
+      return [];
+    }
+  });
   
   const [activeUrl, setActiveUrl] = useState('');
   const [activeSource, setActiveSource] = useState('');
@@ -62,6 +79,15 @@ const App: React.FC = () => {
       console.error('Failed to save rules to localStorage:', error);
     }
   }, [rules]);
+
+  // 监听历史记录变化，保存到localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('routingHistory', JSON.stringify(history));
+    } catch (error) {
+      console.error('Failed to save history to localStorage:', error);
+    }
+  }, [history]);
   
   // 添加已安装IM应用的状态
   const [installedIMApps, setInstalledIMApps] = useState<Array<{ id: string; name: string; path: string }>>([]);
@@ -109,6 +135,8 @@ const App: React.FC = () => {
     if (ipcRenderer && browser && browser.path) {
        ipcRenderer.send('open-in-browser', { url: activeUrl, browserPath: browser.path });
        
+       addToHistory(activeUrl, activeSource, browserId, 'Manual');
+
        // 如果是弹窗模式，处理完后关闭窗口
        if (viewMode === 'popup') {
          console.log('Closing popup window after browser selection');
@@ -123,10 +151,32 @@ const App: React.FC = () => {
     }
   };
 
+  const handleClose = () => {
+    if (ipcRenderer) ipcRenderer.send('close-window');
+  };
+
+  const handleMinimize = () => {
+    if (ipcRenderer) ipcRenderer.send('minimize-window');
+  };
+
+  const handleMaximize = () => {
+    if (ipcRenderer) ipcRenderer.send('maximize-window');
+  };
+
   const addToHistory = (url: string, source: string, browserId: string, method: 'Manual' | 'Rule' | 'AI' | 'Default') => {
-    // Implementation of history logging (placeholder for now or actual implementation)
-    console.log('Adding to history:', { url, source, browserId, method });
-    // In a real app, you might save this to localStorage or send to main process
+    const newLog = {
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      url,
+      sourceApp: source,
+      routedToBrowserId: browserId,
+      method
+    };
+    setHistory(prev => [newLog, ...prev].slice(0, 100)); // Keep last 100 entries
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
   };
 
   // 核心路由逻辑
@@ -246,34 +296,44 @@ const App: React.FC = () => {
 
   // Main Interface
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-white font-sans antialiased">
-      {/* Sidebar */}
-      <Sidebar currentView={currentView} onChangeView={setCurrentView} />
-      
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <h1 className="text-xl font-semibold text-gray-900">
-            {currentView === AppView.RULES && '规则'}
-            {currentView === AppView.SETTINGS && '设置'}
-          </h1>
-        </header>
+    <div className="h-screen w-screen flex items-center justify-center bg-transparent font-sans antialiased p-4">
+      {/* Container with Shadow - Matching Figma Design */}
+      <div className="flex overflow-hidden bg-white rounded-[15px] shadow-[0px_5px_20px_0px_rgba(0,0,0,0.3)] w-full h-full">
+        {/* Sidebar */}
+        <Sidebar 
+          currentView={currentView} 
+          onChangeView={setCurrentView} 
+          onClose={handleClose}
+          onMinimize={handleMinimize}
+          onMaximize={handleMaximize}
+        />
         
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {currentView === AppView.RULES && (
-             <RulesView 
-               rules={rules} 
-               browsers={browsers} 
-               installedIMApps={installedIMApps}
-               onAddRule={r => setRules([...rules, r])} 
-               onDeleteRule={id => setRules(rules.filter(x => x.id !== id))} 
-             />
-          )}
-          {currentView === AppView.SETTINGS && <SettingsView />}
-        </div>
-      </main>
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white">
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            {currentView === AppView.DASHBOARD && (
+              <DashboardView 
+                history={history} 
+                browsers={browsers} 
+                onClearHistory={clearHistory}
+              />
+            )}
+            {currentView === AppView.SETTINGS && (
+              <div className="h-full overflow-y-auto p-6">
+                 <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight mb-6">General</h1>
+                 <SettingsView 
+                    rules={rules}
+                    browsers={browsers}
+                    installedIMApps={installedIMApps}
+                    onAddRule={r => setRules(prev => [...prev, r])}
+                    onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
+                  />
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

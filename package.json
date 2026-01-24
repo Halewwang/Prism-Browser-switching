@@ -1,7 +1,7 @@
 
 {
-  "name": "linkmaster-pro",
-  "productName": "LinkMaster Pro",
+  "name": "prism-app",
+  "productName": "Prism",
   "version": "1.2.5",
   "main": "electron/main.js",
   "author": "Hale",
@@ -14,8 +14,8 @@
     "dist": "npm run build && electron-builder --mac"
   },
   "build": {
-    "appId": "com.linkmaster.router",
-    "productName": "LinkMaster Pro",
+    "appId": "com.prism.app",
+    "productName": "Prism",
     "directories": {
       "output": "release"
     },
@@ -30,6 +30,7 @@
       "target": [
         "dmg"
       ],
+      "icon": "build/icon.png",
       "extendInfo": {
         "CFBundleURLTypes": [
           {
@@ -44,7 +45,7 @@
       }
     },
     "dmg": {
-      "title": "安装 LinkMaster Pro",
+      "title": "Install Prism",
       "contents": [
         {
           "x": 130,

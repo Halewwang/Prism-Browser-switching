@@ -44,28 +44,26 @@ export const getBrowserIcon = (type: string, size = 6) => {
   const cls = `w-${size} h-${size}`;
   switch (type) {
     case 'chrome': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-red-500 via-yellow-500 to-green-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>C</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-br from-red-500 via-yellow-500 to-green-500 flex items-center justify-center text-white font-bold text-[10px]">C</div></div>;
     case 'safari': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>S</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-b from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-[10px]">S</div></div>;
     case 'firefox': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>F</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-br from-orange-400 via-red-500 to-purple-600 flex items-center justify-center text-white font-bold text-[10px]">F</div></div>;
     case 'brave': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>B</div>;
-    case 'vivaldi': 
-      return <div className={`${cls} rounded-full bg-red-600 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>V</div>;
-    case 'arc': 
-      return <div className={`${cls} rounded-full bg-gradient-to-tr from-pink-500 to-indigo-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>A</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white font-bold text-[10px]">B</div></div>;
     case 'edge': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>E</div>;
-    case 'comet': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>C</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-br from-green-400 via-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-[10px]">E</div></div>;
+    case 'arc': 
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-tr from-pink-300 via-purple-400 to-indigo-500 flex items-center justify-center text-white font-bold text-[10px]">A</div></div>;
+    case 'vivaldi': 
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-[10px]">V</div></div>;
     case 'opera': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>O</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-[10px]">O</div></div>;
     case 'opera-gx': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-red-500 to-blue-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>GX</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-gradient-to-br from-red-600 to-black flex items-center justify-center text-white font-bold text-[8px]">GX</div></div>;
     case 'chromium': 
-      return <div className={`${cls} rounded-full bg-gradient-to-br from-blue-500 via-green-500 to-red-500 flex items-center justify-center text-white font-black text-[10px] shadow-sm`}>Ch</div>;
+      return <div className={`${cls} rounded-full bg-white flex items-center justify-center shadow-sm overflow-hidden p-0.5`}><div className="w-full h-full rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-[10px]">Ch</div></div>;
     default: 
-      return <div className={`${cls} rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-black text-[10px] shadow-sm`}>?</div>;
+      return <div className={`${cls} rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-[10px] shadow-sm`}>?</div>;
   }
 };

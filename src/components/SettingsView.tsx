@@ -1,9 +1,25 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Cpu } from 'lucide-react';
+import { BrowserApp, RoutingRule } from '../types';
+import { Cpu, ListFilter, Info } from 'lucide-react';
+import RulesView from './RulesView';
 
-const SettingsView: React.FC = () => {
+interface SettingsViewProps {
+  rules?: RoutingRule[];
+  browsers?: BrowserApp[];
+  installedIMApps?: Array<{ id: string; name: string; path: string }>;
+  onAddRule?: (rule: RoutingRule) => void;
+  onDeleteRule?: (id: string) => void;
+}
+
+const SettingsView: React.FC<SettingsViewProps> = ({ 
+  rules = [], 
+  browsers = [], 
+  installedIMApps = [], 
+  onAddRule = () => {}, 
+  onDeleteRule = () => {} 
+}) => {
+  const [activeTab, setActiveTab] = useState<'general' | 'rules'>('rules');
   const [autoStart, setAutoStart] = useState(true);
-  const [enableAi, setEnableAi] = useState(true);
 
   // Simple Toggle Switch Component
   const ToggleSwitch = ({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) => (
@@ -15,7 +31,7 @@ const SettingsView: React.FC = () => {
         onClick={onClick}
         className={`
           relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200
-          ${active ? 'bg-blue-600' : 'bg-gray-200'}
+          ${active ? 'bg-black' : 'bg-gray-200'}
         `}>
         <span 
           className={`
@@ -28,74 +44,87 @@ const SettingsView: React.FC = () => {
   );
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Settings Sections */}
-      <div className="space-y-6">
-        {/* General Settings */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
-            <Cpu size={18} className="text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">系统设置</h3>
-          </div>
-          
-          <div>
-            <ToggleSwitch 
-              active={autoStart} 
-              onClick={() => setAutoStart(!autoStart)} 
-              label="开机自动激活服务"
-            />
-          </div>
-        </div>
+    <div className="h-full flex flex-col max-w-5xl mx-auto w-full">
+      {/* Tabs Header */}
+      <div className="flex space-x-1 bg-[#F8F8F8] p-1 rounded-full border border-[#E1E1E1] w-fit mb-6">
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`
+            px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2
+            ${activeTab === 'rules' 
+              ? 'bg-white text-black shadow-sm border border-[#E1E1E1]' 
+              : 'text-gray-500 hover:text-gray-900'}
+          `}
+        >
+          <ListFilter size={16} />
+          路由规则
+        </button>
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`
+            px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2
+            ${activeTab === 'general' 
+              ? 'bg-white text-black shadow-sm border border-[#E1E1E1]' 
+              : 'text-gray-500 hover:text-gray-900'}
+          `}
+        >
+          <Cpu size={16} />
+          通用设置
+        </button>
+      </div>
 
-        {/* AI Settings */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
-            <ShieldCheck size={18} className="text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">智能增强</h3>
-          </div>
-          
-          <div>
-            <ToggleSwitch 
-              active={enableAi} 
-              onClick={() => setEnableAi(!enableAi)} 
-              label="Gemini 路由语义分析"
-            />
-            
-            {enableAi && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                    <ShieldCheck size={16} className="text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">智能感知服务已连接</p>
-                    <p className="text-xs text-gray-500 mt-1">基于 Gemini 技术的智能路由推荐</p>
-                  </div>
+      {/* Content Area */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'rules' ? (
+          <RulesView 
+            rules={rules}
+            browsers={browsers}
+            installedIMApps={installedIMApps}
+            onAddRule={onAddRule}
+            onDeleteRule={onDeleteRule}
+          />
+        ) : (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {/* General Settings */}
+            <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
+              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-[#E1E1E1]">
+                <Cpu size={18} className="text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">系统设置</h3>
+              </div>
+              
+              <div>
+                <ToggleSwitch 
+                  active={autoStart} 
+                  onClick={() => setAutoStart(!autoStart)} 
+                  label="开机自动启动"
+                />
+              </div>
+            </div>
+
+            {/* About Section */}
+            <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
+              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-[#E1E1E1]">
+                <Info size={18} className="text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">关于</h3>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Prism for macOS</span>
+                  <span className="text-sm font-medium text-gray-900">1.2.5</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Build Version</span>
+                  <span className="text-sm font-medium text-gray-900">9021</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">License</span>
+                  <span className="text-sm font-medium text-gray-900">MIT</span>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* About Section */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">关于</h3>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-500">版本</span>
-              <span className="text-sm font-medium text-gray-900">1.2.5</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-500">构建号</span>
-              <span className="text-sm font-medium text-gray-900">9021</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-500">许可证</span>
-              <span className="text-sm font-medium text-gray-900">MIT</span>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

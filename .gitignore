@@ -25,3 +25,6 @@ dist-ssr
 
 # Build output
 release/
+
+# User data
+dev-user-data/
