@@ -1,0 +1,5 @@
+{
+  "name": "LinkMaster - macOS Browser Router",
+  "description": "Native macOS browser selector. Intercept links and choose your target browser on the fly.",
+  "requestFramePermissions": []
+}

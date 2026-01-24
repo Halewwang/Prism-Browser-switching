@@ -1,0 +1,32 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.linkmaster.router
+productName: LinkMaster Pro
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+      - index.html
+mac:
+  category: public.app-category.utilities
+  target:
+    - dmg
+  extendInfo:
+    CFBundleURLTypes:
+      - CFBundleURLSchemes:
+          - http
+          - https
+        CFBundleURLName: Web URL Handler
+        CFBundleTypeRole: Viewer
+dmg:
+  title: 安装 LinkMaster Pro
+  contents:
+    - x: 130
+      'y': 180
+    - x: 410
+      'y': 180
+      type: link
+      path: /Applications
+electronVersion: 29.4.6

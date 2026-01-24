@@ -1,0 +1,76 @@
+
+{
+  "name": "linkmaster-pro",
+  "productName": "LinkMaster Pro",
+  "version": "1.2.5",
+  "main": "electron/main.js",
+  "author": "Hale",
+  "type": "module",
+  "description": "原生 macOS 浏览器路由选择器",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.linkmaster.router",
+    "productName": "LinkMaster Pro",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "index.html"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "http",
+              "https"
+            ],
+            "CFBundleURLName": "Web URL Handler",
+            "CFBundleTypeRole": "Viewer"
+          }
+        ]
+      }
+    },
+    "dmg": {
+      "title": "安装 LinkMaster Pro",
+      "contents": [
+        {
+          "x": 130,
+          "y": 180
+        },
+        {
+          "x": 410,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.2",
+    "lucide-react": "^0.358.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0",
+    "tailwindcss": "^3.4.1"
+  }
+}
