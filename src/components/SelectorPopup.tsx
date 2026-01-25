@@ -1,8 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { BrowserApp } from '../types';
-import { AppWindow } from 'lucide-react';
-import { getSourceAppDetails } from '../constants';
+import { getSourceAppDetails } from '../utils/sourceApp';
 
 interface SelectorPopupProps {
   url: string;
@@ -17,8 +16,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers,
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  // Get mapped source app details
-  const sourceDetails = getSourceAppDetails(sourceApp || '');
+  const sourceAppDetails = getSourceAppDetails(sourceApp || '');
 
   const handleImageError = (browserId: string) => {
     setImageErrors(prev => ({ ...prev, [browserId]: true }));
@@ -49,12 +47,11 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers,
       <div className="flex gap-[7px] p-[7px] h-[54px] w-full box-border">
         {/* Source App */}
         <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
-          <div className="w-[14px] h-[14px] flex items-center justify-center text-black">
-             {/* Source App Icon */}
-             {sourceDetails.icon}
+          <div className="w-[14px] h-[14px] text-black flex items-center justify-center">
+             {sourceAppDetails.icon}
           </div>
           <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
-            {sourceDetails.name}
+            {sourceAppDetails.name}
           </span>
         </div>
 

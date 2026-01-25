@@ -1,7 +1,8 @@
 import React from 'react';
 import { ArrowRight, Zap, Trash2, Clock } from 'lucide-react';
 import { BrowserApp, HistoryLog } from '../types';
-import { getBrowserIcon, APP_ICONS, getSourceAppDetails } from '../constants';
+import { getBrowserIcon } from '../constants';
+import { getSourceAppDetails } from '../utils/sourceApp';
 
 interface DashboardViewProps {
   history: HistoryLog[];
@@ -46,8 +47,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
           <div className="space-y-[7px]">
             {history.map((log) => {
               const targetBrowser = browsers.find(b => b.id === log.routedToBrowserId);
-              const sourceDetails = getSourceAppDetails(log.sourceApp);
-              
+              const sourceAppDetails = getSourceAppDetails(log.sourceApp);
+
               return (
                 <div key={log.id} className="flex items-center gap-[7px] group">
                   {/* Main Info Pill */}
@@ -55,10 +56,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     {/* Source */}
                     <div className="flex items-center gap-2 min-w-[80px] shrink-0">
                        <div className="w-4 h-4 flex items-center justify-center">
-                          {sourceDetails.icon}
+                          {sourceAppDetails.icon}
                        </div>
                        <span className="text-[12px] font-[590] text-black truncate max-w-[80px]">
-                         {sourceDetails.name}
+                         {sourceAppDetails.name}
                        </span>
                     </div>
 

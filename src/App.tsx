@@ -183,7 +183,6 @@ const App: React.FC = () => {
   const processRouting = (url: string, source: string) => {
     console.log('Processing routing for:', { url, source });
     console.log('Current rules:', rules);
-    console.log('Installed browsers:', browsers);
     
     // 规范化sourceApp名称
     const normalizedSource = source.replace(/\.app$/i, '').trim().toLowerCase();
@@ -192,35 +191,21 @@ const App: React.FC = () => {
     
     let matchedRule = null;
     
-    // 1. 检查源应用规则
-    if (normalizedSource) {
+    // 1. 优先检查 URL 规则 (精确度更高)
+    matchedRule = rules.find(rule => {
+      if (!rule.active || rule.type !== RuleType.URL_PATTERN) return false;
+      const ruleValue = rule.value.trim().toLowerCase();
+      // 支持简单的通配符匹配或包含匹配
+      return ruleValue && normalizedUrl.includes(ruleValue);
+    });
+    
+    // 2. 如果没有 URL 规则，检查来源应用规则
+    if (!matchedRule && normalizedSource) {
       matchedRule = rules.find(rule => {
         if (!rule.active || rule.type !== RuleType.SOURCE_APP) return false;
-        
         const ruleValue = rule.value.replace(/\.app$/i, '').trim().toLowerCase();
-        
-        // Exact match or includes
-        // Also handle Chinese/English variations via hardcoded check if needed, 
-        // but generally ruleValue should match normalizedSource
-        
-        // Improve matching: Check if normalizedSource includes ruleValue OR ruleValue includes normalizedSource
-        // This helps if rule is "DingTalk" and source is "DingTalk.app" (handled) or "钉钉" (needs mapping)
-        
-        // Try to match alias if available
-        if (ruleValue === 'dingtalk' && (normalizedSource.includes('dingtalk') || normalizedSource.includes('钉钉'))) return true;
-        if ((ruleValue === 'wechat' || ruleValue === 'weixin') && (normalizedSource.includes('wechat') || normalizedSource.includes('weixin') || normalizedSource.includes('微信'))) return true;
-        if ((ruleValue === 'lark' || ruleValue === 'feishu') && (normalizedSource.includes('lark') || normalizedSource.includes('feishu') || normalizedSource.includes('飞书'))) return true;
-        
+        // 来源匹配逻辑：检查包含关系
         return ruleValue && normalizedSource.includes(ruleValue);
-      });
-    }
-    
-    // 2. 检查URL模式规则
-    if (!matchedRule) {
-      matchedRule = rules.find(rule => {
-        if (!rule.active || rule.type !== RuleType.URL_PATTERN) return false;
-        const ruleValue = rule.value.trim().toLowerCase();
-        return ruleValue && normalizedUrl.includes(ruleValue);
       });
     }
     
