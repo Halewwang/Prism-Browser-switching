@@ -310,7 +310,7 @@ function switchToDashboardMode() {
 }
 
 // 切换到弹窗模式
-function switchToPopupMode(url, sourceApp) {
+function switchToPopupMode(url, sourceApp, sourceAppIcon) {
   if (!mainWindow) return;
   isPopupMode = true;
   
@@ -339,7 +339,7 @@ function switchToPopupMode(url, sourceApp) {
   mainWindow.webContents.send('view-mode-change', 'popup');
   // 稍微延迟发送数据，确保 React 已渲染弹窗组件
   setTimeout(() => {
-    mainWindow.webContents.send('deep-link', { url, source: sourceApp });
+    mainWindow.webContents.send('deep-link', { url, source: sourceApp, sourceIcon: sourceAppIcon });
   }, 100);
 }
 
@@ -377,40 +377,76 @@ app.on('window-all-closed', () => {
   }
 });
 
+// Helper to get source app details
+async function getSourceAppInfo() {
+  return new Promise((resolve) => {
+    exec('lsappinfo visibleProcessList', async (error, stdout) => {
+      let sourceAppName = 'Unknown';
+      let sourceAppPath = '';
+      let sourceAppIcon = '';
+
+      if (!error && stdout) {
+        // Output format: ASN:0x...-"Name": ASN:0x...-"Name": ...
+        const matches = stdout.match(/-"([^"]+)"/g);
+        if (matches) {
+          const appNames = matches.map(m => m.slice(2, -1)); // Remove -" and "
+          // Filter out Prism itself and system apps
+          const ignoreList = ['Prism', 'Electron', 'Finder', '访达', 'Dock', 'SystemUIServer', 'TRAE', 'Terminal', 'iTerm2', 'Xcode'];
+          
+          for (const name of appNames) {
+             if (!ignoreList.includes(name)) {
+                sourceAppName = name;
+                break;
+             }
+          }
+        }
+      }
+
+      if (sourceAppName !== 'Unknown') {
+          try {
+             const pathOutput = await new Promise((res) => {
+                 exec(`lsappinfo info -only bundlepath "${sourceAppName}"`, (e, out) => res(out || ''));
+             });
+             const pathMatch = pathOutput.match(/"LSBundlePath"="([^"]+)"/);
+             if (pathMatch) {
+                 sourceAppPath = pathMatch[1];
+             }
+          } catch (e) {
+              console.error('Failed to get app path', e);
+          }
+
+          if (sourceAppPath && existsSync(sourceAppPath)) {
+              try {
+                  const icon = await app.getFileIcon(sourceAppPath, { size: 'large' });
+                  sourceAppIcon = icon.toDataURL();
+              } catch (e) {
+                  console.error('Failed to get app icon', e);
+              }
+          }
+      }
+      resolve({ name: sourceAppName, path: sourceAppPath, icon: sourceAppIcon });
+    });
+  });
+}
+
 // 处理外部链接唤起
-app.on('open-url', (event, url) => {
+app.on('open-url', async (event, url) => {
   event.preventDefault();
   
-  const script = `tell application "System Events"
-    set frontApp to name of first application process whose frontmost is true
-    if frontApp is "Prism" or frontApp is "Electron" then
-        set visibleApps to name of every application process whose visible is true
-        repeat with appName in visibleApps
-            if appName is not "Prism" and appName is not "Electron" and appName is not "Finder" then
-                return appName
-            end if
-        end repeat
-        return "Unknown"
-    else
-        return frontApp
-    end if
-  end tell`;
-  exec(`osascript -e '${script}'`, (error, stdout) => {
-    const sourceApp = error ? '外部应用' : stdout.trim();
+  const { name: sourceApp, icon: sourceAppIcon } = await getSourceAppInfo();
     
-    console.log('Open URL event received:', { url, sourceApp });
+  console.log('Open URL event received:', { url, sourceApp });
     
-    if (mainWindow) {
-      // 直接显示弹窗，让渲染进程处理规则匹配
-      switchToPopupMode(url, sourceApp);
-    } else {
-      // 窗口未创建时的处理
-      createWindow();
-      mainWindow.once('ready-to-show', () => {
-        switchToPopupMode(url, sourceApp);
-      });
-    }
-  });
+  if (mainWindow) {
+    // 直接显示弹窗，让渲染进程处理规则匹配
+    switchToPopupMode(url, sourceApp, sourceAppIcon);
+  } else {
+    // 窗口未创建时的处理
+    createWindow();
+    mainWindow.once('ready-to-show', () => {
+      switchToPopupMode(url, sourceApp, sourceAppIcon);
+    });
+  }
 });
 
 ipcMain.on('open-in-browser', (event, { url, browserPath }) => {

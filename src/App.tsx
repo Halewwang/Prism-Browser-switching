@@ -71,8 +71,9 @@ const App: React.FC = () => {
   
   const [activeUrl, setActiveUrl] = useState('');
   const [activeSource, setActiveSource] = useState('');
+  const [activeSourceIcon, setActiveSourceIcon] = useState<string | undefined>(undefined);
   const [showPopupOverlay, setShowPopupOverlay] = useState(false);
-  const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string} | null>(null);
+  const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string, sourceIcon?: string} | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   
   // 监听规则变化，保存到localStorage
@@ -190,12 +191,13 @@ const App: React.FC = () => {
     if (ipcRenderer) ipcRenderer.send('maximize-window');
   };
 
-  const addToHistory = (url: string, source: string, browserId: string, method: 'Manual' | 'Rule' | 'AI' | 'Default') => {
+  const addToHistory = (url: string, source: string, browserId: string, method: 'Manual' | 'Rule' | 'AI' | 'Default', sourceIcon?: string) => {
     const newLog = {
       id: Date.now().toString(),
       timestamp: new Date(),
       url,
       sourceApp: source,
+      sourceAppIcon: sourceIcon,
       routedToBrowserId: browserId,
       method
     };
@@ -207,8 +209,8 @@ const App: React.FC = () => {
   };
 
   // 核心路由逻辑
-  const processRouting = (url: string, source: string) => {
-    console.log('Processing routing for:', { url, source });
+  const processRouting = (url: string, source: string, sourceIcon?: string) => {
+    console.log('Processing routing for:', { url, source, hasIcon: !!sourceIcon });
     console.log('Current rules:', rules);
     
     // 规范化sourceApp名称
@@ -243,17 +245,19 @@ const App: React.FC = () => {
         if (ipcRenderer) {
           ipcRenderer.send('open-in-browser', { url, browserPath: targetBrowser.path });
         }
-        addToHistory(url, source, matchedRule.targetBrowserId, 'Rule');
+        addToHistory(url, source, matchedRule.targetBrowserId, 'Rule', sourceIcon);
       } else {
         console.log('No browser found for rule, showing popup');
         setActiveUrl(url);
         setActiveSource(source);
+        setActiveSourceIcon(sourceIcon);
         setShowPopupOverlay(false);
       }
     } else {
       console.log('No rule matched, showing popup');
       setActiveUrl(url);
       setActiveSource(source);
+      setActiveSourceIcon(sourceIcon);
       setShowPopupOverlay(false);
     }
   };
@@ -262,7 +266,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (pendingDeepLink && browsers.length > 0) {
       console.log('Processing pending deep link');
-      processRouting(pendingDeepLink.url, pendingDeepLink.source);
+      processRouting(pendingDeepLink.url, pendingDeepLink.source, pendingDeepLink.sourceIcon);
       setPendingDeepLink(null);
     }
   }, [browsers, pendingDeepLink, rules]);
@@ -284,16 +288,16 @@ const App: React.FC = () => {
     }
     
     ipcRenderer.on('deep-link', (_: any, data: any) => {
-      const { url, source } = data;
-      console.log('Deep link received:', { url, source });
+      const { url, source, sourceIcon } = data;
+      console.log('Deep link received:', { url, source, hasIcon: !!sourceIcon });
       
       if (browsers.length === 0) {
         console.log('Browsers not loaded yet, queueing deep link');
-        setPendingDeepLink({ url, source });
+        setPendingDeepLink({ url, source, sourceIcon });
         return;
       }
       
-      processRouting(url, source);
+      processRouting(url, source, sourceIcon);
     });
     
     return () => {
@@ -310,6 +314,7 @@ const App: React.FC = () => {
           <SelectorPopup 
             url={activeUrl}
             sourceApp={activeSource}
+            sourceAppIcon={activeSourceIcon}
             browsers={browsers}
             onSelect={handleSelectBrowser}
             onCancel={handleCancel}

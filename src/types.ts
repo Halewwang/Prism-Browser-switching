@@ -28,6 +28,7 @@ export interface HistoryLog {
   timestamp: Date;
   url: string;
   sourceApp?: string;
+  sourceAppIcon?: string;
   routedToBrowserId: string;
   method: 'Manual' | 'Rule' | 'AI' | 'Default';
 }

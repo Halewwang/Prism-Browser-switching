@@ -48,6 +48,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
             {history.map((log) => {
               const targetBrowser = browsers.find(b => b.id === log.routedToBrowserId);
               const sourceAppDetails = getSourceAppDetails(log.sourceApp);
+              const displayIcon = log.sourceAppIcon ? (
+                 <img src={log.sourceAppIcon} alt={sourceAppDetails.name} className="w-full h-full object-contain rounded-md" />
+              ) : sourceAppDetails.icon;
 
               return (
                 <div key={log.id} className="flex items-center gap-[7px] group">
@@ -56,7 +59,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     {/* Source */}
                     <div className="flex items-center gap-2 min-w-[80px] shrink-0">
                        <div className="w-4 h-4 flex items-center justify-center">
-                          {sourceAppDetails.icon}
+                          {displayIcon}
                        </div>
                        <span className="text-[12px] font-[590] text-black truncate max-w-[80px]">
                          {sourceAppDetails.name}

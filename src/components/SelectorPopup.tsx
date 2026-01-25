@@ -6,17 +6,21 @@ import { getSourceAppDetails } from '../utils/sourceApp';
 interface SelectorPopupProps {
   url: string;
   sourceApp?: string;
+  sourceAppIcon?: string;
   browsers: BrowserApp[];
   onSelect: (browserId: string, remember: boolean) => void;
   onCancel: () => void;
   isStandalone?: boolean;
 }
 
-const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers, onSelect, onCancel }) => {
+const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceAppIcon, browsers, onSelect, onCancel }) => {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   const sourceAppDetails = getSourceAppDetails(sourceApp || '');
+  const displayIcon = sourceAppIcon ? (
+    <img src={sourceAppIcon} alt={sourceAppDetails.name} className="w-full h-full object-contain rounded-md" />
+  ) : sourceAppDetails.icon;
 
   const handleImageError = (browserId: string) => {
     setImageErrors(prev => ({ ...prev, [browserId]: true }));
@@ -48,7 +52,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers,
         {/* Source App */}
         <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
           <div className="w-[14px] h-[14px] text-black flex items-center justify-center">
-             {sourceAppDetails.icon}
+             {displayIcon}
           </div>
           <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
             {sourceAppDetails.name}
