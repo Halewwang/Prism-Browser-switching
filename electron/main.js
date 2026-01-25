@@ -381,7 +381,20 @@ app.on('window-all-closed', () => {
 app.on('open-url', (event, url) => {
   event.preventDefault();
   
-  const script = `tell application "System Events" to get name of first application process whose frontmost is true`;
+  const script = `tell application "System Events"
+    set frontApp to name of first application process whose frontmost is true
+    if frontApp is "Prism" or frontApp is "Electron" then
+        set visibleApps to name of every application process whose visible is true
+        repeat with appName in visibleApps
+            if appName is not "Prism" and appName is not "Electron" and appName is not "Finder" then
+                return appName
+            end if
+        end repeat
+        return "Unknown"
+    else
+        return frontApp
+    end if
+  end tell`;
   exec(`osascript -e '${script}'`, (error, stdout) => {
     const sourceApp = error ? '外部应用' : stdout.trim();
     

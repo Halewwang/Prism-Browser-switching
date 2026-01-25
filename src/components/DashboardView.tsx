@@ -71,7 +71,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     {/* Target */}
                     <div className="flex items-center gap-2 min-w-[80px] shrink-0">
                         <div className="w-4 h-4 flex items-center justify-center">
-                            {targetBrowser?.iconDataURL ? (
+                            {targetBrowser?.iconDataURL && targetBrowser.iconDataURL.length > 50 ? (
                             <img src={targetBrowser.iconDataURL} alt={targetBrowser.name} className="w-3.5 h-3.5 object-contain" />
                             ) : (
                             targetBrowser && getBrowserIcon(targetBrowser.type, 3.5)

@@ -6,9 +6,23 @@ import { checkForUpdates } from '../utils/updater';
 
 // 安全地获取ipcRenderer
 const getIpcRenderer = () => {
+  if (typeof window === 'undefined') return null;
+  
+  // 1. 尝试通过 contextBridge 获取 (预加载脚本方式)
   if ((window as any).electron?.ipcRenderer) {
     return (window as any).electron.ipcRenderer;
   }
+  
+  // 2. 尝试通过 window.require 获取 (nodeIntegration: true 方式)
+  if ((window as any).require) {
+    try {
+      const electron = (window as any).require('electron');
+      return electron.ipcRenderer;
+    } catch (error) {
+      console.error('Failed to require electron:', error);
+    }
+  }
+  
   return null;
 };
 
@@ -31,6 +45,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [autoStart, setAutoStart] = useState(true);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string>('');
+  
+  const [appVersion, setAppVersion] = useState<string>('Loading...');
+  const [buildInfo, setBuildInfo] = useState<string>('Loading...');
+
+  React.useEffect(() => {
+      const fetchInfo = async () => {
+          const ipcRenderer = getIpcRenderer();
+          if (ipcRenderer) {
+              try {
+                  const version = await ipcRenderer.invoke('get-app-version');
+                  setAppVersion(version);
+                  // Since we don't have a real build number in package.json, we can use a timestamp or just repeat version
+                  // Or we can try to get it if we add a handler. For now, let's use a placeholder or derived value.
+                  setBuildInfo('2026.01.25'); 
+              } catch (e) {
+                  console.error("Failed to get app info", e);
+                  setAppVersion('Unknown');
+                  setBuildInfo('Unknown');
+              }
+          }
+      };
+      fetchInfo();
+  }, []);
 
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true);
@@ -181,11 +218,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Prism for macOS</span>
-                  <span className="text-sm font-medium text-gray-900">1.2.5</span>
+                  <span className="text-sm font-medium text-gray-900">{appVersion}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Build Version</span>
-                  <span className="text-sm font-medium text-gray-900">9021</span>
+                  <span className="text-sm font-medium text-gray-900">{buildInfo}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">License</span>
