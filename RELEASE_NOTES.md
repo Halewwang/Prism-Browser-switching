@@ -1,8 +1,8 @@
-# v1.6.0 (2026-01-25)
+# v1.7.0 (2026-01-25)
 
 ## Changes
-* Auto update: 1/25/2026, 1:40:55 PM (114e380)
-* Auto update: 1/25/2026, 1:18:39 PM (66e3509)
+* Auto update: 1/25/2026, 2:00:28 PM (926a1b4)
+* Auto update: 1/25/2026, 1:58:59 PM (636d565)
 
 ## Installation
-Download `Prism-1.6.0-arm64.dmg` and drag to Applications.
+Download `Prism-1.7.0-arm64.dmg` and drag to Applications.
