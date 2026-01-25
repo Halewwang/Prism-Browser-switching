@@ -1,8 +1,7 @@
-
 {
   "name": "prism-app",
   "productName": "Prism",
-  "version": "1.2.5",
+  "version": "1.3.0",
   "main": "electron/main.js",
   "author": "Hale",
   "type": "module",
@@ -12,6 +11,7 @@
     "build": "vite build",
     "start": "electron .",
     "sync": "node scripts/sync.js",
+    "release": "node scripts/release.js",
     "dist": "npm run build && electron-builder --mac"
   },
   "build": {
