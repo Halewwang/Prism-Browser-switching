@@ -68,7 +68,17 @@ const main = async () => {
     console.log('Recent Commits:');
     console.log(logs);
     
-    const type = await askQuestion('\nSelect release type (major/minor/patch) [patch]: ') || 'patch';
+    // Parse args for non-interactive mode
+    const args = process.argv.slice(2);
+    const typeArg = args.find(arg => arg.startsWith('--type='));
+    
+    let type = 'patch';
+    if (typeArg) {
+        type = typeArg.split('=')[1];
+    } else {
+        type = await askQuestion('\nSelect release type (major/minor/patch) [patch]: ') || 'patch';
+    }
+
     if (!['major', 'minor', 'patch'].includes(type)) {
         console.error('Invalid type. Aborting.');
         process.exit(1);
@@ -99,11 +109,31 @@ const main = async () => {
     console.log('\n🚀 Pushing to GitHub...');
     run('git push && git push --tags');
 
-    console.log('\n✨ Release Process Complete!');
-    console.log(`1. Go to: https://github.com/Halewwang/Prism-Browser-switching/releases/new`);
-    console.log(`2. Select tag: v${newVersion}`);
-    console.log(`3. Copy content from RELEASE_NOTES.md`);
-    console.log(`4. Upload: release/Prism-${newVersion}-arm64.dmg`);
+    // 7. Create GitHub Release
+    try {
+        console.log('\n📦 Creating GitHub Release...');
+        const dmgPath = `release/Prism-${newVersion}-arm64.dmg`;
+        const title = `v${newVersion}`;
+        
+        // Generate Checksum
+        console.log('Generating Checksum...');
+        const checksum = execSync(`shasum -a 256 "${dmgPath}"`, { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
+        fs.appendFileSync(RELEASE_NOTES_PATH, `\n\n## Checksum (SHA-256)\n\`\`\`\n${checksum}\n\`\`\``);
+
+        // Upload
+        const cmd = `gh release create v${newVersion} "${dmgPath}" --title "${title}" --notes-file "${RELEASE_NOTES_PATH}"`;
+        run(cmd);
+        console.log('✅ GitHub Release created successfully!');
+    } catch (e) {
+        console.error('⚠️ Failed to create GitHub Release automatically. Please upload manually.');
+        console.error(e.message);
+        
+        console.log('\n✨ Release Process Complete!');
+        console.log(`1. Go to: https://github.com/Halewwang/Prism-Browser-switching/releases/new`);
+        console.log(`2. Select tag: v${newVersion}`);
+        console.log(`3. Copy content from RELEASE_NOTES.md`);
+        console.log(`4. Upload: release/Prism-${newVersion}-arm64.dmg`);
+    }
     
     rl.close();
 };
