@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "vite build",
     "start": "electron .",
+    "sync": "node scripts/sync.js",
     "dist": "npm run build && electron-builder --mac"
   },
   "build": {
