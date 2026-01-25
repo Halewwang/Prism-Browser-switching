@@ -1,134 +1,119 @@
-# Prism for macOS 
+# Prism for macOS
 
 <div align="center">
   <img src="build/icon.png" alt="Prism Logo" width="128" height="128" />
-  <h3>您的 macOS 智能浏览器路由管家</h3>
+  
+  <h3>macOS 智能浏览器路由管家</h3>
   <p>接管系统链接点击，根据来源应用与规则，自动分发至最合适的浏览器。</p>
+
   <p>
-    <a href="#-核心功能">核心功能</a> • 
-    <a href="#-使用场景">使用场景</a> • 
-    <a href="#-界面预览">界面预览</a> • 
-    <a href="#-下载安装">下载安装</a>
+    <a href="https://github.com/Halewwang/Prism-Browser-switching/releases">
+      <img src="https://img.shields.io/github/v/release/Halewwang/Prism-Browser-switching?style=flat-square&color=000000" alt="Version" />
+    </a>
+    <a href="LICENSE">
+      <img src="https://img.shields.io/github/license/Halewwang/Prism-Browser-switching?style=flat-square&color=000000" alt="License" />
+    </a>
+    <img src="https://img.shields.io/badge/platform-macOS-000000?style=flat-square&logo=apple" alt="Platform" />
   </p>
 </div>
 
 ---
 
-## 📖 项目简介
+## 📖 项目概述 (Project Overview)
 
-**Prism** 是一款专为 macOS 打造的高性能浏览器路由工具（Browser Router）。它旨在解决现代工作流中“多浏览器并存”带来的链接跳转痛点。
+**Prism** 是一款专为 macOS 设计的高性能浏览器路由工具（Browser Router）。在现代工作流中，我们经常需要在多个浏览器之间切换：Chrome 用于开发调试，Arc 用于日常浏览，Safari 用于个人生活，或者 Edge 用于企业内网。
 
-在日常工作中，我们往往需要同时使用多个浏览器：Chrome 用于开发调试，Arc 用于日常浏览，Safari 用于个人生活，或者 Edge 用于特定的企业内网应用。Prism 通过接管 macOS 的默认浏览器行为，充当了一个智能的“中间人”。它能够精准识别点击链接的**来源应用程序**（如 Slack、钉钉、微信、飞书）以及**URL 的特征**，并根据您预设的规则，自动将链接发送到最合适的浏览器中打开。
+Prism 通过接管 macOS 的默认浏览器行为，充当了一个智能的“交通指挥官”。它能够精准识别点击链接的**来源应用程序**（如 Slack、钉钉、微信、飞书）以及 **URL 的特征**，并根据您预设的规则，自动将链接发送到最合适的浏览器中打开。
 
-告别繁琐的手动复制粘贴，Prism 让每一次点击都精准抵达目的地。
+**核心价值：**
+*   **工作生活分离**：自动将办公软件的链接分流至工作浏览器，社交软件链接分流至私人浏览器。
+*   **开发效率提升**：特定内网或调试域名自动在开发版浏览器中打开。
+*   **无感体验**：原生级的启动速度与 UI 设计，仿佛系统自带功能。
 
-## 🎯 目标用户
+## ✨ 功能特性 (Features)
 
-*   **全栈开发者**：需要在 Chrome/Firefox/Safari 之间频繁切换调试 Web 应用。
-*   **企业白领/产品经理**：工作流依赖 Slack/钉钉/飞书等协作软件，需区分工作（Arc/Edge）与私人（Safari）浏览环境。
-*   **多账号运营人员**：需要隔离不同浏览器的 Cookie 和会话环境。
-*   **macOS 效率工具爱好者**：追求极致的原生体验与键盘操作效率。
+*   **🤖 智能来源识别**：采用底层系统调用，精准识别唤起链接的来源应用（支持微信、钉钉、飞书、Slack、Teams 等）。
+*   **⚡️ 强大的规则引擎**：
+    *   支持 **URL 关键字/正则** 匹配。
+    *   支持按 **来源 App** 指定目标浏览器。
+    *   支持 **优先级控制**（URL 规则 > 来源规则）。
+*   **🎨 原生级 UI 体验**：遵循 macOS 设计规范，拥有精美的毛玻璃特效、圆角设计及原生应用图标显示。
+*   **⌨️ 高效操作**：支持快捷键（数字键/方向键）快速选择浏览器，操作行云流水。
+*   **📊 历史记录回溯**：自动记录跳转历史，方便随时查找错过的链接。
+*   **🔒 隐私安全**：完全开源，所有数据仅存储在本地，绝不上传服务器。
 
-## ✨ 核心功能与技术优势
+## 🚀 快速开始 (Quick Start)
 
-*   **🤖 智能来源识别**
-    *   采用底层系统调用 (`lsappinfo`)，精准识别唤起链接的来源应用（支持微信、钉钉、飞书、Slack、Teams 等），彻底解决传统工具识别不准的问题。
-*   **⚡️ 强大的规则引擎**
-    *   **URL 规则**：支持域名匹配、通配符匹配。
-    *   **来源规则**：支持按“来源 App”指定目标浏览器。
-    *   **优先级控制**：URL 规则优先于来源规则，灵活应对复杂场景。
-*   **🎨 原生级 UI 体验**
-    *   遵循 macOS Human Interface Guidelines 设计，拥有精美的毛玻璃特效与圆角设计。
-    *   **无感唤起**：极速响应的弹窗选择器，支持键盘快捷键（数字键/方向键）快速选择。
-    *   **原生图标**：直接提取系统已安装应用的官方高清图标，视觉体验如原生应用般统一。
-*   **📊 历史记录回溯**
-    *   自动记录每一次跳转的来源、目标及时间，方便随时回溯历史链接，不错过任何重要信息。
-*   **🔒 隐私安全第一**
-    *   完全开源，所有配置与历史数据仅存储在本地（LocalStorage/JSON），绝不上传任何服务器。
+### 对于普通用户
 
-## 📸 界面预览
+1.  **下载**：访问 [Releases 页面](https://github.com/Halewwang/Prism-Browser-switching/releases) 下载最新的 `.dmg` 安装包。
+2.  **安装**：打开 `.dmg` 文件，将 **Prism** 拖入 `Applications` 文件夹。
+3.  **配置**：
+    *   启动 Prism。
+    *   前往 **系统设置** -> **桌面与程序坞** -> **默认浏览器**，选择 **Prism**。
+    *   (可选) 在 Prism 设置中配置您的分发规则。
 
-> *请在 `docs/images` 目录下添加以下截图以展示应用效果*
+### 对于开发者
 
-### 1. 智能选择弹窗 (Selector Popup)
-当未匹配到规则或需要手动选择时，Prism 会弹出一个轻量级的选择框。支持键盘快捷键，操作行云流水。
-
-![Selector Popup](docs/images/screenshot_popup.png)
-*(建议替换为实际弹窗截图：展示来源应用图标、URL摘要及可用浏览器列表)*
-
-### 2. 仪表盘与历史记录 (Dashboard)
-清晰展示最近的跳转记录，精准显示来源应用（如钉钉、微信）与目标浏览器。
-
-![Dashboard](docs/images/screenshot_dashboard.png)
-*(建议替换为实际仪表盘截图：展示带有原生图标的历史记录列表)*
-
-### 3. 规则配置 (Settings)
-简单直观的规则管理界面，轻松添加 URL 或来源匹配规则。
-
-![Settings](docs/images/screenshot_settings.png)
-*(建议替换为实际设置页面截图)*
-
-## 🚀 使用场景示例
-
-*   **场景 A：工作与生活分离**
-    *   配置规则：所有来自 **钉钉** 和 **飞书** 的链接 -> 自动在 **Chrome** (工作浏览器) 打开。
-    *   配置规则：所有来自 **微信** 的链接 -> 自动在 **Safari** (生活浏览器) 打开。
-*   **场景 B：特定内网开发**
-    *   配置规则：当 URL 包含 `localhost` 或 `company-internal.com` -> 始终在 **Firefox Developer Edition** 打开。
-*   **场景 C：视频会议**
-    *   配置规则：当 URL 包含 `zoom.us` 或 `teams.microsoft.com` -> 自动在默认浏览器打开或提示选择，避免误触。
-
-## 📥 下载安装
-
-1.  访问 [Releases 页面](https://github.com/Halewwang/Prism-Browser-switching/releases) 下载最新的 `.dmg` 安装包。
-2.  将 Prism 拖入 `Applications` 文件夹。
-3.  启动 Prism，并按照提示在“系统设置 -> 桌面与程序坞 -> 默认浏览器”中选择 **Prism**。
-
-## 🛠 开发与构建
-
-如果您想参与开发或自行构建，请遵循以下步骤：
-
-### 环境要求
-*   Node.js (v18+)
-*   macOS (Intel or Apple Silicon)
-
-### 快速开始
+如果您想参与开发或自行构建，请确保您的环境满足以下要求：
+*   **Node.js**: v18+
+*   **macOS**: Intel 或 Apple Silicon
 
 ```bash
-# 1. 克隆仓库
+# 1. 克隆项目仓库
 git clone https://github.com/Halewwang/Prism-Browser-switching.git
 cd Prism-Browser-switching
 
-# 2. 安装依赖
+# 2. 安装项目依赖
 npm install
 
-# 3. 启动开发模式
-# 终端 1: 启动 React 开发服务器
+# 3. 启动开发环境
+# 终端 A: 启动 React 前端服务
 npm run dev
 
-# 4. 启动 Electron 主进程 (在另一个终端)
+# 终端 B: 启动 Electron 主进程
 npm start
 ```
 
-### 构建发布包
+## 💡 使用示例 (Usage Examples)
 
-```bash
-# 执行自动化构建与打包
-npm run dist
-```
-打包完成后，`.dmg` 安装文件将生成在 `release/` 目录下。
+### 场景一：按来源应用分流
 
-## 📝 技术栈
+配置规则后，Prism 会自动处理链接跳转：
 
-*   **Core**: [Electron](https://www.electronjs.org/) (Process Isolation, IPC)
-*   **UI**: [React](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
-*   **Build**: [Vite](https://vitejs.dev/) + [Electron Builder](https://www.electron.build/)
-*   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-*   **System**: macOS AppleScript / `lsappinfo` integration
+*   **规则**：来源应用 `DingTalk` (钉钉) -> 目标浏览器 `Chrome`
+*   **效果**：在钉钉中点击的所有链接，都会自动在 Chrome 中打开，保持工作环境纯净。
 
-## 📄 开源协议
+### 场景二：按 URL 关键字分流
 
-本项目采用 [MIT License](LICENSE) 开源。
+*   **规则**：URL 包含 `google.com` -> 目标浏览器 `Arc`
+*   **规则**：URL 包含 `localhost:3000` -> 目标浏览器 `Firefox Developer Edition`
+*   **效果**：访问特定域名或开发环境时，自动唤起对应的专用浏览器。
+
+### 场景三：手动选择 (Selector)
+
+当没有匹配任何规则时，Prism 会弹出一个轻量级选择框：
+
+1.  点击链接。
+2.  Prism 弹窗显示可用浏览器列表。
+3.  按 `1` 选择 Chrome，按 `2` 选择 Safari（支持自定义快捷键）。
+
+## 🤝 贡献指南 (Contributing)
+
+我们非常欢迎社区贡献！如果您有好的想法或发现了 Bug，请按以下步骤操作：
+
+1.  **Fork** 本仓库。
+2.  创建一个新的分支 (`git checkout -b feature/AmazingFeature`)。
+3.  提交您的更改 (`git commit -m 'Add some AmazingFeature'`)。
+4.  推送到分支 (`git push origin feature/AmazingFeature`)。
+5.  提交 **Pull Request**。
+
+### 问题反馈
+请在 [Issues](https://github.com/Halewwang/Prism-Browser-switching/issues) 页面提交 Bug 报告或功能请求。
+
+## 📄 许可证 (License)
+
+本项目基于 **MIT License** 开源。详情请参阅 [LICENSE](LICENSE) 文件。
 
 ---
 <div align="center">
