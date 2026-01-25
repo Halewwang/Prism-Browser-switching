@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "start": "electron .",
+    "test": "node scripts/test-icon-extraction.cjs",
     "sync": "node scripts/sync.js",
     "release": "node scripts/release.js",
     "dist": "npm run build && electron-builder --mac"

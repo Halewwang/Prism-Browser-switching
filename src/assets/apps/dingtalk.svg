@@ -1,6 +1,1 @@
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="256" height="256" rx="60" fill="white"/>
-<path d="M40 40H216V216H40V40Z" fill="#007FFF"/>
-<path d="M128 60L160 90L140 160L80 140L60 90L128 60Z" fill="white"/>
-<path d="M180 180L160 110L200 80L180 180Z" fill="white" opacity="0.8"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0089FF"><path d="M11.52 2.76a.6.6 0 0 1 .96 0l9.6 16.8a.6.6 0 0 1-.52.9H2.44a.6.6 0 0 1-.52-.9l9.6-16.8z"/></svg>

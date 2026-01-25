@@ -27,22 +27,39 @@ const REPO_NAME = 'Prism-Browser-switching';
 
 export const checkForUpdates = async (currentVersion: string): Promise<UpdateInfo> => {
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`);
+    // Add timestamp to prevent caching
+    const timestamp = new Date().getTime();
+    const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest?t=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
     
     if (!response.ok) {
+      console.error(`GitHub API Error: ${response.status} ${response.statusText}`);
       throw new Error(`GitHub API Error: ${response.statusText}`);
     }
 
     const release: GitHubRelease = await response.json();
+    console.log('Latest release info:', { tag: release.tag_name, published: release.published_at });
     
     // Normalize version strings (remove 'v' prefix if present)
     const latestVersion = release.tag_name.replace(/^v/, '');
     const normalizedCurrentVersion = currentVersion.replace(/^v/, '');
 
+    console.log(`Comparing versions: Current(${normalizedCurrentVersion}) vs Latest(${latestVersion})`);
+
     // Compare versions using semver
     // Note: compare returns 1 if v1 > v2, 0 if v1 == v2, -1 if v1 < v2
     // We want to check if latestVersion > normalizedCurrentVersion
     const hasUpdate = compare(latestVersion, normalizedCurrentVersion) === 1;
+    
+    if (hasUpdate) {
+        console.log('Update available!');
+    } else {
+        console.log('App is up to date.');
+    }
 
     // Find the DMG asset for macOS
     const dmgAsset = release.assets.find(asset => asset.name.endsWith('.dmg') || asset.name.endsWith('-arm64.dmg'));
