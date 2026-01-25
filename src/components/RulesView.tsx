@@ -6,7 +6,7 @@ import { getBrowserIcon } from '../constants';
 interface RulesViewProps {
   rules: RoutingRule[];
   browsers: BrowserApp[];
-  installedIMApps: Array<{ id: string; name: string; path: string }>;
+  installedIMApps: Array<{ id: string; name: string; path: string; iconDataURL?: string }>;
   onAddRule: (rule: RoutingRule) => void;
   onDeleteRule: (id: string) => void;
 }
@@ -126,8 +126,14 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                 {browsers.find(b => b.id === newTargetId) && getBrowserIcon(browsers.find(b => b.id === newTargetId)!.type, 4)}
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 flex items-center justify-center">
+                 {(() => {
+                    const selectedBrowser = browsers.find(b => b.id === newTargetId);
+                    if (selectedBrowser?.iconDataURL) {
+                        return <img src={selectedBrowser.iconDataURL} alt="" className="w-full h-full object-contain" />;
+                    }
+                    return selectedBrowser ? getBrowserIcon(selectedBrowser.type, 4) : null;
+                 })()}
               </div>
             </div>
           </div>

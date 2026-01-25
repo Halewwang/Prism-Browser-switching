@@ -17,10 +17,8 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  const sourceAppDetails = getSourceAppDetails(sourceApp || '');
-  const displayIcon = sourceAppIcon ? (
-    <img src={sourceAppIcon} alt={sourceAppDetails.name} className="w-full h-full object-contain rounded-md" />
-  ) : sourceAppDetails.icon;
+  const sourceAppDetails = getSourceAppDetails(sourceApp || '', sourceAppIcon);
+  const displayIcon = sourceAppDetails.icon;
 
   const handleImageError = (browserId: string) => {
     setImageErrors(prev => ({ ...prev, [browserId]: true }));

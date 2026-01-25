@@ -6,118 +6,92 @@ import { exec } from 'child_process';
 import { existsSync } from 'fs';
 import pkg from '../package.json' assert { type: "json" };
 
-// 浏览器列表配置
-const BROWSER_CONFIGS = [
-  { id: 'b1', name: 'Arc', icon: 'arc', path: '/Applications/Arc.app', type: 'arc' },
-  { id: 'b2', name: 'Google Chrome', icon: 'chrome', path: '/Applications/Google Chrome.app', type: 'chrome', isDefault: true },
-  { id: 'b3', name: 'Safari', icon: 'safari', path: '/Applications/Safari.app', type: 'safari' },
-  { id: 'b4', name: 'Firefox', icon: 'firefox', path: '/Applications/Firefox.app', type: 'firefox' },
-  { id: 'b5', name: 'Microsoft Edge', icon: 'edge', path: '/Applications/Microsoft Edge.app', type: 'edge' },
-  { id: 'b6', name: 'Brave', icon: 'brave', path: '/Applications/Brave Browser.app', type: 'brave' },
-  { id: 'b7', name: 'Vivaldi', icon: 'vivaldi', path: '/Applications/Vivaldi.app', type: 'vivaldi' },
-  { id: 'b8', name: 'Chrome Canary', icon: 'chrome', path: '/Applications/Google Chrome Canary.app', type: 'chrome' },
-  { id: 'b9', name: 'Comet', icon: 'comet', path: '/Applications/Comet.app', type: 'comet' },
-  { id: 'b10', name: 'Opera', icon: 'opera', path: '/Applications/Opera.app', type: 'opera' },
-  { id: 'b11', name: 'Opera GX', icon: 'opera-gx', path: '/Applications/Opera GX.app', type: 'opera-gx' },
-  { id: 'b12', name: 'Chromium', icon: 'chromium', path: '/Applications/Chromium.app', type: 'chromium' },
-  { id: 'b13', name: 'Firefox Developer Edition', icon: 'firefox', path: '/Applications/Firefox Developer Edition.app', type: 'firefox' },
-  { id: 'b14', name: 'Firefox Nightly', icon: 'firefox', path: '/Applications/Firefox Nightly.app', type: 'firefox' },
-  { id: 'b15', name: 'Edge Canary', icon: 'edge', path: '/Applications/Microsoft Edge Canary.app', type: 'edge' },
-];
+// 动态扫描已安装的应用程序（通用）
+async function scanAppsByBundleIds(bundleIdMap) {
+  console.log('Scanning apps dynamically...');
+  const installedApps = [];
+  
+  for (const [id, config] of Object.entries(bundleIdMap)) {
+    try {
+        const pathOutput = await new Promise((resolve) => {
+            exec(`mdfind "kMDItemCFBundleIdentifier == '${config.bundleId}'" | head -n 1`, (err, stdout) => {
+                resolve(stdout ? stdout.trim() : '');
+            });
+        });
 
+        if (pathOutput && existsSync(pathOutput)) {
+            console.log(`${config.name} found at ${pathOutput}`);
+            let iconDataURL = '';
+            try {
+                const icon = await app.getFileIcon(pathOutput, { size: 'large' });
+                iconDataURL = icon.toDataURL();
+            } catch (err) {
+                console.error(`Failed to get icon for ${config.name}:`, err);
+            }
 
-// IM应用列表配置
-const IM_APP_CONFIGS = [
-  { id: 'im1', name: '微信', path: '/Applications/WeChat.app' },
-  { id: 'im2', name: 'QQ', path: '/Applications/QQ.app' },
-  { id: 'im3', name: '钉钉', path: '/Applications/DingTalk.app' },
-  { id: 'im4', name: '飞书', path: '/Applications/Lark.app' },
-  { id: 'im5', name: 'Slack', path: '/Applications/Slack.app' },
-  { id: 'im6', name: 'Discord', path: '/Applications/Discord.app' },
-  { id: 'im7', name: 'Telegram', path: '/Applications/Telegram.app' },
-  { id: 'im8', name: 'WhatsApp', path: '/Applications/WhatsApp.app' },
-  { id: 'im9', name: 'Signal', path: '/Applications/Signal.app' },
-  { id: 'im10', name: 'Microsoft Teams', path: '/Applications/Microsoft Teams.app' },
-  { id: 'im11', name: 'Zoom', path: '/Applications/Zoom.us.app' },
-  { id: 'im12', name: 'Lark', path: '/Applications/Lark.app' },
-  { id: 'im13', name: '飞书', path: '/Applications/Feishu.app' },
-  { id: 'im14', name: 'Feishu', path: '/Applications/Feishu.app' },
-];
+            installedApps.push({
+                id: id,
+                name: config.name,
+                path: pathOutput,
+                type: config.type || 'other',
+                iconDataURL: iconDataURL,
+                hasIcon: !!iconDataURL
+            });
+        }
+    } catch (e) {
+        console.error(`Error scanning for ${config.name}:`, e);
+    }
+  }
+  return installedApps;
+}
 
+// 浏览器配置 (Bundle ID 映射)
+const BROWSER_BUNDLE_IDS = {
+  'b1': { name: 'Arc', bundleId: 'company.thebrowser.Browser', type: 'arc' },
+  'b2': { name: 'Google Chrome', bundleId: 'com.google.Chrome', type: 'chrome' },
+  'b3': { name: 'Safari', bundleId: 'com.apple.Safari', type: 'safari' },
+  'b4': { name: 'Firefox', bundleId: 'org.mozilla.firefox', type: 'firefox' },
+  'b5': { name: 'Microsoft Edge', bundleId: 'com.microsoft.edgemac', type: 'edge' },
+  'b6': { name: 'Brave', bundleId: 'com.brave.Browser', type: 'brave' },
+  'b7': { name: 'Vivaldi', bundleId: 'com.vivaldi.Vivaldi', type: 'vivaldi' },
+  'b8': { name: 'Chrome Canary', bundleId: 'com.google.Chrome.canary', type: 'chrome' },
+  'b9': { name: 'Comet', bundleId: 'com.comet.browser', type: 'comet' },
+  'b10': { name: 'Opera', bundleId: 'com.operasoftware.Opera', type: 'opera' },
+  'b11': { name: 'Opera GX', bundleId: 'com.operasoftware.OperaGX', type: 'opera-gx' },
+  'b12': { name: 'Chromium', bundleId: 'org.chromium.Chromium', type: 'chromium' },
+  'b13': { name: 'Firefox Developer Edition', bundleId: 'org.mozilla.firefoxdeveloperedition', type: 'firefox' },
+  'b14': { name: 'Firefox Nightly', bundleId: 'org.mozilla.nightly', type: 'firefox' },
+  'b15': { name: 'Edge Canary', bundleId: 'com.microsoft.edgemac.Canary', type: 'edge' },
+  'b16': { name: 'Orion', bundleId: 'com.kagi.kagimacOS', type: 'other' },
+  'b17': { name: 'SigmaOS', bundleId: 'com.sigmaos.sigmaos.macos', type: 'other' }
+};
+
+// 办公/聊天应用配置 (Bundle ID 映射)
+const IM_APP_BUNDLE_IDS = {
+  'im1': { name: '微信', bundleId: 'com.tencent.xinWeChat' },
+  'im2': { name: 'QQ', bundleId: 'com.tencent.qq' },
+  'im3': { name: '钉钉', bundleId: 'com.alibaba.DingTalkMac' },
+  'im4': { name: '飞书', bundleId: 'com.electron.lark' }, // Lark often uses this
+  'im5': { name: 'Lark', bundleId: 'com.electron.lark.helper' }, // Check both
+  'im6': { name: 'Slack', bundleId: 'com.tinyspeck.slackmacgap' },
+  'im7': { name: 'Discord', bundleId: 'com.hnc.Discord' },
+  'im8': { name: 'Telegram', bundleId: 'ru.keepcoder.Telegram' },
+  'im9': { name: 'WhatsApp', bundleId: 'net.whatsapp.WhatsApp' },
+  'im10': { name: 'Microsoft Teams', bundleId: 'com.microsoft.teams' },
+  'im11': { name: 'Zoom', bundleId: 'us.zoom.xos' },
+  'im12': { name: 'Feishu', bundleId: 'com.bytedance.lark.helper' }, // Alternative bundle ID
+  'im13': { name: 'WeCom', bundleId: 'com.tencent.WeWorkMac' }, // 企业微信
+  'im14': { name: 'DingTalk', bundleId: 'com.alibaba.DingTalkMac' }
+};
 
 // 扫描已安装的浏览器
 async function scanInstalledBrowsers() {
-  console.log('Scanning installed browsers...');
-  const installedBrowsers = [];
-  
-  // 过滤已安装的浏览器
-  for (const browser of BROWSER_CONFIGS) {
-    if (existsSync(browser.path)) {
-      console.log(`${browser.name}: Installed`);
-      
-      let iconDataURL = '';
-      try {
-        const icon = await app.getFileIcon(browser.path, { size: 'large' });
-        iconDataURL = icon.toDataURL();
-        console.log(`Got icon for ${browser.name}, length: ${iconDataURL.length}`);
-      } catch (err) {
-        console.error(`Failed to get icon for ${browser.name}:`, err);
-      }
-
-      // 添加额外的浏览器信息
-      installedBrowsers.push({
-        ...browser,
-        // 添加浏览器原生图标路径
-        iconPath: `${browser.path}/Contents/Resources/AppIcon.icns`,
-        // 验证图标文件是否存在
-        hasIcon: existsSync(`${browser.path}/Contents/Resources/AppIcon.icns`),
-        // 添加 Base64 格式的图标数据
-        iconDataURL: iconDataURL
-      });
-    } else {
-      console.log(`${browser.name}: Not Installed`);
-    }
-  }
-  
-  return installedBrowsers;
+  return await scanAppsByBundleIds(BROWSER_BUNDLE_IDS);
 }
 
 // 扫描已安装的IM应用
 async function scanInstalledIMApps() {
-  console.log('Scanning installed IM apps...');
-  const installedIMApps = [];
-  
-  // 过滤已安装的IM应用
-  for (const imApp of IM_APP_CONFIGS) {
-    if (existsSync(imApp.path)) {
-      console.log(`${imApp.name}: Installed`);
-      
-      let iconDataURL = '';
-      try {
-        // 使用 app.getFileIcon 获取系统图标
-        // 对于 .app 包，这通常能获取到正确的应用图标
-        const icon = await app.getFileIcon(imApp.path, { size: 'large' });
-        iconDataURL = icon.toDataURL();
-      } catch (err) {
-        console.error(`Failed to get icon for ${imApp.name}:`, err);
-      }
-
-      // 添加额外的应用信息
-      installedIMApps.push({
-        ...imApp,
-        // 添加应用原生图标路径
-        iconPath: `${imApp.path}/Contents/Resources/AppIcon.icns`,
-        // 验证图标文件是否存在
-        hasIcon: existsSync(`${imApp.path}/Contents/Resources/AppIcon.icns`),
-        // 添加 Base64 格式的图标数据
-        iconDataURL: iconDataURL
-      });
-    } else {
-      console.log(`${imApp.name}: Not Installed`);
-    }
-  }
-  
-  return installedIMApps;
+  return await scanAppsByBundleIds(IM_APP_BUNDLE_IDS);
 }
 
 const __filename = fileURLToPath(import.meta.url);

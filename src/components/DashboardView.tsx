@@ -47,11 +47,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
           <div className="space-y-[7px]">
             {history.map((log) => {
               const targetBrowser = browsers.find(b => b.id === log.routedToBrowserId);
-              const sourceAppDetails = getSourceAppDetails(log.sourceApp);
-              const displayIcon = log.sourceAppIcon ? (
-                 <img src={log.sourceAppIcon} alt={sourceAppDetails.name} className="w-full h-full object-contain rounded-md" />
-              ) : sourceAppDetails.icon;
-
+              const sourceAppDetails = getSourceAppDetails(log.sourceApp || 'Unknown', log.sourceAppIcon);
+              
+              // Prefer dynamic source icon if available in log, else use utility
+              // Note: log.sourceAppIcon is already passed to getSourceAppDetails above
+              
               return (
                 <div key={log.id} className="flex items-center gap-[7px] group">
                   {/* Main Info Pill */}
@@ -59,7 +59,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     {/* Source */}
                     <div className="flex items-center gap-2 min-w-[80px] shrink-0">
                        <div className="w-4 h-4 flex items-center justify-center">
-                          {displayIcon}
+                          {sourceAppDetails.icon}
                        </div>
                        <span className="text-[12px] font-[590] text-black truncate max-w-[80px]">
                          {sourceAppDetails.name}
