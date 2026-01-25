@@ -6,3 +6,8 @@
 
 ## Installation
 Download `Prism-1.7.0-arm64.dmg` and drag to Applications.
+
+## Checksum (SHA-256)
+```
+099879eda286c283225e1d04ba3e2677c8cf7dd3271f1448267e57e426168f89  release/Prism-1.7.0-arm64.dmg
+```

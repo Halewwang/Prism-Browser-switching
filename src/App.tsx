@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { I18nProvider } from './i18n';
 import { AppView, BrowserApp, RoutingRule, RuleType } from './types';
 import { MOCK_RULES } from './constants';
 import Sidebar from './components/Sidebar';
@@ -42,7 +43,7 @@ const getIpcRenderer = () => {
 
 const ipcRenderer = getIpcRenderer();
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [viewMode, setViewMode] = useState<'dashboard' | 'popup'>('dashboard');
   
@@ -378,6 +379,14 @@ const App: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   );
 };
 

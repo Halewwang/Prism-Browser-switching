@@ -33,6 +33,12 @@ export interface HistoryLog {
   method: 'Manual' | 'Rule' | 'AI' | 'Default';
 }
 
+export interface UpdateInfo {
+  hasUpdate: boolean;
+  latestVersion: string;
+  downloadUrl: string;
+}
+
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   RULES = 'RULES',

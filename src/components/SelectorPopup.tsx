@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserApp } from '../types';
 import { getSourceAppDetails } from '../utils/sourceApp';
+import { useI18n } from '../i18n';
 
 interface SelectorPopupProps {
   url: string;
@@ -14,6 +15,7 @@ interface SelectorPopupProps {
 }
 
 const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceAppIcon, browsers, onSelect, onCancel }) => {
+  const { t } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
@@ -69,7 +71,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
           onClick={onCancel}
           className="w-[79px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center cursor-pointer hover:bg-[#F0F0F0] active:bg-[#E8E8E8] transition-colors shrink-0"
         >
-          <span className="text-[12px] text-black font-normal font-sans">Cancel</span>
+          <span className="text-[12px] text-black font-normal font-sans">{t.popup.cancel}</span>
         </div>
       </div>
 

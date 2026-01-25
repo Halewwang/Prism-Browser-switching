@@ -1,21 +1,21 @@
 
 import React from 'react';
-import { AppView } from '../types';
-import { Clock, Settings, Info, Zap } from 'lucide-react';
+import { LayoutDashboard, Settings, GitFork } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface SidebarProps {
-  currentView: AppView;
-  onChangeView: (view: AppView) => void;
-  onClose?: () => void;
-  onMinimize?: () => void;
-  onMaximize?: () => void;
+  activeTab: 'dashboard' | 'rules' | 'settings';
+  onTabChange: (tab: 'dashboard' | 'rules' | 'settings') => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onClose, onMinimize, onMaximize }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+  const { t } = useI18n();
+  
   const menuItems = [
-    { id: AppView.DASHBOARD, label: '历史记录', icon: Clock },
-    { id: AppView.SETTINGS, label: '通用设置', icon: Settings },
-  ];
+    { id: 'dashboard', icon: LayoutDashboard, label: t.nav.dashboard },
+    { id: 'rules', icon: GitFork, label: t.nav.rules },
+    { id: 'settings', icon: Settings, label: t.nav.settings },
+  ] as const;
 
   return (
     <div className="w-[107px] bg-[#F8F8F8] border-r border-[#E5E5E5] h-full flex flex-col items-center py-4 shrink-0">
@@ -37,21 +37,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onClose, o
       <nav className="flex-1 w-full px-[15px] space-y-4 flex flex-col items-center z-50">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          // Map ABOUT to Settings for now if clicked, or just visually
-          const viewId = item.id === 'ABOUT' as any ? AppView.SETTINGS : item.id;
-          const isActive = currentView === viewId && (item.id !== 'ABOUT' as any || currentView === 'ABOUT' as any); // Simplification
-
-          // In the design, History is active. 
-          // If we are in Dashboard, History is active.
-          // If we are in Settings, General is active.
-          
-          const isItemActive = (item.id === AppView.DASHBOARD && currentView === AppView.DASHBOARD) ||
-                               (item.id === AppView.SETTINGS && currentView === AppView.SETTINGS && item.label === 'GENERAL');
+          const isItemActive = item.id === activeTab;
 
           return (
             <button
-              key={item.label}
-              onClick={() => onChangeView(item.id === 'ABOUT' as any ? AppView.SETTINGS : item.id)}
+              key={item.id}
+              onClick={() => onTabChange(item.id)}
               className={`
                 flex flex-col items-center gap-1.5 p-2 rounded-[5px] w-[77px] transition-all duration-200 no-drag-region group focus:outline-none
                 ${isItemActive 

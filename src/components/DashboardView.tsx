@@ -3,6 +3,7 @@ import { ArrowRight, Zap, Trash2, Clock } from 'lucide-react';
 import { BrowserApp, HistoryLog } from '../types';
 import { getBrowserIcon } from '../constants';
 import { getSourceAppDetails } from '../utils/sourceApp';
+import { useI18n } from '../i18n';
 
 interface DashboardViewProps {
   history: HistoryLog[];
@@ -11,27 +12,29 @@ interface DashboardViewProps {
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClearHistory }) => {
+  const { t } = useI18n();
+
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = Math.floor((now.getTime() - new Date(date).getTime()) / 60000);
-    if (diff < 1) return 'Just now';
-    if (diff < 60) return `${diff}m ago`;
+    if (diff < 1) return t.dashboard.justNow;
+    if (diff < 60) return `${diff}m ${t.dashboard.ago}`;
     const hours = Math.floor(diff / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return '1d ago';
+    if (hours < 24) return `${hours}h ${t.dashboard.ago}`;
+    return `1d ${t.dashboard.ago}`;
   };
 
   return (
     <div className="h-full flex flex-col overflow-hidden w-full bg-white">
       {/* Header */}
       <div className="pt-6 pb-6 px-5 flex justify-between items-end">
-        <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight">History</h1>
+        <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight">{t.dashboard.title}</h1>
         {history.length > 0 && (
            <button 
              onClick={onClearHistory}
              className="text-xs text-gray-400 hover:text-red-500 transition-colors pb-1"
            >
-             Clear All
+             {t.dashboard.clearAll}
            </button>
         )}
       </div>
@@ -41,7 +44,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
         {history.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 pb-20">
              <Clock size={32} className="opacity-20 mb-3" />
-             <p className="text-sm opacity-50">No history yet</p>
+             <p className="text-sm opacity-50">{t.dashboard.noHistory}</p>
           </div>
         ) : (
           <div className="space-y-[7px]">
@@ -104,7 +107,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     // In design it seems always visible, but maybe better on hover? 
                     // Design has it fully opaque. I'll keep it visible.
                   >
-                    <span className="text-[12px] font-normal text-black group-hover:text-red-500">删除</span>
+                    <span className="text-[12px] font-normal text-black group-hover:text-red-500">{t.rules.delete}</span>
                   </button>
                 </div>
               );

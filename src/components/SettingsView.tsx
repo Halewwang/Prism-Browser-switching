@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { BrowserApp, RoutingRule } from '../types';
-import { Cpu, ListFilter, Info, RefreshCcw } from 'lucide-react';
+import { BrowserApp, RoutingRule, UpdateInfo } from '../types';
+import { Cpu, ListFilter, Info, RefreshCcw, Globe } from 'lucide-react';
 import RulesView from './RulesView';
-import { checkForUpdates } from '../utils/updater';
+import { useI18n } from '../i18n';
 
 // 安全地获取ipcRenderer
 const getIpcRenderer = () => {
@@ -29,9 +29,13 @@ const getIpcRenderer = () => {
 interface SettingsViewProps {
   rules?: RoutingRule[];
   browsers?: BrowserApp[];
-  installedIMApps?: Array<{ id: string; name: string; path: string }>;
+  installedIMApps?: Array<{ id: string; name: string; path: string; iconDataURL?: string }>;
   onAddRule?: (rule: RoutingRule) => void;
   onDeleteRule?: (id: string) => void;
+  onRescan?: () => void;
+  onCheckUpdate?: () => void;
+  isCheckingUpdate?: boolean;
+  updateInfo?: UpdateInfo | null;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
@@ -39,12 +43,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   browsers = [], 
   installedIMApps = [], 
   onAddRule = () => {}, 
-  onDeleteRule = () => {} 
+  onDeleteRule = () => {},
+  onRescan,
+  onCheckUpdate,
+  isCheckingUpdate,
+  updateInfo
 }) => {
+  const { t, language, setLanguage } = useI18n();
   const [activeTab, setActiveTab] = useState<'general' | 'rules'>('rules');
   const [autoStart, setAutoStart] = useState(true);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<string>('');
   
   const [appVersion, setAppVersion] = useState<string>('Loading...');
   const [buildInfo, setBuildInfo] = useState<string>('Loading...');
@@ -56,8 +63,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               try {
                   const version = await ipcRenderer.invoke('get-app-version');
                   setAppVersion(version);
-                  // Since we don't have a real build number in package.json, we can use a timestamp or just repeat version
-                  // Or we can try to get it if we add a handler. For now, let's use a placeholder or derived value.
                   setBuildInfo('2026.01.25'); 
               } catch (e) {
                   console.error("Failed to get app info", e);
@@ -68,47 +73,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       };
       fetchInfo();
   }, []);
-
-  const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    setUpdateStatus('Checking...');
-    
-    try {
-      const ipcRenderer = getIpcRenderer();
-      if (!ipcRenderer) {
-        setUpdateStatus('Error: IPC not available');
-        return;
-      }
-
-      const currentVersion = await ipcRenderer.invoke('get-app-version');
-      const info = await checkForUpdates(currentVersion);
-      
-      if (info.hasUpdate) {
-        // If update found, the main App component will handle the modal via state lift or event
-        // But here we can also just trigger the download if we want, or show a message
-        // For better UX, we'll let the user know an update is available and maybe trigger the modal
-        // Since the App component also checks on startup, we might want to expose setUpdateInfo to here
-        // or just let the user know.
-        // Simplified approach: Re-trigger the startup check logic by reloading or sending an event
-        // Or better: pass a callback prop `onCheckUpdate` from App.tsx. 
-        // For now, let's just show status text.
-        setUpdateStatus(`New version v${info.latestVersion} available!`);
-        // Trigger the update modal in App.tsx by re-fetching there or using IPC
-        // To keep it simple without refactoring props too much:
-        // We will invoke the same logic as App.tsx if possible, or just open the download link
-        if(confirm(`New version v${info.latestVersion} available! Download now?`)) {
-             ipcRenderer.send('start-download-update', info.downloadUrl);
-        }
-      } else {
-        setUpdateStatus('You are up to date.');
-      }
-    } catch (e) {
-      setUpdateStatus('Failed to check for updates.');
-      console.error(e);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
 
   // Simple Toggle Switch Component
   const ToggleSwitch = ({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) => (
@@ -146,7 +110,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           `}
         >
           <ListFilter size={16} />
-          路由规则
+          {t.rules.title}
         </button>
         <button
           onClick={() => setActiveTab('general')}
@@ -158,7 +122,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           `}
         >
           <Cpu size={16} />
-          通用设置
+          {t.settings.general}
         </button>
       </div>
 
@@ -178,31 +142,55 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
               <div className="flex items-center gap-2 mb-4 pb-4 border-b border-[#E1E1E1]">
                 <Cpu size={18} className="text-gray-600" />
-                <h3 className="text-lg font-semibold text-gray-900">系统设置</h3>
+                <h3 className="text-lg font-semibold text-gray-900">{t.settings.title}</h3>
               </div>
               
               <div>
+                {/* Language Switch */}
+                <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">{t.settings.language}</h4>
+                    <p className="text-xs text-gray-500 mt-1">{t.settings.languageDesc}</p>
+                  </div>
+                  <div className="flex bg-white border border-[#E1E1E1] p-1 rounded-lg">
+                    <button
+                      onClick={() => setLanguage('en')}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${language === 'en' ? 'bg-[#F8F8F8] text-black shadow-sm border border-[#E1E1E1]' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      English
+                    </button>
+                    <button
+                      onClick={() => setLanguage('zh')}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${language === 'zh' ? 'bg-[#F8F8F8] text-black shadow-sm border border-[#E1E1E1]' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      中文
+                    </button>
+                  </div>
+                </div>
+
                 <ToggleSwitch 
                   active={autoStart} 
                   onClick={() => setAutoStart(!autoStart)} 
-                  label="开机自动启动"
+                  label={t.settings.autoStart}
                 />
                 
                 {/* Update Check */}
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
                   <div>
-                    <h4 className="text-sm font-medium text-gray-900">检查更新</h4>
-                    {updateStatus && (
-                      <p className="text-xs text-gray-500 mt-1">{updateStatus}</p>
+                    <h4 className="text-sm font-medium text-gray-900">{t.settings.checkUpdate}</h4>
+                    {updateInfo && (
+                       <p className="text-xs text-gray-500 mt-1">
+                          {updateInfo.hasUpdate ? t.settings.updateAvailable : t.settings.upToDate} (v{updateInfo.latestVersion})
+                       </p>
                     )}
                   </div>
                   <button 
-                    onClick={handleCheckUpdate}
+                    onClick={onCheckUpdate}
                     disabled={isCheckingUpdate}
                     className="px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     <RefreshCcw size={14} className={isCheckingUpdate ? 'animate-spin' : ''} />
-                    {isCheckingUpdate ? 'Checking...' : 'Check'}
+                    {isCheckingUpdate ? t.settings.checking : 'Check'}
                   </button>
                 </div>
               </div>
@@ -212,7 +200,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
               <div className="flex items-center gap-2 mb-4 pb-4 border-b border-[#E1E1E1]">
                 <Info size={18} className="text-gray-600" />
-                <h3 className="text-lg font-semibold text-gray-900">关于</h3>
+                <h3 className="text-lg font-semibold text-gray-900">About</h3>
               </div>
               
               <div className="space-y-3">

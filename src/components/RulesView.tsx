@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BrowserApp, RoutingRule, RuleType } from '../types';
 import { Trash2, Plus, AppWindow, Globe, Search, ArrowRight, Sliders } from 'lucide-react';
 import { getBrowserIcon } from '../constants';
+import { useI18n } from '../i18n';
 
 interface RulesViewProps {
   rules: RoutingRule[];
@@ -12,6 +13,7 @@ interface RulesViewProps {
 }
 
 const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps, onAddRule, onDeleteRule }) => {
+  const { t } = useI18n();
   const [newType, setNewType] = useState<RuleType>(RuleType.SOURCE_APP);
   const [newValue, setNewValue] = useState('');
   const [isCustomInput, setIsCustomInput] = useState(false);
@@ -26,7 +28,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
       value: newValue,
       targetBrowserId: newTargetId,
       active: true,
-      description: '用户自定义规则'
+      description: t.rules.userRule
     };
     onAddRule(newRule);
     setNewValue('');
@@ -44,31 +46,31 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
       <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Plus className="w-5 h-5 text-gray-400" />
-          添加路由规则
+          {t.rules.addRule}
         </h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">触发条件</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">{t.rules.trigger}</label>
             <div className="flex bg-white border border-[#E1E1E1] p-1 rounded-lg">
               <button
                 onClick={() => { setNewType(RuleType.SOURCE_APP); setNewValue(''); setIsCustomInput(false); }}
                 className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all whitespace-nowrap ${newType === RuleType.SOURCE_APP ? 'bg-[#F8F8F8] text-black shadow-sm border border-[#E1E1E1]' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                来源应用
+                {t.rules.sourceApp}
               </button>
               <button
                 onClick={() => { setNewType(RuleType.URL_PATTERN); setNewValue(''); setIsCustomInput(false); }}
                 className={`flex-1 py-1.5 px-3 rounded-md text-sm font-medium transition-all whitespace-nowrap ${newType === RuleType.URL_PATTERN ? 'bg-[#F8F8F8] text-black shadow-sm border border-[#E1E1E1]' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                URL 匹配
+                {t.rules.urlPattern}
               </button>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">
-              {newType === RuleType.SOURCE_APP ? '选择应用' : '匹配关键字'}
+              {newType === RuleType.SOURCE_APP ? t.rules.sourceApp : t.rules.urlPattern}
             </label>
             
             {newType === RuleType.SOURCE_APP && !isCustomInput ? (
@@ -84,11 +86,11 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                 }}
                 className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black/20 transition-all appearance-none"
               >
-                <option value="">选择来源应用...</option>
+                <option value="">{t.rules.selectApp}</option>
                 {installedIMApps.map(app => (
                   <option key={app.id} value={app.name}>{app.name}</option>
                 ))}
-                <option value="CUSTOM">手动输入应用名称...</option>
+                <option value="CUSTOM">{t.rules.manualInput}</option>
               </select>
             ) : (
               <div className="relative">
@@ -96,7 +98,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                   type="text"
                   value={newValue}
                   onChange={(e) => setNewValue(e.target.value)}
-                  placeholder={newType === RuleType.SOURCE_APP ? "输入应用名称 (如 Slack)" : "输入域名关键字 (如 google.com)"}
+                  placeholder={newType === RuleType.SOURCE_APP ? t.rules.inputApp : t.rules.inputKeyword}
                   className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black/20 transition-all"
                   autoFocus={isCustomInput}
                 />
@@ -105,7 +107,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                     onClick={() => setIsCustomInput(false)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    取消
+                    {t.popup.cancel}
                   </button>
                 )}
               </div>
@@ -115,7 +117,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">目标浏览器</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">{t.rules.targetBrowser}</label>
             <div className="relative">
               <select
                 value={newTargetId}
@@ -130,7 +132,20 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                  {(() => {
                     const selectedBrowser = browsers.find(b => b.id === newTargetId);
                     if (selectedBrowser?.iconDataURL) {
-                        return <img src={selectedBrowser.iconDataURL} alt="" className="w-full h-full object-contain" />;
+                        return (
+                          <img 
+                            src={selectedBrowser.iconDataURL} 
+                            alt="" 
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              // Fallback if image fails to load
+                              e.currentTarget.style.display = 'none';
+                              // You could potentially trigger a state update here to switch to icon fallback, 
+                              // but for now, hiding the broken image is a good start. 
+                              // A better approach is to render the default icon if image fails.
+                            }} 
+                          />
+                        );
                     }
                     return selectedBrowser ? getBrowserIcon(selectedBrowser.type, 4) : null;
                  })()}
@@ -144,7 +159,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
               disabled={!newValue}
               className="px-6 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
             >
-              <Plus size={16} /> 添加规则
+              <Plus size={16} /> {t.rules.addRule}
             </button>
           </div>
         </div>
@@ -158,14 +173,14 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input 
                     type="text" 
-                    placeholder="搜索规则..."
+                    placeholder={t.rules.searchRules}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-4 py-1.5 bg-white border border-[#E1E1E1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black/20 transition-all"
                 />
             </div>
             <div className="text-xs text-gray-400 font-medium">
-                {filteredRules.length} 个规则
+                {filteredRules.length} {t.rules.rulesCount}
             </div>
         </div>
 
@@ -175,7 +190,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                <div className="w-16 h-16 bg-white border border-[#E1E1E1] rounded-2xl flex items-center justify-center mb-4">
                 <Sliders size={32} className="opacity-20 text-black" />
               </div>
-              <p>暂无匹配规则</p>
+              <p>{t.rules.noRules}</p>
             </div>
           ) : (
             <div className="divide-y divide-[#E1E1E1]">
@@ -192,9 +207,9 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                           <span className="text-sm font-semibold text-black">{rule.value}</span>
                         </div>
                         <div className="text-xs text-gray-500 flex items-center gap-1">
-                            {rule.type === RuleType.SOURCE_APP ? '来源应用' : 'URL 匹配'}
+                            {rule.type === RuleType.SOURCE_APP ? t.rules.sourceApp : t.rules.urlPattern}
                             <ArrowRight size={10} className="text-gray-300" />
-                            <span className="text-gray-700 font-medium">{targetBrowser?.name || '未知浏览器'}</span>
+                            <span className="text-gray-700 font-medium">{targetBrowser?.name || 'Unknown'}</span>
                         </div>
                       </div>
                     </div>
@@ -202,7 +217,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                     <button 
                         onClick={() => onDeleteRule(rule.id)}
                         className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                        aria-label="删除规则"
+                        aria-label={t.rules.delete}
                     >
                         <Trash2 size={16} />
                     </button>

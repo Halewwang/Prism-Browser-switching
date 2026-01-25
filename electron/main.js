@@ -81,7 +81,24 @@ const IM_APP_BUNDLE_IDS = {
   'im11': { name: 'Zoom', bundleId: 'us.zoom.xos' },
   'im12': { name: 'Feishu', bundleId: 'com.bytedance.lark.helper' }, // Alternative bundle ID
   'im13': { name: 'WeCom', bundleId: 'com.tencent.WeWorkMac' }, // 企业微信
-  'im14': { name: 'DingTalk', bundleId: 'com.alibaba.DingTalkMac' }
+  'im14': { name: 'DingTalk', bundleId: 'com.alibaba.DingTalkMac' },
+  'im15': { name: 'Skype', bundleId: 'com.skype.skype' },
+  'im16': { name: 'Line', bundleId: 'jp.naver.line.mac' },
+  'im17': { name: 'Signal', bundleId: 'org.whispersystems.signal-desktop' },
+  'im18': { name: 'Notion', bundleId: 'notion.id' },
+  'im19': { name: 'Obsidian', bundleId: 'md.obsidian' },
+  'im20': { name: 'WPS Office', bundleId: 'com.kingsoft.wpsoffice.mac' },
+  'im21': { name: 'Microsoft Word', bundleId: 'com.microsoft.Word' },
+  'im22': { name: 'Microsoft Excel', bundleId: 'com.microsoft.Excel' },
+  'im23': { name: 'Microsoft PowerPoint', bundleId: 'com.microsoft.Powerpoint' },
+  'im24': { name: 'Microsoft Outlook', bundleId: 'com.microsoft.Outlook' },
+  'im25': { name: 'Tencent Meeting', bundleId: 'com.tencent.meeting' }, // 腾讯会议
+  'im26': { name: 'VooV Meeting', bundleId: 'com.tencent.voov' },
+  'im27': { name: 'Mail', bundleId: 'com.apple.mail' },
+  'im28': { name: 'Thunderbird', bundleId: 'org.mozilla.thunderbird' },
+  'im29': { name: 'Spark', bundleId: 'com.readdle.smartemail-Mac' },
+  'im30': { name: 'Foxmail', bundleId: 'com.tencent.Foxmail' },
+  'im31': { name: 'Netease Mail Master', bundleId: 'com.netease.mail.master' }
 };
 
 // 扫描已安装的浏览器
