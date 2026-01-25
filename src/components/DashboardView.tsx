@@ -26,18 +26,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
   return (
     <div className="h-full flex flex-col max-w-5xl mx-auto w-full">
       {/* Main Card */}
-      <div className="flex-1 bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300 h-full p-6">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#E1E1E1] flex items-center justify-between">
-           <div className="flex items-center gap-2">
-              <History size={18} className="text-gray-600" />
-              <h3 className="text-lg font-semibold text-gray-900">{t.dashboard.history}</h3>
-           </div>
+        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-[#E1E1E1]">
+           <History size={18} className="text-gray-600" />
+           <h3 className="text-lg font-semibold text-gray-900">{t.dashboard.history}</h3>
            {history.length > 0 && (
              <button 
                onClick={onClearHistory}
-               className="text-xs font-medium text-gray-500 hover:text-red-600 transition-colors px-2 py-1 hover:bg-red-50 rounded-md"
+               className="ml-auto text-xs font-medium text-gray-500 hover:text-red-600 transition-colors px-2 py-1 hover:bg-red-50 rounded-md"
              >
                {t.dashboard.clearAll}
              </button>

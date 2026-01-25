@@ -77,15 +77,6 @@ export const checkForUpdates = async (currentVersion: string): Promise<UpdateInf
     };
   } catch (error) {
     console.error('Failed to check for updates:', error);
-    // Return safe default on error
-    return {
-      hasUpdate: false,
-      latestVersion: '',
-      currentVersion,
-      releaseDate: '',
-      releaseNotes: '',
-      downloadUrl: '',
-      downloadSize: 0
-    };
+    throw error; // Propagate error to caller
   }
 };

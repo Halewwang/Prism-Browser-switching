@@ -343,7 +343,7 @@ const AppContent: React.FC = () => {
           {/* Main Content Area */}
           <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white">
             {/* Content */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden p-6">
               {activeTab === 'dashboard' && (
                 <DashboardView 
                   history={history} 
@@ -352,7 +352,7 @@ const AppContent: React.FC = () => {
                 />
               )}
               {activeTab === 'rules' && (
-                 <div className="h-full overflow-y-auto p-6">
+                 <div className="h-full overflow-y-auto">
                    <RulesView 
                       rules={rules}
                       browsers={browsers}
@@ -362,7 +362,7 @@ const AppContent: React.FC = () => {
                  </div>
               )}
               {activeTab === 'settings' && (
-                <div className="h-full overflow-y-auto p-6">
+                <div className="h-full overflow-y-auto">
                    <SettingsView 
                       browsers={browsers}
                       onRescan={() => ipcRenderer && ipcRenderer.send('get-installed-browsers')}
@@ -380,9 +380,14 @@ const AppContent: React.FC = () => {
                                 // Simple feedback using native alert, can be improved to Toast later
                                 alert('You are up to date!');
                               }
-                          } catch (e) {
+                          } catch (e: any) {
                               console.error(e);
-                              alert('Failed to check for updates.');
+                              const msg = e.message || 'Unknown error';
+                              if (msg.includes('403')) {
+                                  alert('Update check failed: Rate limit exceeded. Please try again later.');
+                              } else {
+                                  alert(`Failed to check for updates: ${msg}`);
+                              }
                           } finally {
                               setIsCheckingUpdate(false);
                           }
