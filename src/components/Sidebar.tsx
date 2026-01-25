@@ -18,7 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onClose, o
   ];
 
   return (
-    <div className="w-[107px] bg-[#F8F8F8] border-r border-[#E5E5E5] h-full flex flex-col items-center py-4 drag-region shrink-0">
+    <div className="w-[107px] bg-[#F8F8F8] border-r border-[#E5E5E5] h-full flex flex-col items-center py-4 shrink-0">
       {/* Brand/Logo */}
       <div className="mt-10 mb-8 flex flex-col items-center gap-2 no-drag-region">
         <div className="w-8 h-8 flex items-center justify-center">
@@ -34,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onClose, o
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 w-full px-[15px] space-y-4 flex flex-col items-center">
+      <nav className="flex-1 w-full px-[15px] space-y-4 flex flex-col items-center z-50">
         {menuItems.map((item) => {
           const Icon = item.icon;
           // Map ABOUT to Settings for now if clicked, or just visually
@@ -53,10 +53,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onClose, o
               key={item.label}
               onClick={() => onChangeView(item.id === 'ABOUT' as any ? AppView.SETTINGS : item.id)}
               className={`
-                flex flex-col items-center gap-1.5 p-2 rounded-[5px] w-[77px] transition-all duration-200 no-drag-region group
+                flex flex-col items-center gap-1.5 p-2 rounded-[5px] w-[77px] transition-all duration-200 no-drag-region group focus:outline-none
                 ${isItemActive 
                   ? 'bg-transparent border border-[#E1E1E1] shadow-sm' 
-                  : 'bg-transparent border border-transparent hover:bg-gray-200/50'}
+                  : 'bg-transparent border border-transparent hover:bg-gray-200/50 active:scale-95 active:bg-gray-200'}
               `}
             >
               <div className={`p-1 rounded-md ${isItemActive ? 'bg-transparent' : ''}`}>

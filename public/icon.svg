@@ -1,14 +1,7 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="120" fill="black"/>
-  <!-- Vertical -->
-  <path d="M256 100V412" stroke="#9CA3AF" stroke-width="40" stroke-linecap="butt"/>
-  <!-- Horizontal -->
-  <path d="M100 256H412" stroke="#9CA3AF" stroke-width="40" stroke-linecap="butt"/>
-  <!-- Diagonal TL-BR -->
-  <path d="M146 146L366 366" stroke="#9CA3AF" stroke-width="40" stroke-linecap="butt"/>
-  <!-- Diagonal TR-BL (Split) -->
-  <!-- Top Right part (Grey) -->
-  <path d="M366 146L256 256" stroke="#9CA3AF" stroke-width="40" stroke-linecap="butt"/>
-  <!-- Bottom Left part (Green) -->
-  <path d="M256 256L146 366" stroke="#4ADE80" stroke-width="40" stroke-linecap="butt"/>
+<rect width="512" height="512" rx="120" fill="black"/>
+<path d="M256 120V392" stroke="#A3A3A3" stroke-width="45" stroke-linecap="square"/>
+<path d="M120 256H392" stroke="#A3A3A3" stroke-width="45" stroke-linecap="square"/>
+<path d="M159.828 159.828L352.172 352.172" stroke="#A3A3A3" stroke-width="45" stroke-linecap="square"/>
+<path d="M159.828 352.172L352.172 159.828" stroke="#4ADE80" stroke-width="45" stroke-linecap="square"/>
 </svg>

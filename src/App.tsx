@@ -298,41 +298,46 @@ const App: React.FC = () => {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-transparent font-sans antialiased p-4">
       {/* Container with Shadow - Matching Figma Design */}
-      <div className="flex overflow-hidden bg-white rounded-[15px] shadow-[0px_5px_20px_0px_rgba(0,0,0,0.3)] w-full h-full">
-        {/* Sidebar */}
-        <Sidebar 
-          currentView={currentView} 
-          onChangeView={setCurrentView} 
-          onClose={handleClose}
-          onMinimize={handleMinimize}
-          onMaximize={handleMaximize}
-        />
-        
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white">
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            {currentView === AppView.DASHBOARD && (
-              <DashboardView 
-                history={history} 
-                browsers={browsers} 
-                onClearHistory={clearHistory}
-              />
-            )}
-            {currentView === AppView.SETTINGS && (
-              <div className="h-full overflow-y-auto p-6">
-                 <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight mb-6">General</h1>
-                 <SettingsView 
-                    rules={rules}
-                    browsers={browsers}
-                    installedIMApps={installedIMApps}
-                    onAddRule={r => setRules(prev => [...prev, r])}
-                    onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
-                  />
-              </div>
-            )}
-          </div>
-        </main>
+      <div className="flex flex-col overflow-hidden bg-white rounded-[15px] shadow-[0px_5px_20px_0px_rgba(0,0,0,0.3)] w-full h-full relative">
+        {/* Global Drag Region - Covers Top Area */}
+        <div className="absolute top-0 left-0 right-0 h-10 drag-region z-50 pointer-events-none"></div>
+
+        <div className="flex flex-1 overflow-hidden z-0">
+          {/* Sidebar */}
+          <Sidebar 
+            currentView={currentView} 
+            onChangeView={setCurrentView} 
+            onClose={handleClose}
+            onMinimize={handleMinimize}
+            onMaximize={handleMaximize}
+          />
+          
+          {/* Main Content Area */}
+          <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white">
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              {currentView === AppView.DASHBOARD && (
+                <DashboardView 
+                  history={history} 
+                  browsers={browsers} 
+                  onClearHistory={clearHistory}
+                />
+              )}
+              {currentView === AppView.SETTINGS && (
+                <div className="h-full overflow-y-auto p-6">
+                   <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight mb-6">General</h1>
+                   <SettingsView 
+                      rules={rules}
+                      browsers={browsers}
+                      installedIMApps={installedIMApps}
+                      onAddRule={r => setRules(prev => [...prev, r])}
+                      onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
+                    />
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   );
