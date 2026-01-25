@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowRight, Zap, Trash2, Clock } from 'lucide-react';
 import { BrowserApp, HistoryLog } from '../types';
-import { getBrowserIcon, APP_ICONS } from '../constants';
+import { getBrowserIcon, APP_ICONS, getSourceAppDetails } from '../constants';
 
 interface DashboardViewProps {
   history: HistoryLog[];
@@ -46,6 +46,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
           <div className="space-y-[7px]">
             {history.map((log) => {
               const targetBrowser = browsers.find(b => b.id === log.routedToBrowserId);
+              const sourceDetails = getSourceAppDetails(log.sourceApp);
+              
               return (
                 <div key={log.id} className="flex items-center gap-[7px] group">
                   {/* Main Info Pill */}
@@ -53,15 +55,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ history, browsers, onClea
                     {/* Source */}
                     <div className="flex items-center gap-2 min-w-[80px] shrink-0">
                        <div className="w-4 h-4 flex items-center justify-center">
-                          {log.sourceApp && APP_ICONS[log.sourceApp] ? (
-                            // Clone element to adjust size if needed, or just wrap
-                            <div className="scale-75 origin-center">{APP_ICONS[log.sourceApp]}</div>
-                          ) : (
-                            <Zap size={14} className="text-gray-400" />
-                          )}
+                          {sourceDetails.icon}
                        </div>
                        <span className="text-[12px] font-[590] text-black truncate max-w-[80px]">
-                         {log.sourceApp || '外部应用'}
+                         {sourceDetails.name}
                        </span>
                     </div>
 

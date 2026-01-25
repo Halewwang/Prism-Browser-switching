@@ -196,7 +196,21 @@ const App: React.FC = () => {
     if (normalizedSource) {
       matchedRule = rules.find(rule => {
         if (!rule.active || rule.type !== RuleType.SOURCE_APP) return false;
+        
         const ruleValue = rule.value.replace(/\.app$/i, '').trim().toLowerCase();
+        
+        // Exact match or includes
+        // Also handle Chinese/English variations via hardcoded check if needed, 
+        // but generally ruleValue should match normalizedSource
+        
+        // Improve matching: Check if normalizedSource includes ruleValue OR ruleValue includes normalizedSource
+        // This helps if rule is "DingTalk" and source is "DingTalk.app" (handled) or "钉钉" (needs mapping)
+        
+        // Try to match alias if available
+        if (ruleValue === 'dingtalk' && (normalizedSource.includes('dingtalk') || normalizedSource.includes('钉钉'))) return true;
+        if ((ruleValue === 'wechat' || ruleValue === 'weixin') && (normalizedSource.includes('wechat') || normalizedSource.includes('weixin') || normalizedSource.includes('微信'))) return true;
+        if ((ruleValue === 'lark' || ruleValue === 'feishu') && (normalizedSource.includes('lark') || normalizedSource.includes('feishu') || normalizedSource.includes('飞书'))) return true;
+        
         return ruleValue && normalizedSource.includes(ruleValue);
       });
     }

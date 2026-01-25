@@ -8,6 +8,12 @@ import safariIcon from './assets/browsers/safari.svg';
 import edgeIcon from './assets/browsers/edge.svg';
 import firefoxIcon from './assets/browsers/firefox.svg';
 
+import dingtalkIcon from './assets/apps/dingtalk.svg';
+import wechatIcon from './assets/apps/wechat.svg';
+import larkIcon from './assets/apps/lark.svg';
+import slackIcon from './assets/apps/slack.svg';
+import telegramIcon from './assets/apps/telegram.svg';
+
 export const MOCK_BROWSERS: BrowserApp[] = [
   { id: 'b1', name: 'Arc', icon: 'arc', path: '/Applications/Arc.app', type: 'arc' },
   { id: 'b2', name: 'Google Chrome', icon: 'chrome', path: '/Applications/Google Chrome.app', type: 'chrome', isDefault: true },
@@ -32,17 +38,59 @@ export const MOCK_HISTORY: HistoryLog[] = [
 ];
 
 export const APP_ICONS: Record<string, React.ReactNode> = {
-  'Slack': <Hash className="w-3 h-3 text-purple-500" />,
-  'Discord': <MessageCircle className="w-3 h-3 text-indigo-500" />,
-  'VS Code': <Command className="w-3 h-3 text-blue-500" />,
-  'Terminal': <Box className="w-3 h-3 text-slate-700" />,
-  'GitHub Desktop': <Github className="w-3 h-3 text-slate-900" />,
-  'Telegram': <Send className="w-3 h-3 text-blue-400" />,
-  'WeChat': <MessageSquare className="w-3 h-3 text-green-500" />,
-  '微信': <MessageSquare className="w-3 h-3 text-green-500" />,
-  'DingTalk': <Send className="w-3 h-3 text-blue-600" />,
-  '钉钉': <Send className="w-3 h-3 text-blue-600" />,
-  'Postman': <Rocket className="w-3 h-3 text-orange-500" />,
+  'Slack': <img src={slackIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'Discord': <MessageCircle className="w-3.5 h-3.5 text-indigo-500" />,
+  'VS Code': <Command className="w-3.5 h-3.5 text-blue-500" />,
+  'Terminal': <Box className="w-3.5 h-3.5 text-slate-700" />,
+  'GitHub Desktop': <Github className="w-3.5 h-3.5 text-slate-900" />,
+  'Telegram': <img src={telegramIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'WeChat': <img src={wechatIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  '微信': <img src={wechatIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'DingTalk': <img src={dingtalkIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  '钉钉': <img src={dingtalkIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'Lark': <img src={larkIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'Feishu': <img src={larkIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  '飞书': <img src={larkIcon} className="w-3.5 h-3.5 rounded-sm object-contain" />,
+  'Postman': <Rocket className="w-3.5 h-3.5 text-orange-500" />,
+};
+
+// Helper to normalize app name and get details
+export const getSourceAppDetails = (appName: string) => {
+  if (!appName) return { name: 'External', icon: <Zap size={14} className="text-gray-400" /> };
+  
+  const normalized = appName.trim();
+  const lower = normalized.toLowerCase();
+  
+  // Try direct match first
+  if (APP_ICONS[normalized]) {
+    return { name: normalized, icon: APP_ICONS[normalized] };
+  }
+  
+  // Try known aliases
+  if (lower.includes('dingtalk') || lower.includes('钉钉')) {
+    return { name: 'DingTalk', icon: APP_ICONS['DingTalk'] };
+  }
+  if (lower.includes('wechat') || lower.includes('weixin') || lower.includes('微信')) {
+    return { name: 'WeChat', icon: APP_ICONS['WeChat'] };
+  }
+  if (lower.includes('lark') || lower.includes('feishu') || lower.includes('飞书')) {
+    return { name: 'Lark', icon: APP_ICONS['Lark'] };
+  }
+  if (lower.includes('slack')) {
+    return { name: 'Slack', icon: APP_ICONS['Slack'] };
+  }
+  if (lower.includes('telegram')) {
+    return { name: 'Telegram', icon: APP_ICONS['Telegram'] };
+  }
+  if (lower.includes('code') || lower.includes('vscode')) {
+    return { name: 'VS Code', icon: APP_ICONS['VS Code'] };
+  }
+
+  // Fallback
+  return { 
+    name: normalized, 
+    icon: <Zap size={14} className="text-gray-400" /> 
+  };
 };
 
 export const getBrowserIcon = (type: string, size = 6) => {

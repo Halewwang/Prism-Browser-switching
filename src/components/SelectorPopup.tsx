@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserApp } from '../types';
 import { AppWindow } from 'lucide-react';
+import { getSourceAppDetails } from '../constants';
 
 interface SelectorPopupProps {
   url: string;
@@ -15,6 +16,9 @@ interface SelectorPopupProps {
 const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers, onSelect, onCancel }) => {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  // Get mapped source app details
+  const sourceDetails = getSourceAppDetails(sourceApp || '');
 
   const handleImageError = (browserId: string) => {
     setImageErrors(prev => ({ ...prev, [browserId]: true }));
@@ -45,12 +49,12 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, browsers,
       <div className="flex gap-[7px] p-[7px] h-[54px] w-full box-border">
         {/* Source App */}
         <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
-          <div className="w-[14px] h-[14px] text-black">
-             {/* Placeholder for Source App Icon */}
-             <AppWindow size={14} strokeWidth={2.5} />
+          <div className="w-[14px] h-[14px] flex items-center justify-center text-black">
+             {/* Source App Icon */}
+             {sourceDetails.icon}
           </div>
           <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
-            {sourceApp || 'Link'}
+            {sourceDetails.name}
           </span>
         </div>
 
