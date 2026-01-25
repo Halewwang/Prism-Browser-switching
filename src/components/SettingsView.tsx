@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
 import { BrowserApp, RoutingRule } from '../types';
-import { Cpu, ListFilter, Info } from 'lucide-react';
+import { Cpu, ListFilter, Info, RefreshCcw } from 'lucide-react';
 import RulesView from './RulesView';
+import { checkForUpdates } from '../utils/updater';
+
+// 安全地获取ipcRenderer
+const getIpcRenderer = () => {
+  if ((window as any).electron?.ipcRenderer) {
+    return (window as any).electron.ipcRenderer;
+  }
+  return null;
+};
 
 interface SettingsViewProps {
   rules?: RoutingRule[];
@@ -20,6 +29,49 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'rules'>('rules');
   const [autoStart, setAutoStart] = useState(true);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string>('');
+
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus('Checking...');
+    
+    try {
+      const ipcRenderer = getIpcRenderer();
+      if (!ipcRenderer) {
+        setUpdateStatus('Error: IPC not available');
+        return;
+      }
+
+      const currentVersion = await ipcRenderer.invoke('get-app-version');
+      const info = await checkForUpdates(currentVersion);
+      
+      if (info.hasUpdate) {
+        // If update found, the main App component will handle the modal via state lift or event
+        // But here we can also just trigger the download if we want, or show a message
+        // For better UX, we'll let the user know an update is available and maybe trigger the modal
+        // Since the App component also checks on startup, we might want to expose setUpdateInfo to here
+        // or just let the user know.
+        // Simplified approach: Re-trigger the startup check logic by reloading or sending an event
+        // Or better: pass a callback prop `onCheckUpdate` from App.tsx. 
+        // For now, let's just show status text.
+        setUpdateStatus(`New version v${info.latestVersion} available!`);
+        // Trigger the update modal in App.tsx by re-fetching there or using IPC
+        // To keep it simple without refactoring props too much:
+        // We will invoke the same logic as App.tsx if possible, or just open the download link
+        if(confirm(`New version v${info.latestVersion} available! Download now?`)) {
+             ipcRenderer.send('start-download-update', info.downloadUrl);
+        }
+      } else {
+        setUpdateStatus('You are up to date.');
+      }
+    } catch (e) {
+      setUpdateStatus('Failed to check for updates.');
+      console.error(e);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   // Simple Toggle Switch Component
   const ToggleSwitch = ({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) => (
@@ -98,6 +150,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   onClick={() => setAutoStart(!autoStart)} 
                   label="开机自动启动"
                 />
+                
+                {/* Update Check */}
+                <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">检查更新</h4>
+                    {updateStatus && (
+                      <p className="text-xs text-gray-500 mt-1">{updateStatus}</p>
+                    )}
+                  </div>
+                  <button 
+                    onClick={handleCheckUpdate}
+                    disabled={isCheckingUpdate}
+                    className="px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCcw size={14} className={isCheckingUpdate ? 'animate-spin' : ''} />
+                    {isCheckingUpdate ? 'Checking...' : 'Check'}
+                  </button>
+                </div>
               </div>
             </div>
 

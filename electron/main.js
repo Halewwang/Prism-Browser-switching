@@ -1,9 +1,10 @@
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
+import pkg from '../package.json' assert { type: "json" };
 
 // 浏览器列表配置
 const BROWSER_CONFIGS = [
@@ -468,3 +469,15 @@ ipcMain.on('maximize-window', () => {
 ipcMain.on('resize-me', (event, { width, height }) => {
     if(mainWindow) mainWindow.setSize(width, height);
 })
+
+// Update Handlers
+ipcMain.handle('get-app-version', () => {
+  return pkg.version;
+});
+
+ipcMain.on('start-download-update', (event, downloadUrl) => {
+  // For macOS, opening the DMG download link in default browser is the safest and standard way
+  // Implementing a custom downloader with progress bar inside Electron is possible but complex (requires saving to temp, mounting dmg, etc.)
+  // Given the "secure and reliable" requirement, deferring to the browser is robust.
+  shell.openExternal(downloadUrl);
+});

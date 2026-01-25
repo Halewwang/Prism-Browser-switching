@@ -8,6 +8,9 @@ import RulesView from './components/RulesView';
 import SettingsView from './components/SettingsView';
 import DashboardView from './components/DashboardView';
 
+import UpdateModal from './components/UpdateModal';
+import { checkForUpdates, UpdateInfo } from './utils/updater';
+
 // 安全地获取ipcRenderer，避免直接使用window.require
 const getIpcRenderer = () => {
   if (typeof window === 'undefined') return null;
@@ -70,6 +73,7 @@ const App: React.FC = () => {
   const [activeSource, setActiveSource] = useState('');
   const [showPopupOverlay, setShowPopupOverlay] = useState(false);
   const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string} | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   
   // 监听规则变化，保存到localStorage
   useEffect(() => {
@@ -127,6 +131,29 @@ const App: React.FC = () => {
       ipcRenderer.removeAllListeners('installed-im-apps');
     };
   }, []);
+
+  // Check for updates on startup
+  useEffect(() => {
+    const checkUpdate = async () => {
+      if (!ipcRenderer) return;
+      
+      const currentVersion = await ipcRenderer.invoke('get-app-version');
+      const info = await checkForUpdates(currentVersion);
+      
+      if (info.hasUpdate) {
+        setUpdateInfo(info);
+      }
+    };
+    
+    checkUpdate();
+  }, []);
+
+  const handleStartUpdate = () => {
+    if (updateInfo && ipcRenderer) {
+      ipcRenderer.send('start-download-update', updateInfo.downloadUrl);
+      setUpdateInfo(null);
+    }
+  };
 
   // 智能路由选择逻辑已移至deep-link事件处理中，此函数保留用于兼容性
 
@@ -296,6 +323,13 @@ const App: React.FC = () => {
   // Main Interface
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-transparent font-sans antialiased p-4">
+      {updateInfo && (
+        <UpdateModal 
+          updateInfo={updateInfo} 
+          onClose={() => setUpdateInfo(null)} 
+          onUpdate={handleStartUpdate}
+        />
+      )}
       {/* Container with Shadow - Matching Figma Design */}
       <div className="flex flex-col overflow-hidden bg-white rounded-[15px] shadow-[0px_5px_20px_0px_rgba(0,0,0,0.3)] w-full h-full relative">
         {/* Global Drag Region - Covers Top Area */}
