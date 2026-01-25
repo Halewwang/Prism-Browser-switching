@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { BrowserApp, RoutingRule, UpdateInfo } from '../types';
-import { Cpu, ListFilter, Info, RefreshCcw, Globe } from 'lucide-react';
-import RulesView from './RulesView';
+import { BrowserApp, UpdateInfo } from '../types';
+import { Cpu, Info, RefreshCcw } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 // 安全地获取ipcRenderer
@@ -27,11 +26,7 @@ const getIpcRenderer = () => {
 };
 
 interface SettingsViewProps {
-  rules?: RoutingRule[];
   browsers?: BrowserApp[];
-  installedIMApps?: Array<{ id: string; name: string; path: string; iconDataURL?: string }>;
-  onAddRule?: (rule: RoutingRule) => void;
-  onDeleteRule?: (id: string) => void;
   onRescan?: () => void;
   onCheckUpdate?: () => void;
   isCheckingUpdate?: boolean;
@@ -39,18 +34,13 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
-  rules = [], 
   browsers = [], 
-  installedIMApps = [], 
-  onAddRule = () => {}, 
-  onDeleteRule = () => {},
   onRescan,
   onCheckUpdate,
   isCheckingUpdate,
   updateInfo
 }) => {
   const { t, language, setLanguage } = useI18n();
-  const [activeTab, setActiveTab] = useState<'general' | 'rules'>('rules');
   const [autoStart, setAutoStart] = useState(true);
   
   const [appVersion, setAppVersion] = useState<string>('Loading...');
@@ -98,45 +88,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="h-full flex flex-col max-w-5xl mx-auto w-full">
-      {/* Tabs Header */}
-      <div className="flex space-x-1 bg-[#F8F8F8] p-1 rounded-full border border-[#E1E1E1] w-fit mb-6">
-        <button
-          onClick={() => setActiveTab('rules')}
-          className={`
-            px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2
-            ${activeTab === 'rules' 
-              ? 'bg-white text-black shadow-sm border border-[#E1E1E1]' 
-              : 'text-gray-500 hover:text-gray-900'}
-          `}
-        >
-          <ListFilter size={16} />
-          {t.rules.title}
-        </button>
-        <button
-          onClick={() => setActiveTab('general')}
-          className={`
-            px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2
-            ${activeTab === 'general' 
-              ? 'bg-white text-black shadow-sm border border-[#E1E1E1]' 
-              : 'text-gray-500 hover:text-gray-900'}
-          `}
-        >
-          <Cpu size={16} />
-          {t.settings.general}
-        </button>
-      </div>
-
       {/* Content Area */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'rules' ? (
-          <RulesView 
-            rules={rules}
-            browsers={browsers}
-            installedIMApps={installedIMApps}
-            onAddRule={onAddRule}
-            onDeleteRule={onDeleteRule}
-          />
-        ) : (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             {/* General Settings */}
             <div className="bg-[#F8F8F8] border border-[#E1E1E1] rounded-[15px] p-6">
@@ -219,7 +172,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
           </div>
-        )}
       </div>
     </div>
   );

@@ -44,7 +44,7 @@ const getIpcRenderer = () => {
 const ipcRenderer = getIpcRenderer();
 
 const AppContent: React.FC = () => {
-  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rules' | 'settings'>('dashboard');
   const [viewMode, setViewMode] = useState<'dashboard' | 'popup'>('dashboard');
   
   // 使用扫描得到的已安装浏览器列表
@@ -74,8 +74,9 @@ const AppContent: React.FC = () => {
   const [activeSource, setActiveSource] = useState('');
   const [activeSourceIcon, setActiveSourceIcon] = useState<string | undefined>(undefined);
   const [showPopupOverlay, setShowPopupOverlay] = useState(false);
-  const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string, sourceIcon?: string} | null>(null);
+  const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string, sourceIcon?: string, sourceBundleId?: string} | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   
   // 监听规则变化，保存到localStorage
   useEffect(() => {
@@ -95,9 +96,6 @@ const AppContent: React.FC = () => {
     }
   }, [history]);
   
-  // 添加已安装IM应用的状态
-  const [installedIMApps, setInstalledIMApps] = useState<Array<{ id: string; name: string; path: string }>>([]);
-  
   // 获取已安装的浏览器列表
   useEffect(() => {
     if (!ipcRenderer) return;
@@ -116,24 +114,6 @@ const AppContent: React.FC = () => {
     };
   }, []);
   
-  // 获取已安装的IM应用列表
-  useEffect(() => {
-    if (!ipcRenderer) return;
-    
-    // 请求已安装的IM应用列表
-    ipcRenderer.send('get-installed-im-apps');
-    
-    // 监听已安装IM应用列表的响应
-    ipcRenderer.on('installed-im-apps', (event, installedIMApps) => {
-      console.log('Received installed IM apps:', installedIMApps);
-      setInstalledIMApps(installedIMApps);
-    });
-    
-    return () => {
-      ipcRenderer.removeAllListeners('installed-im-apps');
-    };
-  }, []);
-
   // Check for updates on startup
   useEffect(() => {
     const checkUpdate = async () => {
@@ -210,8 +190,8 @@ const AppContent: React.FC = () => {
   };
 
   // 核心路由逻辑
-  const processRouting = (url: string, source: string, sourceIcon?: string) => {
-    console.log('Processing routing for:', { url, source, hasIcon: !!sourceIcon });
+  const processRouting = (url: string, source: string, sourceIcon?: string, sourceBundleId?: string) => {
+    console.log('Processing routing for:', { url, source, sourceBundleId, hasIcon: !!sourceIcon });
     console.log('Current rules:', rules);
     
     // 规范化sourceApp名称
@@ -230,12 +210,24 @@ const AppContent: React.FC = () => {
     });
     
     // 2. 如果没有 URL 规则，检查来源应用规则
-    if (!matchedRule && normalizedSource) {
+    if (!matchedRule) {
       matchedRule = rules.find(rule => {
         if (!rule.active || rule.type !== RuleType.SOURCE_APP) return false;
+        
+        // Check Bundle ID match first (Exact match)
+        if (sourceBundleId && rule.value === sourceBundleId) {
+            return true;
+        }
+
+        // Fallback to legacy name matching
         const ruleValue = rule.value.replace(/\.app$/i, '').trim().toLowerCase();
-        // 来源匹配逻辑：检查包含关系
-        return ruleValue && normalizedSource.includes(ruleValue);
+        // 来源匹配逻辑：检查包含关系 (e.g. rule="Slack" matches source="Slack")
+        // Only if ruleValue is NOT likely a bundle ID (contains dots)
+        if (ruleValue.includes('.')) {
+             // Treat as bundle ID, so strict equality
+             return sourceBundleId === rule.value;
+        }
+        return normalizedSource && ruleValue && normalizedSource.includes(ruleValue);
       });
     }
     
@@ -267,7 +259,7 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (pendingDeepLink && browsers.length > 0) {
       console.log('Processing pending deep link');
-      processRouting(pendingDeepLink.url, pendingDeepLink.source, pendingDeepLink.sourceIcon);
+      processRouting(pendingDeepLink.url, pendingDeepLink.source, pendingDeepLink.sourceIcon, pendingDeepLink.sourceBundleId);
       setPendingDeepLink(null);
     }
   }, [browsers, pendingDeepLink, rules]);
@@ -289,23 +281,23 @@ const AppContent: React.FC = () => {
     }
     
     ipcRenderer.on('deep-link', (_: any, data: any) => {
-      const { url, source, sourceIcon } = data;
-      console.log('Deep link received:', { url, source, hasIcon: !!sourceIcon });
+      const { url, source, sourceIcon, sourceBundleId } = data;
+      console.log('Deep link received:', { url, source, sourceBundleId, hasIcon: !!sourceIcon });
       
       if (browsers.length === 0) {
         console.log('Browsers not loaded yet, queueing deep link');
-        setPendingDeepLink({ url, source, sourceIcon });
+        setPendingDeepLink({ url, source, sourceIcon, sourceBundleId });
         return;
       }
       
-      processRouting(url, source, sourceIcon);
+      processRouting(url, source, sourceIcon, sourceBundleId);
     });
     
     return () => {
       ipcRenderer.removeAllListeners('view-mode-change');
       ipcRenderer.removeAllListeners('deep-link');
     };
-  }, [rules, browsers, installedIMApps]);
+  }, [rules, browsers]);
 
   // Standalone Popup Interface
   if (viewMode === 'popup') {
@@ -344,33 +336,58 @@ const AppContent: React.FC = () => {
         <div className="flex flex-1 overflow-hidden z-0">
           {/* Sidebar */}
           <Sidebar 
-            currentView={currentView} 
-            onChangeView={setCurrentView} 
-            onClose={handleClose}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
           />
           
           {/* Main Content Area */}
           <main className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white">
             {/* Content */}
             <div className="flex-1 overflow-hidden">
-              {currentView === AppView.DASHBOARD && (
+              {activeTab === 'dashboard' && (
                 <DashboardView 
                   history={history} 
                   browsers={browsers} 
                   onClearHistory={clearHistory}
                 />
               )}
-              {currentView === AppView.SETTINGS && (
-                <div className="h-full overflow-y-auto p-6">
-                   <h1 className="text-[25px] font-normal text-black font-['SF_Pro_Display'] leading-tight mb-6">General</h1>
-                   <SettingsView 
+              {activeTab === 'rules' && (
+                 <div className="h-full overflow-y-auto p-6">
+                   <RulesView 
                       rules={rules}
                       browsers={browsers}
-                      installedIMApps={installedIMApps}
                       onAddRule={r => setRules(prev => [...prev, r])}
                       onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
+                    />
+                 </div>
+              )}
+              {activeTab === 'settings' && (
+                <div className="h-full overflow-y-auto p-6">
+                   <SettingsView 
+                      browsers={browsers}
+                      onRescan={() => ipcRenderer && ipcRenderer.send('get-installed-browsers')}
+                      isCheckingUpdate={isCheckingUpdate}
+                      onCheckUpdate={async () => {
+                          if (!ipcRenderer) return;
+                          
+                          setIsCheckingUpdate(true);
+                          try {
+                              const currentVersion = await ipcRenderer.invoke('get-app-version');
+                              const info = await checkForUpdates(currentVersion);
+                              if (info.hasUpdate) {
+                                setUpdateInfo(info);
+                              } else {
+                                // Simple feedback using native alert, can be improved to Toast later
+                                alert('You are up to date!');
+                              }
+                          } catch (e) {
+                              console.error(e);
+                              alert('Failed to check for updates.');
+                          } finally {
+                              setIsCheckingUpdate(false);
+                          }
+                      }}
+                      updateInfo={updateInfo}
                     />
                 </div>
               )}

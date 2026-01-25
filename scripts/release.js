@@ -120,18 +120,22 @@ const main = async () => {
         const checksum = execSync(`shasum -a 256 "${dmgPath}"`, { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
         fs.appendFileSync(RELEASE_NOTES_PATH, `\n\n## Checksum (SHA-256)\n\`\`\`\n${checksum}\n\`\`\``);
 
-        // Upload
-        const cmd = `gh release create v${newVersion} "${dmgPath}" --title "${title}" --notes-file "${RELEASE_NOTES_PATH}"`;
-        run(cmd);
-        console.log('✅ GitHub Release created successfully!');
+        // Check if gh is installed
+        try {
+            execSync('gh --version', { stdio: 'ignore' });
+            // Upload
+            const cmd = `gh release create v${newVersion} "${dmgPath}" --title "${title}" --notes-file "${RELEASE_NOTES_PATH}"`;
+            run(cmd);
+            console.log('✅ GitHub Release created successfully!');
+        } catch (e) {
+             console.log('⚠️ GitHub CLI (gh) not found. Skipping automatic upload.');
+             throw new Error('GitHub CLI not installed');
+        }
     } catch (e) {
-        console.error('⚠️ Failed to create GitHub Release automatically. Please upload manually.');
-        console.error(e.message);
-        
-        console.log('\n✨ Release Process Complete!');
+        console.log('\n✨ Release Process Complete (Local Only)!');
         console.log(`1. Go to: https://github.com/Halewwang/Prism-Browser-switching/releases/new`);
         console.log(`2. Select tag: v${newVersion}`);
-        console.log(`3. Copy content from RELEASE_NOTES.md`);
+        console.log(`3. Copy content from RELEASE_NOTES.md (Checksum included)`);
         console.log(`4. Upload: release/Prism-${newVersion}-arm64.dmg`);
     }
     

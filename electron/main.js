@@ -1,12 +1,12 @@
 
-import { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
 import pkg from '../package.json' assert { type: "json" };
 
-// 动态扫描已安装的应用程序（通用）
+// 动态扫描已安装的应用程序（通用） - 仅保留浏览器扫描
 async function scanAppsByBundleIds(bundleIdMap) {
   console.log('Scanning apps dynamically...');
   const installedApps = [];
@@ -66,49 +66,9 @@ const BROWSER_BUNDLE_IDS = {
   'b17': { name: 'SigmaOS', bundleId: 'com.sigmaos.sigmaos.macos', type: 'other' }
 };
 
-// 办公/聊天应用配置 (Bundle ID 映射)
-const IM_APP_BUNDLE_IDS = {
-  'im1': { name: '微信', bundleId: 'com.tencent.xinWeChat' },
-  'im2': { name: 'QQ', bundleId: 'com.tencent.qq' },
-  'im3': { name: '钉钉', bundleId: 'com.alibaba.DingTalkMac' },
-  'im4': { name: '飞书', bundleId: 'com.electron.lark' }, // Lark often uses this
-  'im5': { name: 'Lark', bundleId: 'com.electron.lark.helper' }, // Check both
-  'im6': { name: 'Slack', bundleId: 'com.tinyspeck.slackmacgap' },
-  'im7': { name: 'Discord', bundleId: 'com.hnc.Discord' },
-  'im8': { name: 'Telegram', bundleId: 'ru.keepcoder.Telegram' },
-  'im9': { name: 'WhatsApp', bundleId: 'net.whatsapp.WhatsApp' },
-  'im10': { name: 'Microsoft Teams', bundleId: 'com.microsoft.teams' },
-  'im11': { name: 'Zoom', bundleId: 'us.zoom.xos' },
-  'im12': { name: 'Feishu', bundleId: 'com.bytedance.lark.helper' }, // Alternative bundle ID
-  'im13': { name: 'WeCom', bundleId: 'com.tencent.WeWorkMac' }, // 企业微信
-  'im14': { name: 'DingTalk', bundleId: 'com.alibaba.DingTalkMac' },
-  'im15': { name: 'Skype', bundleId: 'com.skype.skype' },
-  'im16': { name: 'Line', bundleId: 'jp.naver.line.mac' },
-  'im17': { name: 'Signal', bundleId: 'org.whispersystems.signal-desktop' },
-  'im18': { name: 'Notion', bundleId: 'notion.id' },
-  'im19': { name: 'Obsidian', bundleId: 'md.obsidian' },
-  'im20': { name: 'WPS Office', bundleId: 'com.kingsoft.wpsoffice.mac' },
-  'im21': { name: 'Microsoft Word', bundleId: 'com.microsoft.Word' },
-  'im22': { name: 'Microsoft Excel', bundleId: 'com.microsoft.Excel' },
-  'im23': { name: 'Microsoft PowerPoint', bundleId: 'com.microsoft.Powerpoint' },
-  'im24': { name: 'Microsoft Outlook', bundleId: 'com.microsoft.Outlook' },
-  'im25': { name: 'Tencent Meeting', bundleId: 'com.tencent.meeting' }, // 腾讯会议
-  'im26': { name: 'VooV Meeting', bundleId: 'com.tencent.voov' },
-  'im27': { name: 'Mail', bundleId: 'com.apple.mail' },
-  'im28': { name: 'Thunderbird', bundleId: 'org.mozilla.thunderbird' },
-  'im29': { name: 'Spark', bundleId: 'com.readdle.smartemail-Mac' },
-  'im30': { name: 'Foxmail', bundleId: 'com.tencent.Foxmail' },
-  'im31': { name: 'Netease Mail Master', bundleId: 'com.netease.mail.master' }
-};
-
 // 扫描已安装的浏览器
 async function scanInstalledBrowsers() {
   return await scanAppsByBundleIds(BROWSER_BUNDLE_IDS);
-}
-
-// 扫描已安装的IM应用
-async function scanInstalledIMApps() {
-  return await scanAppsByBundleIds(IM_APP_BUNDLE_IDS);
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -301,7 +261,7 @@ function switchToDashboardMode() {
 }
 
 // 切换到弹窗模式
-function switchToPopupMode(url, sourceApp, sourceAppIcon) {
+function switchToPopupMode(url, sourceApp, sourceAppIcon, sourceBundleId) {
   if (!mainWindow) return;
   isPopupMode = true;
   
@@ -330,7 +290,7 @@ function switchToPopupMode(url, sourceApp, sourceAppIcon) {
   mainWindow.webContents.send('view-mode-change', 'popup');
   // 稍微延迟发送数据，确保 React 已渲染弹窗组件
   setTimeout(() => {
-    mainWindow.webContents.send('deep-link', { url, source: sourceApp, sourceIcon: sourceAppIcon });
+    mainWindow.webContents.send('deep-link', { url, source: sourceApp, sourceIcon: sourceAppIcon, sourceBundleId });
   }, 100);
 }
 
@@ -344,10 +304,50 @@ app.whenReady().then(() => {
     event.reply('installed-browsers', installedBrowsers);
   });
   
-  // 当渲染进程请求已安装IM应用列表时
-  ipcMain.on('get-installed-im-apps', async (event) => {
-    const installedIMApps = await scanInstalledIMApps();
-    event.reply('installed-im-apps', installedIMApps);
+  // 处理选择源应用请求
+  ipcMain.handle('select-source-app', async () => {
+    if (!mainWindow) return null;
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'Applications', extensions: ['app'] }]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    const appPath = result.filePaths[0];
+    const appName = path.basename(appPath, '.app');
+    let iconDataURL = '';
+    let bundleId = '';
+
+    // Get Icon
+    try {
+      const icon = await app.getFileIcon(appPath, { size: 'large' });
+      iconDataURL = icon.toDataURL();
+    } catch (e) {
+      console.error('Failed to get icon', e);
+    }
+
+    // Get Bundle ID
+    try {
+       const stdout = await new Promise((resolve) => {
+           exec(`mdls -name kMDItemCFBundleIdentifier -r "${appPath}"`, (err, out) => resolve(out));
+       });
+       if (stdout && stdout !== '(null)') {
+           bundleId = stdout.trim();
+       }
+    } catch (e) {
+       console.error('Failed to get bundle id', e);
+    }
+
+    return {
+      name: appName,
+      path: appPath,
+      iconDataURL,
+      bundleId
+    };
   });
 });
 
@@ -375,6 +375,7 @@ async function getSourceAppInfo() {
       let sourceAppName = 'Unknown';
       let sourceAppPath = '';
       let sourceAppIcon = '';
+      let sourceAppBundleId = '';
 
       if (!error && stdout) {
         // Output format: ASN:0x...-"Name": ASN:0x...-"Name": ...
@@ -413,9 +414,21 @@ async function getSourceAppInfo() {
               } catch (e) {
                   console.error('Failed to get app icon', e);
               }
+              
+              // Get Bundle ID
+              try {
+                 const stdout = await new Promise((res) => {
+                     exec(`mdls -name kMDItemCFBundleIdentifier -r "${sourceAppPath}"`, (e, out) => res(out || ''));
+                 });
+                 if (stdout && stdout !== '(null)') {
+                     sourceAppBundleId = stdout.trim();
+                 }
+              } catch (e) {
+                 console.error('Failed to get app bundle id', e);
+              }
           }
       }
-      resolve({ name: sourceAppName, path: sourceAppPath, icon: sourceAppIcon });
+      resolve({ name: sourceAppName, path: sourceAppPath, icon: sourceAppIcon, bundleId: sourceAppBundleId });
     });
   });
 }
@@ -424,18 +437,18 @@ async function getSourceAppInfo() {
 app.on('open-url', async (event, url) => {
   event.preventDefault();
   
-  const { name: sourceApp, icon: sourceAppIcon } = await getSourceAppInfo();
+  const { name: sourceApp, icon: sourceAppIcon, bundleId: sourceAppBundleId } = await getSourceAppInfo();
     
-  console.log('Open URL event received:', { url, sourceApp });
+  console.log('Open URL event received:', { url, sourceApp, sourceAppBundleId });
     
   if (mainWindow) {
     // 直接显示弹窗，让渲染进程处理规则匹配
-    switchToPopupMode(url, sourceApp, sourceAppIcon);
+    switchToPopupMode(url, sourceApp, sourceAppIcon, sourceAppBundleId);
   } else {
     // 窗口未创建时的处理
     createWindow();
     mainWindow.once('ready-to-show', () => {
-      switchToPopupMode(url, sourceApp, sourceAppIcon);
+      switchToPopupMode(url, sourceApp, sourceAppIcon, sourceAppBundleId);
     });
   }
 });

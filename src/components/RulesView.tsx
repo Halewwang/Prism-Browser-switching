@@ -7,18 +7,38 @@ import { useI18n } from '../i18n';
 interface RulesViewProps {
   rules: RoutingRule[];
   browsers: BrowserApp[];
-  installedIMApps: Array<{ id: string; name: string; path: string; iconDataURL?: string }>;
   onAddRule: (rule: RoutingRule) => void;
   onDeleteRule: (id: string) => void;
 }
 
-const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps, onAddRule, onDeleteRule }) => {
+const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDeleteRule }) => {
   const { t } = useI18n();
   const [newType, setNewType] = useState<RuleType>(RuleType.SOURCE_APP);
   const [newValue, setNewValue] = useState('');
+  const [selectedApp, setSelectedApp] = useState<{name: string, bundleId: string, icon: string} | null>(null);
   const [isCustomInput, setIsCustomInput] = useState(false);
   const [newTargetId, setNewTargetId] = useState(browsers[0]?.id || '');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const handleSelectApp = async () => {
+      const ipcRenderer = (window as any).electron?.ipcRenderer || (window as any).require?.('electron')?.ipcRenderer;
+      if (ipcRenderer) {
+          try {
+              const result = await ipcRenderer.invoke('select-source-app');
+              if (result) {
+                  setSelectedApp({
+                      name: result.name,
+                      bundleId: result.bundleId,
+                      icon: result.iconDataURL
+                  });
+                  setNewValue(result.bundleId);
+                  setIsCustomInput(false);
+              }
+          } catch (e) {
+              console.error("Failed to select app", e);
+          }
+      }
+  };
 
   const handleAdd = () => {
     if (!newValue || !newTargetId) return;
@@ -28,10 +48,13 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
       value: newValue,
       targetBrowserId: newTargetId,
       active: true,
-      description: t.rules.userRule
+      description: t.rules.userRule,
+      appName: newType === RuleType.SOURCE_APP ? (selectedApp?.name || newValue) : undefined,
+      appIcon: newType === RuleType.SOURCE_APP ? selectedApp?.icon : undefined
     };
     onAddRule(newRule);
     setNewValue('');
+    setSelectedApp(null);
     setIsCustomInput(false);
   };
 
@@ -74,24 +97,26 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
             </label>
             
             {newType === RuleType.SOURCE_APP && !isCustomInput ? (
-              <select
-                value={newValue}
-                onChange={(e) => {
-                  if (e.target.value === 'CUSTOM') {
-                    setIsCustomInput(true);
-                    setNewValue('');
-                  } else {
-                    setNewValue(e.target.value);
-                  }
-                }}
-                className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black/20 transition-all appearance-none"
-              >
-                <option value="">{t.rules.selectApp}</option>
-                {installedIMApps.map(app => (
-                  <option key={app.id} value={app.name}>{app.name}</option>
-                ))}
-                <option value="CUSTOM">{t.rules.manualInput}</option>
-              </select>
+              <div className="flex gap-2">
+                 <button
+                    onClick={handleSelectApp}
+                    className="flex-1 px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm text-left flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
+                 >
+                    {selectedApp ? (
+                        <>
+                           {selectedApp.icon ? (
+                               <img src={selectedApp.icon} className="w-4 h-4 object-contain" alt="" />
+                           ) : (
+                               <AppWindow size={16} />
+                           )}
+                           <span className="truncate font-medium text-black">{selectedApp.name}</span>
+                           <span className="text-xs text-gray-400 ml-auto truncate max-w-[100px]">{selectedApp.bundleId}</span>
+                        </>
+                    ) : (
+                        <span className="text-gray-500">{t.rules.selectApp}</span>
+                    )}
+                 </button>
+              </div>
             ) : (
               <div className="relative">
                  <input
@@ -140,9 +165,6 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                             onError={(e) => {
                               // Fallback if image fails to load
                               e.currentTarget.style.display = 'none';
-                              // You could potentially trigger a state update here to switch to icon fallback, 
-                              // but for now, hiding the broken image is a good start. 
-                              // A better approach is to render the default icon if image fails.
                             }} 
                           />
                         );
@@ -157,7 +179,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
             <button
               onClick={handleAdd}
               disabled={!newValue}
-              className="px-6 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
+              className="w-full md:w-auto px-6 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               <Plus size={16} /> {t.rules.addRule}
             </button>
@@ -199,12 +221,16 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, installedIMApps,
                 return (
                   <div key={rule.id} className="px-6 py-4 hover:bg-black/5 transition-colors group flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border border-[#E1E1E1] shadow-sm bg-white text-black`}>
-                        {rule.type === RuleType.SOURCE_APP ? <AppWindow size={18} /> : <Globe size={18} />}
+                      <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border border-[#E1E1E1] shadow-sm bg-white text-black overflow-hidden`}>
+                        {rule.appIcon ? (
+                            <img src={rule.appIcon} className="w-full h-full object-contain" alt="" />
+                        ) : (
+                            rule.type === RuleType.SOURCE_APP ? <AppWindow size={18} /> : <Globe size={18} />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-semibold text-black">{rule.value}</span>
+                          <span className="text-sm font-semibold text-black">{rule.appName || rule.value}</span>
                         </div>
                         <div className="text-xs text-gray-500 flex items-center gap-1">
                             {rule.type === RuleType.SOURCE_APP ? t.rules.sourceApp : t.rules.urlPattern}

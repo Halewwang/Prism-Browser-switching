@@ -21,6 +21,8 @@ export interface RoutingRule {
   targetBrowserId: string;
   description?: string;
   active: boolean;
+  appName?: string; // Display name for SOURCE_APP rules
+  appIcon?: string; // Base64 icon for SOURCE_APP rules
 }
 
 export interface HistoryLog {
