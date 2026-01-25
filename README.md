@@ -98,6 +98,24 @@ npm start
 2.  Prism 弹窗显示可用浏览器列表。
 3.  按 `1` 选择 Chrome，按 `2` 选择 Safari（支持自定义快捷键）。
 
+## ❓ 常见问题 (FAQ)
+
+### ⚠️ 打开应用时提示 "Prism is damaged and can't be opened"？
+
+这是由于 macOS 的安全机制（Gatekeeper）拦截了未签名的应用。由于本项目是开源免费项目，暂未购买 Apple 开发者证书进行签名。
+
+**解决方法：**
+
+请在终端（Terminal）中运行以下命令，即可正常打开：
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/Prism.app
+```
+
+### 🔒 为什么应用需要获取辅助功能权限？
+
+Prism 需要使用辅助功能 API 来获取当前前台应用的窗口位置，以便将选择器弹窗精准显示在您的鼠标或窗口附近，提升使用体验。我们承诺不会读取您的任何其他敏感信息。
+
 ## 🤝 贡献指南 (Contributing)
 
 我们非常欢迎社区贡献！如果您有好的想法或发现了 Bug，请按以下步骤操作：
