@@ -1,7 +1,7 @@
-# v1.10.6 (2026-01-25)
+# v1.10.7 (2026-01-27)
 
 ## Changes
-* docs: update README with detailed features and usage guide (9b225a3)
+* fix: build config for ad-hoc signing and update FAQ for damaged app error (9642b2d)
 
 ## Installation
-Download `Prism-1.10.6-arm64.dmg` and drag to Applications.
+Download `Prism-1.10.7-arm64.dmg` and drag to Applications.

@@ -1,7 +1,7 @@
 {
   "name": "prism-app",
   "productName": "Prism",
-  "version": "1.10.6",
+  "version": "1.10.7",
   "main": "electron/main.js",
   "author": "Hale",
   "type": "module",
@@ -76,6 +76,7 @@
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3",
     "postcss": "^8.5.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
