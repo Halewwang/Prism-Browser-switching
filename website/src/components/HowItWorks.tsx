@@ -2,19 +2,19 @@ import { MousePointerClick, Settings, ExternalLink } from 'lucide-react';
 
 const steps = [
   {
-    icon: <MousePointerClick className="w-8 h-8 text-white" />,
+    icon: <MousePointerClick className="w-8 h-8 text-white z-10" />,
     title: "Click a Link",
     description: "Click any link in any application like Slack, Discord, or Mail.",
     color: "bg-neutral-800"
   },
   {
-    icon: <Settings className="w-8 h-8 text-white" />,
+    icon: <Settings className="w-8 h-8 text-white z-10" />,
     title: "Prism Activates",
     description: "Prism intercepts the request and checks your predefined rules.",
     color: "bg-neutral-700"
   },
   {
-    icon: <ExternalLink className="w-8 h-8 text-white" />,
+    icon: <ExternalLink className="w-8 h-8 text-white z-10" />,
     title: "Browser Opens",
     description: "The correct browser opens automatically. If no rule matches, you choose.",
     color: "bg-neutral-600"
@@ -39,7 +39,7 @@ export const HowItWorks = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
             {steps.map((step, index) => (
               <div key={index} className="flex flex-col items-center text-center">
-                <div className={`w-16 h-16 md:w-20 md:h-20 ${step.color} rounded-2xl shadow-lg shadow-gray-500/20 flex items-center justify-center mb-6 md:mb-8 transform transition-transform hover:scale-110 relative bg-white border-4 border-white`}>
+                <div className={`w-16 h-16 md:w-20 md:h-20 ${step.color} rounded-2xl shadow-lg shadow-gray-500/20 flex items-center justify-center mb-6 md:mb-8 transform transition-transform hover:scale-110 relative border-4 border-white z-10`}>
                   {step.icon}
                 </div>
                 <h3 className="text-lg md:text-xl font-bold text-neutral-900 mb-2 md:mb-3">{step.title}</h3>
