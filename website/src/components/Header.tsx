@@ -21,21 +21,21 @@ export const Header = () => {
       <div className="container mx-auto px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* Logo Placeholder */}
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex items-center justify-center text-white font-bold text-sm">
-            P
+          <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-black rounded-lg shadow-md flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+             <img src="/app-icon.png" alt="Prism Logo" className="w-full h-full object-cover" />
           </div>
-          <span className="text-xl font-semibold tracking-tight text-slate-900">Prism</span>
+          <span className="text-xl font-semibold tracking-tight text-neutral-900">Prism</span>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
+        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
           <a href="#features" className="hover:text-primary transition-colors">Features</a>
           <a href="#how-it-works" className="hover:text-primary transition-colors">How it Works</a>
           <a href="#new-features" className="hover:text-primary transition-colors">What's New</a>
         </nav>
 
         <a 
-          href="#download"
-          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+          href="https://github.com/Prism/LinkMaster/releases/latest/download/Prism-1.10.19-arm64.dmg"
+          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-neutral-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
         >
           <Download size={16} />
           Download

@@ -1,10 +1,6 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Vertical -->
-  <path d="M12 4V20" stroke="black" stroke-width="3" stroke-linecap="round"/>
-  <!-- Horizontal -->
-  <path d="M4 12H20" stroke="black" stroke-width="3" stroke-linecap="round"/>
-  <!-- Diagonal TL-BR -->
-  <path d="M6.34 6.34L17.66 17.66" stroke="black" stroke-width="3" stroke-linecap="round"/>
-  <!-- Diagonal BL-TR (Green) -->
-  <path d="M6.34 17.66L17.66 6.34" stroke="#4ADE80" stroke-width="3" stroke-linecap="round"/>
+<svg width="76" height="76" viewBox="0 0 76 76" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="33.9883" width="7.55297" height="75.5297" fill="black"/>
+<rect x="75.5297" y="33.9884" width="7.55297" height="75.5297" transform="rotate(90 75.5297 33.9884)" fill="black"/>
+<rect x="67.1375" y="61.6826" width="7.55297" height="75.5297" transform="rotate(135 67.1375 61.6826)" fill="black"/>
+<rect x="61.6826" y="8.39225" width="7.55297" height="75.5297" transform="rotate(45 61.6826 8.39225)" fill="#88FF00"/>
 </svg>

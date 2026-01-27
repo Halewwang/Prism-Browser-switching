@@ -95,13 +95,23 @@ const main = async () => {
     fs.writeFileSync(RELEASE_NOTES_PATH, notesContent);
     console.log(`✅ Release notes generated at ${RELEASE_NOTES_PATH}`);
 
+    // 3.5 Generate latest-release.json for auto-update
+    const latestReleaseData = {
+        version: `v${newVersion}`,
+        notes: notesContent,
+        pub_date: new Date().toISOString(),
+        url: `https://github.com/Halewwang/Prism-Browser-switching/releases/download/v${newVersion}/Prism-${newVersion}-arm64.dmg`
+    };
+    fs.writeFileSync(path.join(ROOT_DIR, 'latest-release.json'), JSON.stringify(latestReleaseData, null, 2));
+    console.log('✅ latest-release.json generated');
+
     // 4. Build and Package
     console.log('\n🏗️  Building and Packaging...');
     run('npm run dist');
 
     // 5. Commit and Tag
     console.log('\n💾 Committing version bump...');
-    run('git add package.json RELEASE_NOTES.md');
+    run('git add package.json RELEASE_NOTES.md latest-release.json');
     run(`git commit -m "chore(release): v${newVersion}"`);
     run(`git tag v${newVersion}`);
 

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserApp } from '../types';
 import { getSourceAppDetails } from '../utils/sourceApp';
 import { useI18n } from '../i18n';
+import AppIcon from './AppIcon';
 
 interface SelectorPopupProps {
   url: string;
@@ -52,7 +53,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
         {/* Source App */}
         <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
           <div className="w-[14px] h-[14px] text-black flex items-center justify-center">
-             {displayIcon}
+             <AppIcon appName={sourceAppDetails.name} size={14} />
           </div>
           <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
             {sourceAppDetails.name}
@@ -77,10 +78,10 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
 
       {/* Browser Selection Area */}
       <div className="mx-[7px] mb-[7px] flex-1 bg-[#F8F8F8] rounded-[10px] relative overflow-hidden flex items-center justify-center">
-        <div className="flex items-center justify-start max-w-full h-full px-2 gap-2 overflow-x-auto no-scrollbar">
+        {/* Scrollable Container with custom scrollbar styles */}
+        <div className="flex items-center justify-start w-full h-full px-2 gap-2 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
           {browsers.map((browser, idx) => {
             const isSelected = idx === highlightedIndex;
-            const initial = browser.name.charAt(0).toUpperCase();
             
             return (
               <div
@@ -94,18 +95,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
               >
                 {/* Icon */}
                 <div className="w-[45px] h-[45px] mb-2 flex items-center justify-center">
-                  {browser.iconDataURL && !imageErrors[browser.id] ? (
-                    <img 
-                      src={browser.iconDataURL} 
-                      alt={browser.name} 
-                      className="w-full h-full object-contain drop-shadow-sm" 
-                      onError={() => handleImageError(browser.id)}
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-slate-200 rounded-xl flex items-center justify-center">
-                       <span className="text-slate-500 font-bold text-xl">{initial}</span>
-                    </div>
-                  )}
+                   <AppIcon appName={browser.name} size={45} className="rounded-xl" />
                 </div>
 
                 {/* Name */}

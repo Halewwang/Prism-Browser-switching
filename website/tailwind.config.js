@@ -19,8 +19,9 @@ export default {
         ],
       },
       colors: {
-        primary: '#007AFF', // macOS Blue
-        secondary: '#5E5CE6', // macOS Indigo
+        primary: '#171717', // Neutral-900 (Black)
+        secondary: '#525252', // Neutral-600 (Dark Gray)
+        accent: '#A3A3A3', // Neutral-400 (Light Gray)
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',

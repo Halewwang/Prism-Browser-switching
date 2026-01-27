@@ -1,14 +1,10 @@
 import { compare } from 'semver';
 
-interface GitHubRelease {
-  tag_name: string;
-  published_at: string;
-  body: string;
-  assets: Array<{
-    name: string;
-    browser_download_url: string;
-    size: number;
-  }>;
+interface ReleaseData {
+  version: string;
+  notes: string;
+  pub_date: string;
+  url: string;
 }
 
 export interface UpdateInfo {
@@ -24,12 +20,18 @@ export interface UpdateInfo {
 // GitHub repository configuration
 const REPO_OWNER = 'Halewwang';
 const REPO_NAME = 'Prism-Browser-switching';
+const BRANCH = 'main';
 
 export const checkForUpdates = async (currentVersion: string): Promise<UpdateInfo> => {
   try {
     // Add timestamp to prevent caching
     const timestamp = new Date().getTime();
-    const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest?t=${timestamp}`, {
+    // Use raw.githubusercontent.com to avoid API rate limits
+    const url = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/latest-release.json?t=${timestamp}`;
+    
+    console.log('Checking for updates from:', url);
+    
+    const response = await fetch(url, {
       headers: {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
@@ -37,22 +39,21 @@ export const checkForUpdates = async (currentVersion: string): Promise<UpdateInf
     });
     
     if (!response.ok) {
-      console.error(`GitHub API Error: ${response.status} ${response.statusText}`);
-      throw new Error(`GitHub API Error: ${response.statusText}`);
+      const statusText = response.statusText || 'Unknown Error';
+      console.error(`Update Check Error: ${response.status} ${statusText}`);
+      throw new Error(`Update Check Error: ${response.status} ${statusText}`);
     }
 
-    const release: GitHubRelease = await response.json();
-    console.log('Latest release info:', { tag: release.tag_name, published: release.published_at });
+    const release: ReleaseData = await response.json();
+    console.log('Latest release info:', release);
     
     // Normalize version strings (remove 'v' prefix if present)
-    const latestVersion = release.tag_name.replace(/^v/, '');
+    const latestVersion = release.version.replace(/^v/, '');
     const normalizedCurrentVersion = currentVersion.replace(/^v/, '');
 
     console.log(`Comparing versions: Current(${normalizedCurrentVersion}) vs Latest(${latestVersion})`);
 
     // Compare versions using semver
-    // Note: compare returns 1 if v1 > v2, 0 if v1 == v2, -1 if v1 < v2
-    // We want to check if latestVersion > normalizedCurrentVersion
     const hasUpdate = compare(latestVersion, normalizedCurrentVersion) === 1;
     
     if (hasUpdate) {
@@ -61,19 +62,14 @@ export const checkForUpdates = async (currentVersion: string): Promise<UpdateInf
         console.log('App is up to date.');
     }
 
-    // Find the DMG asset for macOS
-    const dmgAsset = release.assets.find(asset => asset.name.endsWith('.dmg') || asset.name.endsWith('-arm64.dmg'));
-    const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : '';
-    const downloadSize = dmgAsset ? dmgAsset.size : 0;
-
     return {
       hasUpdate,
-      latestVersion: release.tag_name,
+      latestVersion: release.version,
       currentVersion,
-      releaseDate: release.published_at,
-      releaseNotes: release.body,
-      downloadUrl,
-      downloadSize
+      releaseDate: release.pub_date,
+      releaseNotes: release.notes,
+      downloadUrl: release.url,
+      downloadSize: 0 // We don't have size in the simple JSON, but it's fine
     };
   } catch (error) {
     console.error('Failed to check for updates:', error);

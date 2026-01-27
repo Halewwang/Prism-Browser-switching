@@ -21,16 +21,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
     <div className="w-[107px] bg-[#F8F8F8] border-r border-[#E5E5E5] h-full flex flex-col items-center py-4 shrink-0">
       {/* Brand/Logo */}
       <div className="mt-10 mb-8 flex flex-col items-center gap-2 no-drag-region">
-        <div className="w-8 h-8 flex items-center justify-center">
-            {/* Prism Logo */}
-           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 4V20" stroke="black" strokeWidth="3" strokeLinecap="round"/>
-              <path d="M4 12H20" stroke="black" strokeWidth="3" strokeLinecap="round"/>
-              <path d="M6.34 6.34L17.66 17.66" stroke="black" strokeWidth="3" strokeLinecap="round"/>
-              <path d="M6.34 17.66L17.66 6.34" stroke="#4ADE80" strokeWidth="3" strokeLinecap="round"/>
+        <div className="w-[42px] h-[42px] flex items-center justify-center overflow-hidden rounded-[10px]">
+            {/* Prism Logo from build/logo.svg */}
+            <svg width="100%" height="100%" viewBox="0 0 145 145" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="145" height="145" fill="black"/>
+                <rect x="68.9883" y="35" width="7.55297" height="75.5297" fill="#B8B8B8"/>
+                <rect x="110.53" y="68.9884" width="7.55297" height="75.5297" transform="rotate(90 110.53 68.9884)" fill="#B8B8B8"/>
+                <rect x="102.137" y="96.6826" width="7.55297" height="75.5297" transform="rotate(135 102.137 96.6826)" fill="#B8B8B8"/>
+                <rect x="96.6826" y="43.3922" width="7.55297" height="75.5297" transform="rotate(45 96.6826 43.3922)" fill="#88FF00"/>
             </svg>
         </div>
-        <span className="text-[16px] font-normal text-black font-['SF_Pro_Display'] tracking-tight">Prism</span>
+        <span className="text-[20px] font-medium text-black font-['SF_Pro_Display'] tracking-wider">Prism</span>
       </div>
 
       {/* Navigation Menu */}

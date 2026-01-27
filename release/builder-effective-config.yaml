@@ -10,6 +10,7 @@ files:
       - package.json
       - index.html
 mac:
+  identity: null
   category: public.app-category.utilities
   target:
     - dmg

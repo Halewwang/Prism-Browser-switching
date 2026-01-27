@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserApp, RoutingRule, RuleType } from '../types';
-import { Trash2, Plus, AppWindow, Globe, Search, ArrowRight, Sliders, Check } from 'lucide-react';
-import { getBrowserIcon } from '../constants';
+import { Trash2, Plus, Globe, Search, ArrowRight, Sliders, Check } from 'lucide-react';
 import { useI18n } from '../i18n';
+import AppIcon from './AppIcon';
 
 interface RulesViewProps {
   rules: RoutingRule[];
@@ -62,25 +62,10 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
   };
 
   const handleSelectTargetMore = async () => {
-      // For now, re-use select source app logic but maybe filter for browsers if possible
-      // Or just open generic app selector
       const ipcRenderer = (window as any).electron?.ipcRenderer || (window as any).require?.('electron')?.ipcRenderer;
       if (ipcRenderer) {
           try {
-              // Re-use select-source-app for generic app selection, 
-              // but we need to handle it as a browser target manually or just add to browser list?
-              // The user requirement says "select from local installed apps... and add to list"
-              // For target browser, it usually needs to be in `browsers` list which is scanned.
-              // If we pick an arbitrary app, we might need to "register" it as a browser temporarily?
-              // Or simply just use the ID if it matches?
-              
-              // Actually, for "Target Browser", usually we only support browsers detected by the system.
-              // But if user wants to select "More...", we can let them pick an app path.
-              // However, `browsers` prop comes from `App.tsx` scanning.
-              // Let's just trigger a re-scan or assume the user picks something already there?
-              // Requirement: "Select More..." -> "allow user to select from local installed apps... and add to list"
-              
-              // We'll use the same picker.
+              // Use the same picker as source app
               const result = await ipcRenderer.invoke('select-source-app');
               if (result) {
                   // Check if it's already in browsers
@@ -88,13 +73,13 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                   if (existing) {
                       setNewTargetId(existing.id);
                   } else {
-                      // It's a new "browser" (or app used as browser).
-                      // We can't easily add to `browsers` prop without lifting state up.
-                      // For this task, we might simulate it or just use the ID if we could.
-                      // Given constraints, I will alert if not a browser, or just set it.
-                      // But wait, the requirement implies dynamic addition.
-                      // Let's assume for now we just select it if it matches, or show alert.
-                      alert("To add a new browser, please ensure it is installed and re-scan in Settings.");
+                      // Add as new custom browser
+                      const newId = await ipcRenderer.invoke('add-custom-browser', result);
+                      if (newId) {
+                          setNewTargetId(newId);
+                      } else {
+                          alert("Failed to add browser.");
+                      }
                   }
                   setIsSelectingTarget(false);
               }
@@ -136,13 +121,6 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
             <Plus className="w-5 h-5 text-gray-400" />
             {t.rules.addRule}
             </h3>
-            <button
-              onClick={handleAdd}
-              disabled={!newValue}
-              className="px-4 py-1.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
-            >
-              <Plus size={14} /> {t.rules.addRule}
-            </button>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -166,24 +144,20 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                 </div>
              </div>
 
-             <div>
+             <div className="flex flex-col">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">
                     {newType === RuleType.SOURCE_APP ? t.rules.sourceApp : t.rules.urlPattern}
                 </label>
-                
+                <div className="relative flex-1 flex flex-col justify-end">
                 {newType === RuleType.SOURCE_APP ? (
                     <div className="relative">
                         <button
-                            onClick={() => setIsSelectingSource(!isSelectingSource)}
+                            onClick={() => { setIsSelectingSource(!isSelectingSource); setIsSelectingTarget(false); }}
                             className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm text-left flex items-center justify-between hover:bg-gray-50 transition-colors shadow-sm"
                         >
                             {selectedApp ? (
                                 <div className="flex items-center gap-2">
-                                    {selectedApp.icon ? (
-                                        <img src={selectedApp.icon} className="w-4 h-4 object-contain" alt="" />
-                                    ) : (
-                                        <AppWindow size={16} />
-                                    )}
+                                    <AppIcon appName={selectedApp.name} size={16} />
                                     <span className="font-medium text-black">{selectedApp.name}</span>
                                 </div>
                             ) : (
@@ -235,77 +209,78 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                         className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black/20 transition-all"
                     />
                 )}
+                </div>
              </div>
           </div>
 
           {/* Right Column: Target Browser */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">{t.rules.targetBrowser}</label>
-            <div className="relative">
+          <div className="flex flex-col h-full">
+            {/* Spacer Label to align with Left Column's "Trigger" label */}
+            <label className="block text-xs font-medium text-transparent mb-1.5 uppercase tracking-wider select-none">&nbsp;</label>
+            
+            <div className="flex justify-end">
                 <button
-                    onClick={() => setIsSelectingTarget(!isSelectingTarget)}
-                    className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm text-left flex items-center justify-between hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={handleAdd}
+                disabled={!newValue}
+                className="h-[42px] px-6 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
                 >
-                     {(() => {
-                        const selectedBrowser = browsers.find(b => b.id === newTargetId);
-                        if (selectedBrowser) {
-                            return (
-                                <div className="flex items-center gap-2">
-                                    {selectedBrowser.iconDataURL ? (
-                                        <img src={selectedBrowser.iconDataURL} className="w-4 h-4 object-contain" alt="" />
-                                    ) : (
-                                        getBrowserIcon(selectedBrowser.type, 4)
-                                    )}
-                                    <span className="font-medium text-black">{selectedBrowser.name}</span>
-                                </div>
-                            );
-                        }
-                        return <span className="text-gray-500">Select Browser...</span>;
-                     })()}
-                     <Sliders size={14} className="text-gray-400" />
+                <Plus size={14} /> {t.rules.addRule}
                 </button>
-
-                {isSelectingTarget && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E1E1E1] rounded-xl shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                        <div className="max-h-[200px] overflow-y-auto p-1">
-                            {browsers.map(b => (
-                                <button
-                                    key={b.id}
-                                    onClick={() => {
-                                        setNewTargetId(b.id);
-                                        setIsSelectingTarget(false);
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-gray-700 justify-between group"
-                                >
+            </div>
+            
+            <div className="flex-1 flex flex-col justify-end">
+                 <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">{t.rules.targetBrowser}</label>
+                 <div className="relative">
+                    <button
+                        onClick={() => { setIsSelectingTarget(!isSelectingTarget); setIsSelectingSource(false); }}
+                        className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-sm text-left flex items-center justify-between hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        {(() => {
+                            const selectedBrowser = browsers.find(b => b.id === newTargetId);
+                            if (selectedBrowser) {
+                                return (
                                     <div className="flex items-center gap-2">
-                                        {b.iconDataURL ? (
-                                            <img src={b.iconDataURL} className="w-4 h-4 object-contain" alt="" />
-                                        ) : (
-                                            getBrowserIcon(b.type, 4)
-                                        )}
-                                        {b.name}
+                                        <AppIcon appName={selectedBrowser.name} size={16} />
+                                        <span className="font-medium text-black">{selectedBrowser.name}</span>
                                     </div>
-                                    {newTargetId === b.id && <Check size={14} className="text-black" />}
+                                );
+                            }
+                            return <span className="text-gray-500">Select Browser...</span>;
+                        })()}
+                        <Sliders size={14} className="text-gray-400" />
+                    </button>
+
+                    {isSelectingTarget && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E1E1E1] rounded-xl shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="max-h-[200px] overflow-y-auto p-1">
+                                {browsers.map(b => (
+                                    <button
+                                        key={b.id}
+                                        onClick={() => {
+                                            setNewTargetId(b.id);
+                                            setIsSelectingTarget(false);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-gray-700 justify-between group"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <AppIcon appName={b.name} size={16} />
+                                            {b.name}
+                                        </div>
+                                        {newTargetId === b.id && <Check size={14} className="text-black" />}
+                                    </button>
+                                ))}
+                                <div className="h-px bg-gray-100 my-1"></div>
+                                <button
+                                    onClick={handleSelectTargetMore}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-blue-600 font-medium"
+                                >
+                                    <Plus size={14} />
+                                    Select More...
                                 </button>
-                            ))}
-                            <div className="h-px bg-gray-100 my-1"></div>
-                            {/* 
-                                Mocking preset browsers that might not be installed but user wants to see?
-                                Or just relying on `browsers` list which is scanned. 
-                                Requirement says "Show preset list... and Select More...".
-                                If a preset is not in `browsers` (installed), showing it might be confusing if we can't route to it.
-                                We'll stick to installed browsers + Select More.
-                            */}
-                             <button
-                                onClick={handleSelectTargetMore}
-                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-blue-600 font-medium"
-                            >
-                                <Plus size={14} />
-                                Select More...
-                            </button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
           </div>
         </div>
@@ -345,13 +320,13 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                 return (
                   <div key={rule.id} className="px-6 py-4 hover:bg-black/5 transition-colors group flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border border-[#E1E1E1] shadow-sm bg-white text-black overflow-hidden`}>
-                        {rule.appIcon ? (
-                            <img src={rule.appIcon} className="w-full h-full object-contain" alt="" />
-                        ) : (
-                            rule.type === RuleType.SOURCE_APP ? <AppWindow size={18} /> : <Globe size={18} />
-                        )}
-                      </div>
+                      {rule.type === RuleType.SOURCE_APP ? (
+                          <AppIcon appName={rule.appName || rule.value} size={40} className="rounded-[10px] shrink-0" />
+                      ) : (
+                          <div className="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border border-[#E1E1E1] shadow-sm bg-white text-black">
+                              <Globe size={18} />
+                          </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-semibold text-black">{rule.appName || rule.value}</span>

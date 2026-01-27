@@ -52,7 +52,7 @@ export const en = {
     cancel: 'Cancel'
   },
   nav: {
-    dashboard: 'Dashboard',
+    dashboard: 'History',
     rules: 'Rules',
     settings: 'Settings'
   }
@@ -112,7 +112,7 @@ export const zh = {
     cancel: '取消'
   },
   nav: {
-    dashboard: '仪表盘',
+    dashboard: '历史记录',
     rules: '规则',
     settings: '设置'
   }

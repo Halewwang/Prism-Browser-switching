@@ -1,16 +1,25 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { I18nProvider } from './i18n';
 import { AppView, BrowserApp, RoutingRule, RuleType } from './types';
 import { MOCK_RULES } from './constants';
 import Sidebar from './components/Sidebar';
 import SelectorPopup from './components/SelectorPopup';
-import RulesView from './components/RulesView';
-import SettingsView from './components/SettingsView';
-import DashboardView from './components/DashboardView';
+
+// Lazy load large components
+const RulesView = lazy(() => import('./components/RulesView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const DashboardView = lazy(() => import('./components/DashboardView'));
 
 import UpdateModal from './components/UpdateModal';
 import { checkForUpdates, UpdateInfo } from './utils/updater';
+import { RoutingService } from './services/routingService';
+
+// Loading Component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-full w-full">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
+  </div>
+);
 
 // 安全地获取ipcRenderer，避免直接使用window.require
 const getIpcRenderer = () => {
@@ -137,8 +146,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // 智能路由选择逻辑已移至deep-link事件处理中，此函数保留用于兼容性
-
   const handleSelectBrowser = (browserId: string, remember: boolean = false) => {
     const browser = browsers.find(b => b.id === browserId);
     if (ipcRenderer && browser && browser.path) {
@@ -158,18 +165,6 @@ const AppContent: React.FC = () => {
     if (viewMode === 'popup' && ipcRenderer) {
       ipcRenderer.send('close-window');
     }
-  };
-
-  const handleClose = () => {
-    if (ipcRenderer) ipcRenderer.send('close-window');
-  };
-
-  const handleMinimize = () => {
-    if (ipcRenderer) ipcRenderer.send('minimize-window');
-  };
-
-  const handleMaximize = () => {
-    if (ipcRenderer) ipcRenderer.send('maximize-window');
   };
 
   const addToHistory = (url: string, source: string, browserId: string, method: 'Manual' | 'Rule' | 'AI' | 'Default', sourceIcon?: string) => {
@@ -192,52 +187,14 @@ const AppContent: React.FC = () => {
   // 核心路由逻辑
   const processRouting = (url: string, source: string, sourceIcon?: string, sourceBundleId?: string) => {
     console.log('Processing routing for:', { url, source, sourceBundleId, hasIcon: !!sourceIcon });
-    console.log('Current rules:', rules);
     
-    // 规范化sourceApp名称
-    const normalizedSource = source.replace(/\.app$/i, '').trim().toLowerCase();
-    // 规范化URL
-    const normalizedUrl = url.toLowerCase();
-    
-    let matchedRule = null;
-    
-    // 1. 优先检查 URL 规则 (精确度更高)
-    matchedRule = rules.find(rule => {
-      if (!rule.active || rule.type !== RuleType.URL_PATTERN) return false;
-      const ruleValue = rule.value.trim().toLowerCase();
-      // 支持简单的通配符匹配或包含匹配
-      return ruleValue && normalizedUrl.includes(ruleValue);
-    });
-    
-    // 2. 如果没有 URL 规则，检查来源应用规则
-    if (!matchedRule) {
-      matchedRule = rules.find(rule => {
-        if (!rule.active || rule.type !== RuleType.SOURCE_APP) return false;
-        
-        // Check Bundle ID match first (Exact match)
-        if (sourceBundleId && rule.value === sourceBundleId) {
-            return true;
-        }
-
-        // Fallback to legacy name matching
-        const ruleValue = rule.value.replace(/\.app$/i, '').trim().toLowerCase();
-        // 来源匹配逻辑：检查包含关系 (e.g. rule="Slack" matches source="Slack")
-        // Only if ruleValue is NOT likely a bundle ID (contains dots)
-        if (ruleValue.includes('.')) {
-             // Treat as bundle ID, so strict equality
-             return sourceBundleId === rule.value;
-        }
-        return normalizedSource && ruleValue && normalizedSource.includes(ruleValue);
-      });
-    }
+    const matchedRule = RoutingService.matchRule(url, source, sourceBundleId, rules);
     
     if (matchedRule) {
       console.log('Rule matched:', matchedRule);
-      const targetBrowser = browsers.find(b => b.id === matchedRule.targetBrowserId);
-      if (targetBrowser && targetBrowser.path) {
-        if (ipcRenderer) {
-          ipcRenderer.send('open-in-browser', { url, browserPath: targetBrowser.path });
-        }
+      const success = RoutingService.executeRouting(url, matchedRule.targetBrowserId, browsers, ipcRenderer);
+      
+      if (success) {
         addToHistory(url, source, matchedRule.targetBrowserId, 'Rule', sourceIcon);
       } else {
         console.log('No browser found for rule, showing popup');
@@ -345,55 +302,61 @@ const AppContent: React.FC = () => {
             {/* Content */}
             <div className="flex-1 overflow-hidden p-6">
               {activeTab === 'dashboard' && (
-                <DashboardView 
-                  history={history} 
-                  browsers={browsers} 
-                  onClearHistory={clearHistory}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <DashboardView 
+                    history={history} 
+                    browsers={browsers} 
+                    onClearHistory={clearHistory}
+                  />
+                </Suspense>
               )}
               {activeTab === 'rules' && (
                  <div className="h-full overflow-y-auto">
-                   <RulesView 
-                      rules={rules}
-                      browsers={browsers}
-                      onAddRule={r => setRules(prev => [...prev, r])}
-                      onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
-                    />
+                   <Suspense fallback={<LoadingFallback />}>
+                     <RulesView 
+                        rules={rules}
+                        browsers={browsers}
+                        onAddRule={r => setRules(prev => [...prev, r])}
+                        onDeleteRule={id => setRules(prev => prev.filter(x => x.id !== id))}
+                      />
+                   </Suspense>
                  </div>
               )}
               {activeTab === 'settings' && (
                 <div className="h-full overflow-y-auto">
-                   <SettingsView 
-                      browsers={browsers}
-                      onRescan={() => ipcRenderer && ipcRenderer.send('get-installed-browsers')}
-                      isCheckingUpdate={isCheckingUpdate}
-                      onCheckUpdate={async () => {
-                          if (!ipcRenderer) return;
-                          
-                          setIsCheckingUpdate(true);
-                          try {
-                              const currentVersion = await ipcRenderer.invoke('get-app-version');
-                              const info = await checkForUpdates(currentVersion);
-                              if (info.hasUpdate) {
-                                setUpdateInfo(info);
-                              } else {
-                                // Simple feedback using native alert, can be improved to Toast later
-                                alert('You are up to date!');
-                              }
-                          } catch (e: any) {
-                              console.error(e);
-                              const msg = e.message || 'Unknown error';
-                              if (msg.includes('403')) {
-                                  alert('Update check failed: Rate limit exceeded. Please try again later.');
-                              } else {
-                                  alert(`Failed to check for updates: ${msg}`);
-                              }
-                          } finally {
-                              setIsCheckingUpdate(false);
-                          }
-                      }}
-                      updateInfo={updateInfo}
-                    />
+                   <Suspense fallback={<LoadingFallback />}>
+                     <SettingsView 
+                        browsers={browsers}
+                        onRescan={() => ipcRenderer && ipcRenderer.send('get-installed-browsers')}
+                        isCheckingUpdate={isCheckingUpdate}
+                        onCheckUpdate={async () => {
+                            if (!ipcRenderer) return;
+                            
+                            setIsCheckingUpdate(true);
+                            try {
+                                const currentVersion = await ipcRenderer.invoke('get-app-version');
+                                const info = await checkForUpdates(currentVersion);
+                                if (info.hasUpdate) {
+                                  setUpdateInfo(info);
+                                } else {
+                                  // Simple feedback using native alert, can be improved to Toast later
+                                  alert('You are up to date!');
+                                }
+                            } catch (e: any) {
+                                console.error(e);
+                                const msg = e.message || 'Unknown error';
+                                if (msg.includes('403')) {
+                                    alert('Update check failed: GitHub API Rate Limit Exceeded.\n\nPlease wait a while before checking again, or visit the GitHub repository to download manually.');
+                                } else {
+                                    alert(`Failed to check for updates: ${msg}`);
+                                }
+                            } finally {
+                                setIsCheckingUpdate(false);
+                            }
+                        }}
+                        updateInfo={updateInfo}
+                      />
+                   </Suspense>
                 </div>
               )}
             </div>
