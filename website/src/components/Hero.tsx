@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, Command } from 'lucide-react';
+import { Command } from 'lucide-react';
 
 export const Hero = () => {
   return (
