@@ -1,7 +1,7 @@
-# v1.10.11 (2026-01-27)
+# v1.10.12 (2026-01-27)
 
 ## Changes
 
 
 ## Installation
-Download `Prism-1.10.11-arm64.dmg` and drag to Applications.
+Download `Prism-1.10.12-arm64.dmg` and drag to Applications.

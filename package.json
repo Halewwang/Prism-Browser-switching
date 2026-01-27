@@ -1,7 +1,7 @@
 {
   "name": "prism-app",
   "productName": "Prism",
-  "version": "1.10.11",
+  "version": "1.10.12",
   "main": "electron/main.js",
   "author": "Hale",
   "type": "module",
