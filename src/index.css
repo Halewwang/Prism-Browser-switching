@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-travertine: #F5F5F3;
+  --color-charcoal: #1A1A1A;
+  --color-stone: #8C8C8C;
+  --color-bronze: #967444;
+  --color-bronze-dark: #6D522E;
+  
+  /* Redefine sans as the new elegant serif for body to override defaults easily */
+  --font-sans: 'Cormorant Garamond', serif; 
+  --font-serif: 'Playfair Display', serif;
+}
+
+body {
+  background-color: var(--color-travertine);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  font-size: 16px; /* Reduced base size */
+  line-height: 1.8; /* Increased line height for elegance */
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+}
+
+/* Global refinements */
+p {
+  font-feature-settings: "onum" 1, "pnum" 1; /* Old style figures */
+}
