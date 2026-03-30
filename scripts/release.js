@@ -4,6 +4,7 @@ import path from 'path';
 import { execFileSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
+import { compare as compareSemver } from 'semver';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,11 +60,37 @@ const getGitLogs = () => {
   }
 };
 
+const getLatestTaggedVersion = () => {
+  try {
+    const latestTag = execFileSync('git', ['tag', '--sort=-version:refname'], {
+      cwd: ROOT_DIR,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .map((tag) => tag.trim())
+      .find(Boolean);
+
+    if (!latestTag) {
+      return null;
+    }
+
+    return latestTag.replace(/^v/, '');
+  } catch (_error) {
+    return null;
+  }
+};
+
 const updateVersion = (type) => {
   const pkg = readJson(PACKAGE_JSON_PATH);
   const lock = fs.existsSync(PACKAGE_LOCK_PATH) ? readJson(PACKAGE_LOCK_PATH) : null;
 
-  const oldVersion = pkg.version;
+  const packageVersion = pkg.version;
+  const latestTaggedVersion = getLatestTaggedVersion();
+  const oldVersion =
+    latestTaggedVersion && compareSemver(latestTaggedVersion, packageVersion) === 1
+      ? latestTaggedVersion
+      : packageVersion;
+
   let [major, minor, patch] = oldVersion.split('.').map(Number);
 
   if (type === 'major') major++;

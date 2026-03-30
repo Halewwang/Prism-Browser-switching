@@ -1,12 +1,10 @@
-# v1.10.19 (2026-01-27)
+# v1.10.21 (2026-03-30)
 
 ## Changes
-
+* feat: harden app routing and update flow (6f1acfb)
 
 ## Installation
-Download `Prism-1.10.19-arm64.dmg` and drag to Applications.
+Download `Prism-1.10.21-arm64.dmg` and drag to Applications.
 
 ## Checksum (SHA-256)
-```
-5ee719d92a5b3879313757eeb6fb5c23032fe104c1b10e662cfdfce5d74685ef  release/Prism-1.10.19-arm64.dmg
-```
+`55bc565d01cf9d8b39d36a6b380fc85c91d1eb05f402dde6f9d9376d23a0e7d2`
