@@ -6,9 +6,10 @@ interface UpdateModalProps {
   updateInfo: UpdateInfo;
   onClose: () => void;
   onUpdate: () => void;
+  isDownloading?: boolean;
 }
 
-const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onClose, onUpdate }) => {
+const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onClose, onUpdate, isDownloading = false }) => {
   // Convert markdown-like release notes to simple text/paragraphs
   // For a robust implementation, use a markdown parser library. 
   // Here we do a simple split by newline for safety and speed.
@@ -69,10 +70,11 @@ const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onClose, onUpdate
           </button>
           <button
             onClick={onUpdate}
-            className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm flex items-center justify-center gap-2"
+            disabled={isDownloading}
+            className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
           >
             <Download size={16} />
-            Update Now
+            {isDownloading ? 'Downloading...' : 'Update Now'}
           </button>
         </div>
       </div>

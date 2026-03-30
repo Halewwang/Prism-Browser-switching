@@ -35,10 +35,12 @@ export function createWindow() {
     transparent: true,
     resizable: true,
     hasShadow: false,
+    backgroundColor: '#00000000',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: false
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true
     },
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 34, y: 34 }
@@ -83,11 +85,19 @@ export function createWindow() {
   });
 
   mainWindow.on('close', (e) => {
-    if (!app.isQuitting) {
+    if (!app.isQuitting && isPopupMode) {
       e.preventDefault();
       mainWindow.hide();
+      isPopupMode = false;
+      return false;
     }
-    return false;
+
+    if (!app.isQuitting) {
+      e.preventDefault();
+      app.isQuitting = true;
+      app.quit();
+      return false;
+    }
   });
 
   mainWindow.on('blur', () => {
@@ -161,8 +171,14 @@ export function switchToPopupMode(url, sourceApp, sourceAppIcon, sourceBundleId)
 // Window control handlers helper
 export function registerWindowHandlers() {
     ipcMain.on('close-window', () => {
-        if(mainWindow) mainWindow.hide();
-        isPopupMode = false;
+        if (!mainWindow) return;
+        if (isPopupMode) {
+            mainWindow.hide();
+            isPopupMode = false;
+            return;
+        }
+        app.isQuitting = true;
+        app.quit();
     });
 
     ipcMain.on('minimize-window', () => {

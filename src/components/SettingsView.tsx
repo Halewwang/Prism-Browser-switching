@@ -2,28 +2,7 @@ import React, { useState } from 'react';
 import { BrowserApp, UpdateInfo } from '../types';
 import { Cpu, Info, RefreshCcw } from 'lucide-react';
 import { useI18n } from '../i18n';
-
-// 安全地获取ipcRenderer
-const getIpcRenderer = () => {
-  if (typeof window === 'undefined') return null;
-  
-  // 1. 尝试通过 contextBridge 获取 (预加载脚本方式)
-  if ((window as any).electron?.ipcRenderer) {
-    return (window as any).electron.ipcRenderer;
-  }
-  
-  // 2. 尝试通过 window.require 获取 (nodeIntegration: true 方式)
-  if ((window as any).require) {
-    try {
-      const electron = (window as any).require('electron');
-      return electron.ipcRenderer;
-    } catch (error) {
-      console.error('Failed to require electron:', error);
-    }
-  }
-  
-  return null;
-};
+import { getPrism } from '../utils/prism';
 
 interface SettingsViewProps {
   browsers?: BrowserApp[];
@@ -48,10 +27,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
   React.useEffect(() => {
       const fetchInfo = async () => {
-          const ipcRenderer = getIpcRenderer();
-          if (ipcRenderer) {
+          const prism = getPrism();
+          if (prism) {
               try {
-                  const version = await ipcRenderer.invoke('get-app-version');
+                  const version = await prism.invoke<string>('get-app-version');
                   setAppVersion(version);
                   setBuildInfo('2026.01.25'); 
               } catch (e) {

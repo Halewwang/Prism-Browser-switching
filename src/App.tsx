@@ -13,6 +13,7 @@ const DashboardView = lazy(() => import('./components/DashboardView'));
 import UpdateModal from './components/UpdateModal';
 import { checkForUpdates, UpdateInfo } from './utils/updater';
 import { RoutingService } from './services/routingService';
+import { getPrism } from './utils/prism';
 
 // Loading Component
 const LoadingFallback = () => (
@@ -21,36 +22,7 @@ const LoadingFallback = () => (
   </div>
 );
 
-// 安全地获取ipcRenderer，避免直接使用window.require
-const getIpcRenderer = () => {
-  if (typeof window === 'undefined') return null;
-  
-  console.log('Checking for ipcRenderer...');
-  
-  // 在渲染进程中，electron的ipcRenderer应该通过contextBridge暴露
-  // 如果没有配置预加载脚本，尝试使用window.require（仅用于开发环境）
-  if ((window as any).electron?.ipcRenderer) {
-    console.log('Found ipcRenderer via contextBridge');
-    return (window as any).electron.ipcRenderer;
-  }
-  
-  // 开发环境下的兼容处理
-  if ((window as any).require) {
-    try {
-      const electron = (window as any).require('electron');
-      console.log('Found ipcRenderer via window.require');
-      return electron.ipcRenderer;
-    } catch (error) {
-      console.error('Failed to require electron:', error);
-      return null;
-    }
-  }
-  
-  console.warn('ipcRenderer not found!');
-  return null;
-};
-
-const ipcRenderer = getIpcRenderer();
+const prism = getPrism();
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'rules' | 'settings'>('dashboard');
@@ -82,10 +54,12 @@ const AppContent: React.FC = () => {
   const [activeUrl, setActiveUrl] = useState('');
   const [activeSource, setActiveSource] = useState('');
   const [activeSourceIcon, setActiveSourceIcon] = useState<string | undefined>(undefined);
+  const [activeSourceBundleId, setActiveSourceBundleId] = useState<string | undefined>(undefined);
   const [showPopupOverlay, setShowPopupOverlay] = useState(false);
   const [pendingDeepLink, setPendingDeepLink] = useState<{url: string, source: string, sourceIcon?: string, sourceBundleId?: string} | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
   
   // 监听规则变化，保存到localStorage
   useEffect(() => {
@@ -107,28 +81,28 @@ const AppContent: React.FC = () => {
   
   // 获取已安装的浏览器列表
   useEffect(() => {
-    if (!ipcRenderer) return;
+    if (!prism) return;
     
     // 请求已安装的浏览器列表
-    ipcRenderer.send('get-installed-browsers');
+    prism.send('get-installed-browsers');
     
     // 监听已安装浏览器列表的响应
-    ipcRenderer.on('installed-browsers', (event, installedBrowsers: BrowserApp[]) => {
+    const cleanup = prism.on<BrowserApp[]>('installed-browsers', (installedBrowsers) => {
       console.log('Received installed browsers:', installedBrowsers);
       setBrowsers(installedBrowsers);
     });
     
     return () => {
-      ipcRenderer.removeAllListeners('installed-browsers');
+      cleanup();
     };
   }, []);
   
   // Check for updates on startup
   useEffect(() => {
     const checkUpdate = async () => {
-      if (!ipcRenderer) return;
+      if (!prism) return;
       
-      const currentVersion = await ipcRenderer.invoke('get-app-version');
+      const currentVersion = await prism.invoke<string>('get-app-version');
       const info = await checkForUpdates(currentVersion);
       
       if (info.hasUpdate) {
@@ -139,31 +113,43 @@ const AppContent: React.FC = () => {
     checkUpdate();
   }, []);
 
-  const handleStartUpdate = () => {
-    if (updateInfo && ipcRenderer) {
-      ipcRenderer.send('start-download-update', updateInfo.downloadUrl);
+  const handleStartUpdate = async () => {
+    if (!updateInfo || !prism) return;
+
+    setIsDownloadingUpdate(true);
+    try {
+      await prism.invoke('start-download-update', {
+        downloadUrl: updateInfo.downloadUrl,
+        fileName: updateInfo.fileName,
+        sha256: updateInfo.sha256,
+      });
       setUpdateInfo(null);
+    } catch (error: any) {
+      console.error('Failed to download update:', error);
+      alert(`Failed to download update: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setIsDownloadingUpdate(false);
     }
   };
 
   const handleSelectBrowser = (browserId: string, remember: boolean = false) => {
     const browser = browsers.find(b => b.id === browserId);
-    if (ipcRenderer && browser && browser.path) {
-       ipcRenderer.send('open-in-browser', { url: activeUrl, browserPath: browser.path });
+    if (prism && browser && browser.path) {
+       prism.send('open-in-browser', { url: activeUrl, browserPath: browser.path });
        
        addToHistory(activeUrl, activeSource, browserId, 'Manual');
 
        // 如果是弹窗模式，处理完后关闭窗口
        if (viewMode === 'popup') {
          console.log('Closing popup window after browser selection');
-         ipcRenderer.send('close-window');
+         prism.send('close-window');
        }
     }
   };
 
   const handleCancel = () => {
-    if (viewMode === 'popup' && ipcRenderer) {
-      ipcRenderer.send('close-window');
+    if (viewMode === 'popup' && prism) {
+      prism.send('close-window');
     }
   };
 
@@ -173,6 +159,7 @@ const AppContent: React.FC = () => {
       timestamp: new Date(),
       url,
       sourceApp: source,
+      sourceBundleId: activeSourceBundleId,
       sourceAppIcon: sourceIcon,
       routedToBrowserId: browserId,
       method
@@ -192,7 +179,7 @@ const AppContent: React.FC = () => {
     
     if (matchedRule) {
       console.log('Rule matched:', matchedRule);
-      const success = RoutingService.executeRouting(url, matchedRule.targetBrowserId, browsers, ipcRenderer);
+      const success = RoutingService.executeRouting(url, matchedRule.targetBrowserId, browsers, prism);
       
       if (success) {
         addToHistory(url, source, matchedRule.targetBrowserId, 'Rule', sourceIcon);
@@ -201,6 +188,7 @@ const AppContent: React.FC = () => {
         setActiveUrl(url);
         setActiveSource(source);
         setActiveSourceIcon(sourceIcon);
+        setActiveSourceBundleId(sourceBundleId);
         setShowPopupOverlay(false);
       }
     } else {
@@ -208,6 +196,7 @@ const AppContent: React.FC = () => {
       setActiveUrl(url);
       setActiveSource(source);
       setActiveSourceIcon(sourceIcon);
+      setActiveSourceBundleId(sourceBundleId);
       setShowPopupOverlay(false);
     }
   };
@@ -223,9 +212,9 @@ const AppContent: React.FC = () => {
 
   // 处理deep-link事件
   useEffect(() => {
-    if (!ipcRenderer) return;
+    if (!prism) return;
     
-    ipcRenderer.on('view-mode-change', (_: any, mode: 'dashboard' | 'popup') => {
+    const cleanupViewMode = prism.on<'dashboard' | 'popup'>('view-mode-change', (mode) => {
       console.log('View mode changed:', mode);
       setViewMode(mode);
       if (mode === 'popup') {
@@ -233,11 +222,9 @@ const AppContent: React.FC = () => {
       }
     });
     
-    if (ipcRenderer) {
-      ipcRenderer.send('update-window-style', viewMode === 'popup');
-    }
+    prism.send('update-window-style', viewMode === 'popup');
     
-    ipcRenderer.on('deep-link', (_: any, data: any) => {
+    const cleanupDeepLink = prism.on<any>('deep-link', (data) => {
       const { url, source, sourceIcon, sourceBundleId } = data;
       console.log('Deep link received:', { url, source, sourceBundleId, hasIcon: !!sourceIcon });
       
@@ -251,8 +238,8 @@ const AppContent: React.FC = () => {
     });
     
     return () => {
-      ipcRenderer.removeAllListeners('view-mode-change');
-      ipcRenderer.removeAllListeners('deep-link');
+      cleanupViewMode();
+      cleanupDeepLink();
     };
   }, [rules, browsers]);
 
@@ -265,6 +252,7 @@ const AppContent: React.FC = () => {
             url={activeUrl}
             sourceApp={activeSource}
             sourceAppIcon={activeSourceIcon}
+            sourceBundleId={activeSourceBundleId}
             browsers={browsers}
             onSelect={handleSelectBrowser}
             onCancel={handleCancel}
@@ -283,6 +271,7 @@ const AppContent: React.FC = () => {
           updateInfo={updateInfo} 
           onClose={() => setUpdateInfo(null)} 
           onUpdate={handleStartUpdate}
+          isDownloading={isDownloadingUpdate}
         />
       )}
       {/* Container with Shadow - Matching Figma Design */}
@@ -327,14 +316,14 @@ const AppContent: React.FC = () => {
                    <Suspense fallback={<LoadingFallback />}>
                      <SettingsView 
                         browsers={browsers}
-                        onRescan={() => ipcRenderer && ipcRenderer.send('get-installed-browsers')}
+                        onRescan={() => prism && prism.send('get-installed-browsers')}
                         isCheckingUpdate={isCheckingUpdate}
                         onCheckUpdate={async () => {
-                            if (!ipcRenderer) return;
+                            if (!prism) return;
                             
                             setIsCheckingUpdate(true);
                             try {
-                                const currentVersion = await ipcRenderer.invoke('get-app-version');
+                                const currentVersion = await prism.invoke<string>('get-app-version');
                                 const info = await checkForUpdates(currentVersion);
                                 if (info.hasUpdate) {
                                   setUpdateInfo(info);

@@ -9,23 +9,17 @@ interface SelectorPopupProps {
   url: string;
   sourceApp?: string;
   sourceAppIcon?: string;
+  sourceBundleId?: string;
   browsers: BrowserApp[];
   onSelect: (browserId: string, remember: boolean) => void;
   onCancel: () => void;
   isStandalone?: boolean;
 }
 
-const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceAppIcon, browsers, onSelect, onCancel }) => {
+const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceAppIcon, sourceBundleId, browsers, onSelect, onCancel }) => {
   const { t } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
-  const sourceAppDetails = getSourceAppDetails(sourceApp || '', sourceAppIcon);
-  const displayIcon = sourceAppDetails.icon;
-
-  const handleImageError = (browserId: string) => {
-    setImageErrors(prev => ({ ...prev, [browserId]: true }));
-  };
+  const sourceAppDetails = getSourceAppDetails(sourceApp || '', sourceAppIcon, sourceBundleId);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,14 +40,14 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
   }, [browsers, highlightedIndex, onSelect, onCancel]);
 
   return (
-    <div className="w-[425px] h-[200px] bg-white rounded-[15px] shadow-[0px_3px_18.5px_-3px_rgba(0,0,0,0.25)] flex flex-col overflow-hidden select-none font-sans relative">
+    <div className="w-[425px] h-[200px] bg-white rounded-[15px] shadow-[0px_12px_30px_rgba(15,23,42,0.18),0px_4px_12px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden select-none font-sans relative">
       
       {/* Top Header Bar */}
       <div className="flex gap-[7px] p-[7px] h-[54px] w-full box-border">
         {/* Source App */}
         <div className="w-[75px] h-[40px] bg-[#F8F8F8] border border-[#E1E1E1] rounded-[10px] flex items-center justify-center gap-1.5 shrink-0">
           <div className="w-[14px] h-[14px] text-black flex items-center justify-center">
-             <AppIcon appName={sourceAppDetails.name} size={14} />
+             <AppIcon appName={sourceAppDetails.name} bundleId={sourceBundleId} iconDataURL={sourceAppIcon} size={14} className="rounded-[4px]" />
           </div>
           <span className="text-[12px] font-[590] text-black truncate max-w-[40px] leading-tight font-sans">
             {sourceAppDetails.name}
@@ -95,7 +89,7 @@ const SelectorPopup: React.FC<SelectorPopupProps> = ({ url, sourceApp, sourceApp
               >
                 {/* Icon */}
                 <div className="w-[45px] h-[45px] mb-2 flex items-center justify-center">
-                   <AppIcon appName={browser.name} size={45} className="rounded-xl" />
+                   <AppIcon appName={browser.name} bundleId={browser.bundleId} type={browser.type} iconDataURL={browser.iconDataURL} size={45} className="rounded-xl" />
                 </div>
 
                 {/* Name */}

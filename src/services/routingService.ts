@@ -1,5 +1,5 @@
 import { BrowserApp, RoutingRule, RuleType } from '../types';
-import { IpcRenderer } from 'electron';
+import { PrismApi } from '../utils/prism';
 
 // 路由服务：纯业务逻辑
 export const RoutingService = {
@@ -52,11 +52,11 @@ export const RoutingService = {
     url: string,
     targetBrowserId: string,
     browsers: BrowserApp[],
-    ipcRenderer: IpcRenderer | null
+    prism: PrismApi | null
   ): boolean => {
     const targetBrowser = browsers.find(b => b.id === targetBrowserId);
-    if (targetBrowser && targetBrowser.path && ipcRenderer) {
-      ipcRenderer.send('open-in-browser', { url, browserPath: targetBrowser.path });
+    if (targetBrowser && targetBrowser.path && prism) {
+      prism.send('open-in-browser', { url, browserPath: targetBrowser.path });
       return true;
     }
     return false;

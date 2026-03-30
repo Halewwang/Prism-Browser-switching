@@ -1,23 +1,25 @@
 import React from 'react';
 import { AppWindow } from 'lucide-react';
+import { resolveIcon } from './iconResolver';
 
 interface AppDetails {
   name: string;
   icon: React.ReactNode;
 }
 
-export const getSourceAppDetails = (sourceApp: string, iconDataURL?: string): AppDetails => {
+export const getSourceAppDetails = (sourceApp: string, iconDataURL?: string, bundleId?: string): AppDetails => {
   // Normalize the source app name
   // Remove .app extension and trim
   const normalized = (sourceApp || '').replace(/\.app$/i, '').trim();
   
   const iconClass = "w-full h-full object-contain rounded-md";
+  const resolvedIcon = resolveIcon({ appName: normalized, bundleId, iconDataURL });
 
   // Use dynamic icon if available
-  if (iconDataURL) {
+  if (resolvedIcon.src) {
       return {
           name: normalized || 'Unknown App',
-          icon: <img src={iconDataURL} alt={normalized} className={iconClass} />
+          icon: <img src={resolvedIcon.src} alt={normalized} className={iconClass} />
       };
   }
 

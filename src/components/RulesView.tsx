@@ -3,6 +3,7 @@ import { BrowserApp, RoutingRule, RuleType } from '../types';
 import { Trash2, Plus, Globe, Search, ArrowRight, Sliders, Check } from 'lucide-react';
 import { useI18n } from '../i18n';
 import AppIcon from './AppIcon';
+import { getPrism } from '../utils/prism';
 
 interface RulesViewProps {
   rules: RoutingRule[];
@@ -39,12 +40,12 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
 
   const [isSelectingSource, setIsSelectingSource] = useState(false);
   const [isSelectingTarget, setIsSelectingTarget] = useState(false);
+  const prism = getPrism();
 
   const handleSelectApp = async () => {
-      const ipcRenderer = (window as any).electron?.ipcRenderer || (window as any).require?.('electron')?.ipcRenderer;
-      if (ipcRenderer) {
+      if (prism) {
           try {
-              const result = await ipcRenderer.invoke('select-source-app');
+              const result = await prism.invoke<any>('select-source-app');
               if (result) {
                   setSelectedApp({
                       name: result.name,
@@ -62,11 +63,10 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
   };
 
   const handleSelectTargetMore = async () => {
-      const ipcRenderer = (window as any).electron?.ipcRenderer || (window as any).require?.('electron')?.ipcRenderer;
-      if (ipcRenderer) {
+      if (prism) {
           try {
               // Use the same picker as source app
-              const result = await ipcRenderer.invoke('select-source-app');
+              const result = await prism.invoke<any>('select-source-app');
               if (result) {
                   // Check if it's already in browsers
                   const existing = browsers.find(b => b.bundleId === result.bundleId || b.path === result.path);
@@ -74,7 +74,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                       setNewTargetId(existing.id);
                   } else {
                       // Add as new custom browser
-                      const newId = await ipcRenderer.invoke('add-custom-browser', result);
+                      const newId = await prism.invoke<string | null>('add-custom-browser', result);
                       if (newId) {
                           setNewTargetId(newId);
                       } else {
@@ -157,7 +157,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                         >
                             {selectedApp ? (
                                 <div className="flex items-center gap-2">
-                                    <AppIcon appName={selectedApp.name} size={16} />
+                                    <AppIcon appName={selectedApp.name} bundleId={selectedApp.bundleId} iconDataURL={selectedApp.icon} size={16} />
                                     <span className="font-medium text-black">{selectedApp.name}</span>
                                 </div>
                             ) : (
@@ -184,7 +184,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                                             }}
                                             className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-gray-700"
                                         >
-                                            <div className="w-4 h-4 bg-gray-100 rounded flex items-center justify-center text-[10px]">{app.name[0]}</div>
+                                            <AppIcon appName={app.name} size={16} className="rounded-[4px]" />
                                             {app.name}
                                         </button>
                                     ))}
@@ -240,7 +240,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                             if (selectedBrowser) {
                                 return (
                                     <div className="flex items-center gap-2">
-                                        <AppIcon appName={selectedBrowser.name} size={16} />
+                                        <AppIcon appName={selectedBrowser.name} bundleId={selectedBrowser.bundleId} type={selectedBrowser.type} iconDataURL={selectedBrowser.iconDataURL} size={16} />
                                         <span className="font-medium text-black">{selectedBrowser.name}</span>
                                     </div>
                                 );
@@ -263,7 +263,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                                         className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 text-gray-700 justify-between group"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <AppIcon appName={b.name} size={16} />
+                                            <AppIcon appName={b.name} bundleId={b.bundleId} type={b.type} iconDataURL={b.iconDataURL} size={16} />
                                             {b.name}
                                         </div>
                                         {newTargetId === b.id && <Check size={14} className="text-black" />}
@@ -321,7 +321,7 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
                   <div key={rule.id} className="px-6 py-4 hover:bg-black/5 transition-colors group flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       {rule.type === RuleType.SOURCE_APP ? (
-                          <AppIcon appName={rule.appName || rule.value} size={40} className="rounded-[10px] shrink-0" />
+                          <AppIcon appName={rule.appName || rule.value} iconDataURL={rule.appIcon} size={40} className="rounded-[10px] shrink-0" />
                       ) : (
                           <div className="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border border-[#E1E1E1] shadow-sm bg-white text-black">
                               <Globe size={18} />

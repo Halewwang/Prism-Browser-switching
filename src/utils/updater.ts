@@ -5,6 +5,8 @@ interface ReleaseData {
   notes: string;
   pub_date: string;
   url: string;
+  sha256?: string;
+  fileName?: string;
 }
 
 export interface UpdateInfo {
@@ -15,6 +17,8 @@ export interface UpdateInfo {
   releaseNotes: string;
   downloadUrl: string;
   downloadSize: number;
+  sha256?: string;
+  fileName?: string;
 }
 
 // GitHub repository configuration
@@ -69,7 +73,9 @@ export const checkForUpdates = async (currentVersion: string): Promise<UpdateInf
       releaseDate: release.pub_date,
       releaseNotes: release.notes,
       downloadUrl: release.url,
-      downloadSize: 0 // We don't have size in the simple JSON, but it's fine
+      downloadSize: 0, // We don't have size in the simple JSON, but it's fine
+      sha256: release.sha256,
+      fileName: release.fileName,
     };
   } catch (error) {
     console.error('Failed to check for updates:', error);

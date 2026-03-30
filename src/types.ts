@@ -5,6 +5,7 @@ export interface BrowserApp {
   icon: string;
   path: string;
   isDefault?: boolean;
+  bundleId?: string;
   type: 'chrome' | 'safari' | 'firefox' | 'arc' | 'edge' | 'brave' | 'vivaldi' | 'comet' | 'opera' | 'opera-gx' | 'chromium' | 'other';
   iconDataURL?: string;
 }
@@ -30,6 +31,7 @@ export interface HistoryLog {
   timestamp: Date;
   url: string;
   sourceApp?: string;
+  sourceBundleId?: string;
   sourceAppIcon?: string;
   routedToBrowserId: string;
   method: 'Manual' | 'Rule' | 'AI' | 'Default';

@@ -1,7 +1,18 @@
 import { app } from 'electron';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+
+const execFileAsync = (command, args = []) =>
+  new Promise((resolve, reject) => {
+    execFile(command, args, (error, stdout = '') => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(stdout);
+    });
+  });
 
 // 浏览器配置 (Bundle ID 映射)
 const BROWSER_BUNDLE_IDS = {
@@ -31,11 +42,11 @@ async function scanAppsByBundleIds(bundleIdMap) {
   
   for (const [id, config] of Object.entries(bundleIdMap)) {
     try {
-        const pathOutput = await new Promise((resolve) => {
-            exec(`mdfind "kMDItemCFBundleIdentifier == '${config.bundleId}'" | head -n 1`, (err, stdout) => {
-                resolve(stdout ? stdout.trim() : '');
-            });
-        });
+        const searchOutput = await execFileAsync('mdfind', [`kMDItemCFBundleIdentifier == '${config.bundleId}'`]);
+        const pathOutput = searchOutput
+          .split('\n')
+          .map((item) => item.trim())
+          .find(Boolean) || '';
 
         if (pathOutput && existsSync(pathOutput)) {
             console.log(`${config.name} found at ${pathOutput}`);
@@ -50,6 +61,7 @@ async function scanAppsByBundleIds(bundleIdMap) {
             installedApps.push({
                 id: id,
                 name: config.name,
+                bundleId: config.bundleId,
                 path: pathOutput,
                 type: config.type || 'other',
                 iconDataURL: iconDataURL,
@@ -109,6 +121,7 @@ export async function scanInstalledBrowsers() {
   const formattedCustom = customBrowsers.map((b, index) => ({
       ...b,
       id: b.id || `custom-${Date.now()}-${index}`,
+      bundleId: b.bundleId || '',
       type: b.type || 'other',
       hasIcon: !!b.iconDataURL
   }));
