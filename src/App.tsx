@@ -113,6 +113,30 @@ const AppContent: React.FC = () => {
     checkUpdate();
   }, []);
 
+  useEffect(() => {
+    const hydrateWindowState = async () => {
+      if (!prism) return;
+
+      try {
+        const mode = await prism.invoke<'dashboard' | 'popup'>('get-view-mode');
+        setViewMode(mode);
+
+        const pendingLink = await prism.invoke<{url: string, source: string, sourceIcon?: string, sourceBundleId?: string} | null>('get-pending-deep-link');
+        if (pendingLink) {
+          if (browsers.length === 0) {
+            setPendingDeepLink(pendingLink);
+          } else {
+            processRouting(pendingLink.url, pendingLink.source, pendingLink.sourceIcon, pendingLink.sourceBundleId);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to hydrate window state:', error);
+      }
+    };
+
+    hydrateWindowState();
+  }, [browsers.length]);
+
   const handleStartUpdate = async () => {
     if (!updateInfo || !prism) return;
 

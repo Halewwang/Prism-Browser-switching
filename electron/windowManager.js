@@ -11,6 +11,7 @@ const POPUP_SIZE = { width: 425, height: 200 };
 
 let mainWindow = null;
 let isPopupMode = false;
+let pendingDeepLinkPayload = null;
 
 export function getMainWindow() {
     return mainWindow;
@@ -22,6 +23,16 @@ export function getIsPopupMode() {
 
 export function setIsPopupMode(value) {
     isPopupMode = value;
+}
+
+export function getPendingDeepLinkPayload() {
+    return pendingDeepLinkPayload;
+}
+
+export function consumePendingDeepLinkPayload() {
+    const payload = pendingDeepLinkPayload;
+    pendingDeepLinkPayload = null;
+    return payload;
 }
 
 export function createWindow() {
@@ -112,6 +123,7 @@ export function createWindow() {
 export function switchToDashboardMode() {
   if (!mainWindow) return;
   isPopupMode = false;
+  pendingDeepLinkPayload = null;
   
   mainWindow.setResizable(true);
   mainWindow.setAlwaysOnTop(false);
@@ -130,6 +142,7 @@ export function switchToDashboardMode() {
 export function switchToPopupMode(url, sourceApp, sourceAppIcon, sourceBundleId) {
   if (!mainWindow) return;
   isPopupMode = true;
+  pendingDeepLinkPayload = { url, source: sourceApp, sourceIcon: sourceAppIcon, sourceBundleId };
   
   mainWindow.setSize(POPUP_SIZE.width, POPUP_SIZE.height, true);
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -161,11 +174,18 @@ export function switchToPopupMode(url, sourceApp, sourceAppIcon, sourceBundleId)
   
   mainWindow.show();
   mainWindow.focus();
-  
-  mainWindow.webContents.send('view-mode-change', 'popup');
-  setTimeout(() => {
-    mainWindow.webContents.send('deep-link', { url, source: sourceApp, sourceIcon: sourceAppIcon, sourceBundleId });
-  }, 100);
+
+  const dispatchPopupState = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('view-mode-change', 'popup');
+    mainWindow.webContents.send('deep-link', pendingDeepLinkPayload);
+  };
+
+  // Cold start can race renderer boot. Re-send a few times so popup mode
+  // survives first launch from a URL event.
+  dispatchPopupState();
+  setTimeout(dispatchPopupState, 120);
+  setTimeout(dispatchPopupState, 360);
 }
 
 // Window control handlers helper

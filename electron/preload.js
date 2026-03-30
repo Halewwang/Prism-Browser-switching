@@ -16,6 +16,8 @@ const validChannels = new Set([
 
 const validInvokeChannels = new Set([
   'get-app-version',
+  'get-view-mode',
+  'get-pending-deep-link',
   'select-source-app',
   'add-custom-browser',
   'start-download-update',

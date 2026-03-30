@@ -1,6 +1,17 @@
 import { ICON_ALIASES } from '../data/iconAliases';
+import arcIcon from '../assets/browsers/arc.svg';
+import chromeIcon from '../assets/browsers/chrome.svg';
+import edgeIcon from '../assets/browsers/edge.svg';
+import firefoxIcon from '../assets/browsers/firefox.svg';
+import safariIcon from '../assets/browsers/safari.svg';
 
-const THESVG_BASE = 'https://cdn.jsdelivr.net/gh/GLINCKER/thesvg@main/public/icons';
+const LOCAL_ICON_ASSETS: Record<string, string> = {
+  arc: arcIcon,
+  'google-chrome': chromeIcon,
+  safari: safariIcon,
+  firefox: firefoxIcon,
+  'microsoft-edge': edgeIcon,
+};
 
 export interface ResolveIconInput {
   appName?: string;
@@ -10,7 +21,7 @@ export interface ResolveIconInput {
 }
 
 export interface ResolveIconResult {
-  kind: 'data-url' | 'thesvg' | 'fallback';
+  kind: 'data-url' | 'local' | 'fallback';
   src?: string;
   letter: string;
 }
@@ -47,8 +58,6 @@ export const resolveTheSvgSlug = ({ appName, bundleId, type }: ResolveIconInput)
   return match?.slug || null;
 };
 
-export const buildTheSvgUrl = (slug: string) => `${THESVG_BASE}/${slug}/default.svg`;
-
 export const resolveIcon = ({ appName, bundleId, type, iconDataURL }: ResolveIconInput): ResolveIconResult => {
   const letter = getLetter(appName || bundleId || type);
 
@@ -61,10 +70,12 @@ export const resolveIcon = ({ appName, bundleId, type, iconDataURL }: ResolveIco
   }
 
   const slug = resolveTheSvgSlug({ appName, bundleId, type });
-  if (slug) {
+  const localAsset = slug ? LOCAL_ICON_ASSETS[slug] : undefined;
+
+  if (localAsset) {
     return {
-      kind: 'thesvg',
-      src: buildTheSvgUrl(slug),
+      kind: 'local',
+      src: localAsset,
       letter,
     };
   }

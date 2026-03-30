@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import pkg from '../package.json' assert { type: "json" };
 import { scanInstalledBrowsers, saveCustomBrowser } from './browserScanner.js';
-import { getMainWindow, setIsPopupMode } from './windowManager.js';
+import { consumePendingDeepLinkPayload, getIsPopupMode, getMainWindow, setIsPopupMode } from './windowManager.js';
 
 const ALLOWED_UPDATE_HOSTS = new Set([
   'github.com',
@@ -182,6 +182,14 @@ export function registerIpcHandlers() {
   // Update Handlers
   ipcMain.handle('get-app-version', () => {
     return pkg.version;
+  });
+
+  ipcMain.handle('get-view-mode', () => {
+    return getIsPopupMode() ? 'popup' : 'dashboard';
+  });
+
+  ipcMain.handle('get-pending-deep-link', () => {
+    return consumePendingDeepLinkPayload();
   });
 
   ipcMain.handle('start-download-update', async (_event, payload) => {

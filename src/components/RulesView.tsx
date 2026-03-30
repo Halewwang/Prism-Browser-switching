@@ -42,6 +42,12 @@ const RulesView: React.FC<RulesViewProps> = ({ rules, browsers, onAddRule, onDel
   const [isSelectingTarget, setIsSelectingTarget] = useState(false);
   const prism = getPrism();
 
+  useEffect(() => {
+    if (!newTargetId && browsers[0]?.id) {
+      setNewTargetId(browsers[0].id);
+    }
+  }, [browsers, newTargetId]);
+
   const handleSelectApp = async () => {
       if (prism) {
           try {
