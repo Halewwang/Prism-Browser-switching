@@ -1,8 +1,8 @@
 {
-  "version": "v1.10.21",
-  "notes": "# v1.10.21 (2026-03-30)\n\n## Changes\n* feat: harden app routing and update flow (6f1acfb)\n\n## Installation\nDownload `Prism-1.10.21-arm64.dmg` and drag to Applications.\n\n## Checksum (SHA-256)\n`55bc565d01cf9d8b39d36a6b380fc85c91d1eb05f402dde6f9d9376d23a0e7d2`",
-  "pub_date": "2026-03-30T03:00:00.000Z",
-  "url": "https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.10.21/Prism-1.10.21-arm64.dmg",
-  "sha256": "55bc565d01cf9d8b39d36a6b380fc85c91d1eb05f402dde6f9d9376d23a0e7d2",
-  "fileName": "Prism-1.10.21-arm64.dmg"
+  "version": "v1.10.22",
+  "notes": "# v1.10.22 (2026-03-30)\n\n## Changes\n* fix: restore popup mode and local icon fallbacks (9f85ff1)\n\n## Installation\nDownload `Prism-1.10.22-arm64.dmg` and drag to Applications.\n\n## Checksum (SHA-256)\n`309b619aa8fa72d97a592df7854e935f6609ebe74abe5f9c5aaef979c8f86eda`",
+  "pub_date": "2026-03-30T03:50:18.952Z",
+  "url": "https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.10.22/Prism-1.10.22-arm64.dmg",
+  "sha256": "309b619aa8fa72d97a592df7854e935f6609ebe74abe5f9c5aaef979c8f86eda",
+  "fileName": "Prism-1.10.22-arm64.dmg"
 }
