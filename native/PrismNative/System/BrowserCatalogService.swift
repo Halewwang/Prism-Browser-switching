@@ -123,10 +123,18 @@ final class BrowserCatalogService: BrowserCataloging {
         origin: BrowserOrigin,
         bookmark: Data? = nil
     ) -> BrowserDescriptor? {
+        guard applicationURL.isFileURL else { return nil }
+
         let resolvedURL = resolvedApplicationURL(applicationURL)
-        guard resolvedURL.pathExtension == "app",
+        var isDirectory: ObjCBool = false
+        let fileManager = FileManager.default
+        guard resolvedURL.isFileURL,
+              resolvedURL.pathExtension == "app",
+              fileManager.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue,
+              fileManager.isReadableFile(atPath: resolvedURL.path),
               let bundle = Bundle(url: resolvedURL),
-              FileManager.default.isReadableFile(atPath: resolvedURL.appending(path: "Contents/Info.plist").path),
+              fileManager.isReadableFile(atPath: resolvedURL.appending(path: "Contents/Info.plist").path),
               let bundleIdentifier = bundle.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
               !bundleIdentifier.isEmpty,
               bundleIdentifier != prismBundleIdentifier else {
@@ -154,7 +162,8 @@ final class BrowserCatalogService: BrowserCataloging {
     }
 
     private func resolvedApplicationURL(_ url: URL) -> URL {
-        url.resolvingSymlinksInPath().standardizedFileURL
+        guard url.isFileURL else { return url }
+        return url.resolvingSymlinksInPath().standardizedFileURL
     }
 
     private func ordered(

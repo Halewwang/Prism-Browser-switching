@@ -39,6 +39,8 @@ final class BrowserLauncherService: BrowserLaunching {
             throw BrowserLaunchError.applicationUnavailable
         } catch WorkspaceClientError.rejected {
             throw BrowserLaunchError.rejected
+        } catch WorkspaceClientError.system(let error) {
+            throw BrowserLaunchError.system(error)
         } catch {
             throw BrowserLaunchError.system(error)
         }

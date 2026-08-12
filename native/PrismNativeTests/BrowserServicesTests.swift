@@ -1,7 +1,9 @@
 import AppKit
+import CoreServices
 import Foundation
 import PrismCore
 import Testing
+import XCTest
 @testable import PrismNative
 
 @Test @MainActor func catalogDeduplicatesHandlersByBundleIdentifier() async throws {
@@ -230,6 +232,189 @@ import Testing
     #expect(icon.size == expectedSize)
 }
 
+final class BrowserServiceContractTests: XCTestCase {
+    func testWorkspaceCompletionAdapterClassifiesSuccessAndRejections() {
+        let adapter = WorkspaceOpenCompletionAdapter()
+        let cancelled = NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)
+        let noLaunchPermission = NSError(
+            domain: NSOSStatusErrorDomain,
+            code: Int(kLSNoLaunchPermissionErr)
+        )
+
+        XCTAssertEqual(
+            workspaceCompletionCategory(adapter.resolve(didLaunchApplication: true, error: nil)),
+            .accepted
+        )
+        XCTAssertEqual(
+            workspaceCompletionCategory(adapter.resolve(didLaunchApplication: false, error: nil)),
+            .rejected
+        )
+        XCTAssertEqual(
+            workspaceCompletionCategory(adapter.resolve(didLaunchApplication: false, error: cancelled)),
+            .rejected
+        )
+        XCTAssertEqual(
+            workspaceCompletionCategory(
+                adapter.resolve(didLaunchApplication: false, error: noLaunchPermission)
+            ),
+            .rejected
+        )
+    }
+
+    func testWorkspaceCompletionAdapterClassifiesUnavailableApplicationsAndPreservesUnknownErrors() {
+        let adapter = WorkspaceOpenCompletionAdapter()
+        let missingApplication = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)
+        let missingExecutable = NSError(
+            domain: NSOSStatusErrorDomain,
+            code: Int(kLSNoExecutableErr)
+        )
+        let unreadableApplication = NSError(
+            domain: NSPOSIXErrorDomain,
+            code: Int(POSIXErrorCode.EACCES.rawValue)
+        )
+
+        for error in [missingApplication, missingExecutable, unreadableApplication] {
+            XCTAssertEqual(
+                workspaceCompletionCategory(adapter.resolve(didLaunchApplication: false, error: error)),
+                .applicationUnavailable
+            )
+        }
+
+        let originalError = NSError(domain: "com.prism.tests.workspace", code: 73)
+        let result = adapter.resolve(didLaunchApplication: false, error: originalError)
+        guard case let .failure(.system(error)) = result else {
+            return XCTFail("Expected the original unknown error to remain a system error")
+        }
+        let surfacedError = error as NSError
+        XCTAssertEqual(surfacedError.domain, originalError.domain)
+        XCTAssertEqual(surfacedError.code, originalError.code)
+    }
+
+    func testLauncherMapsWorkspaceFailureCategories() async throws {
+        try await Task { @MainActor in
+            let fixtures = try TemporaryApplicationBundles([
+                ("Safari.app", "com.apple.Safari")
+            ])
+            defer { fixtures.remove() }
+
+            let browser = browserDescriptor(
+                bundleIdentifier: "com.apple.Safari",
+                applicationURL: fixtures.urls[0]
+            )
+            let unavailable = BrowserLauncherService(
+                workspace: StubWorkspaceClient(
+                    applicationURLs: [],
+                    openError: WorkspaceClientError.applicationUnavailable
+                )
+            )
+            let rejected = BrowserLauncherService(
+                workspace: StubWorkspaceClient(
+                    applicationURLs: [],
+                    openError: WorkspaceClientError.rejected
+                )
+            )
+            let originalSystemError = NSError(domain: "com.prism.tests.workspace", code: 91)
+            let system = BrowserLauncherService(
+                workspace: StubWorkspaceClient(
+                    applicationURLs: [],
+                    openError: WorkspaceClientError.system(originalSystemError)
+                )
+            )
+
+            do {
+                _ = try await unavailable.open(URL(string: "https://example.com")!, with: browser)
+                XCTFail("Expected an unavailable application error")
+            } catch let error as BrowserLaunchError {
+                guard case .applicationUnavailable = error else {
+                    return XCTFail("Expected BrowserLaunchError.applicationUnavailable")
+                }
+            }
+
+            do {
+                _ = try await rejected.open(URL(string: "https://example.com")!, with: browser)
+                XCTFail("Expected a rejected handoff error")
+            } catch let error as BrowserLaunchError {
+                guard case .rejected = error else {
+                    return XCTFail("Expected BrowserLaunchError.rejected")
+                }
+            }
+
+            do {
+                _ = try await system.open(URL(string: "https://example.com")!, with: browser)
+                XCTFail("Expected the original system error to be surfaced")
+            } catch let error as BrowserLaunchError {
+                guard case let .system(surfacedError) = error else {
+                    return XCTFail("Expected BrowserLaunchError.system")
+                }
+                let surfacedNSError = surfacedError as NSError
+                XCTAssertEqual(surfacedNSError.domain, originalSystemError.domain)
+                XCTAssertEqual(surfacedNSError.code, originalSystemError.code)
+            }
+        }.value
+    }
+
+    func testLauncherDoesNotReportSuccessBeforeWorkspaceCompletion() async throws {
+        try await Task { @MainActor in
+            let fixtures = try TemporaryApplicationBundles([
+                ("Safari.app", "com.apple.Safari")
+            ])
+            defer { fixtures.remove() }
+
+            let workspace = DeferredWorkspaceClient()
+            let launcher = BrowserLauncherService(workspace: workspace)
+            let browser = browserDescriptor(
+                bundleIdentifier: "com.apple.Safari",
+                applicationURL: fixtures.urls[0]
+            )
+            var didComplete = false
+            let launchTask = Task { @MainActor in
+                didComplete = try await launcher.open(
+                    URL(string: "https://example.com")!,
+                    with: browser
+                ) == .handoffSucceeded
+            }
+
+            await Task.yield()
+            XCTAssertTrue(workspace.hasPendingOpen)
+            XCTAssertFalse(didComplete)
+            workspace.succeed()
+            _ = try await launchTask.value
+            XCTAssertTrue(didComplete)
+        }.value
+    }
+
+    func testCatalogRejectsUnreadableBundleRootsAlongsideNonFileAndNonDirectoryURLs() async throws {
+        try await Task { @MainActor in
+            let fixtures = try TemporaryApplicationBundles([
+                ("Safari.app", "com.apple.Safari"),
+                ("Unreadable Root.app", "com.example.unreadable-root")
+            ])
+            defer { fixtures.remove() }
+
+            let unreadableRoot = fixtures.urls[1]
+            let nonDirectory = try fixtures.makePlainFile(named: "Not A Bundle.app")
+            let remoteURL = try XCTUnwrap(URL(string: "https://example.com/Remote.app"))
+            try fixtures.makeBundleRootUnreadable(at: unreadableRoot)
+
+            XCTAssertFalse(FileManager.default.isReadableFile(atPath: unreadableRoot.path))
+            XCTAssertTrue(
+                FileManager.default.isReadableFile(
+                    atPath: unreadableRoot.appending(path: "Contents/Info.plist").path
+                )
+            )
+
+            let workspace = StubWorkspaceClient(
+                applicationURLs: [fixtures.urls[0], unreadableRoot, nonDirectory, remoteURL]
+            )
+            let catalog = BrowserCatalogService(workspace: workspace, customBrowsers: [])
+
+            let browsers = try await catalog.scan()
+
+            XCTAssertEqual(browsers.map(\.bundleIdentifier), ["com.apple.Safari"])
+        }.value
+    }
+}
+
 @MainActor
 private final class StubWorkspaceClient: WorkspaceClient {
     private let applicationURLsByScheme: [String: [URL]]
@@ -302,6 +487,7 @@ private final class TemporaryApplicationBundles {
     let root: URL
     let urls: [URL]
     private var unreadableInfoPlists: [URL] = []
+    private var unreadableBundleRoots: [URL] = []
 
     init(_ applications: [(name: String, bundleIdentifier: String)]) throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -330,7 +516,21 @@ private final class TemporaryApplicationBundles {
         unreadableInfoPlists.append(infoPlist)
     }
 
+    func makeBundleRootUnreadable(at applicationURL: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o111], ofItemAtPath: applicationURL.path)
+        unreadableBundleRoots.append(applicationURL)
+    }
+
+    func makePlainFile(named name: String) throws -> URL {
+        let fileURL = root.appending(path: name)
+        try Data("not an application bundle".utf8).write(to: fileURL)
+        return fileURL
+    }
+
     func remove() {
+        for bundleRoot in unreadableBundleRoots {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bundleRoot.path)
+        }
         for infoPlist in unreadableInfoPlists {
             try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: infoPlist.path)
         }
@@ -354,6 +554,26 @@ private final class TemporaryApplicationBundles {
 
 private enum BrowserServiceTestError: Error {
     case unavailable
+}
+
+private enum WorkspaceCompletionCategory: Equatable {
+    case accepted
+    case rejected
+    case applicationUnavailable
+    case system
+}
+
+private func workspaceCompletionCategory(_ result: WorkspaceOpenCompletion) -> WorkspaceCompletionCategory {
+    switch result {
+    case .accepted:
+        .accepted
+    case .failure(.rejected):
+        .rejected
+    case .failure(.applicationUnavailable):
+        .applicationUnavailable
+    case .failure(.system):
+        .system
+    }
 }
 
 private func browserDescriptor(
