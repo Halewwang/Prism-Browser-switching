@@ -125,10 +125,26 @@ import Testing
     let safari = SourceApplication(bundleIdentifier: "com.apple.Safari", displayName: "Safari", confidence: .unknown)
 
     tracker.stop()
+    tracker.stop()
     observer.emit(safari)
 
     #expect(observer.removeCount == 1)
     #expect(tracker.lastActivatedApplication == nil)
+}
+
+@Test func activationTrackerSafelyCleansItsObserverWhenReleasedOffMainActor() async {
+    let observer = await MainActor.run { StubActivationObserver() }
+
+    await Task.detached { @Sendable in
+        let tracker = await MainActor.run {
+            ApplicationActivationTracker(observer: observer, prismBundleIdentifier: "com.prism.app")
+        }
+        withExtendedLifetime(tracker) {}
+    }.value
+    await observer.waitForRemoval()
+
+    let removeCount = await MainActor.run { observer.removeCount }
+    #expect(removeCount == 1)
 }
 
 @Test func freshInstallUsesOnlyBundledApprovedSourcesForCurrentOS() throws {
@@ -152,6 +168,33 @@ import Testing
     let manifest = SourceSupportManifest.loadBundled(resourceData: Data("not json".utf8))
 
     #expect(manifest.eligibleBundleIDs(for: OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0)).isEmpty)
+}
+
+@Test func manifestLoaderFailsClosedWithoutTrappingOnOverflowingSampleTotals() {
+    let maxPlusTwenty = manifestData(sources: [
+        validatedSource(coldSamples: Int.max, warmSamples: 20, confirmedCount: Int.max)
+    ])
+    let maxPlusMax = manifestData(sources: [
+        validatedSource(coldSamples: Int.max, warmSamples: Int.max, confirmedCount: Int.max)
+    ])
+
+    let firstResult = SourceSupportManifest.loadBundled(resourceData: maxPlusTwenty)
+    let secondResult = SourceSupportManifest.loadBundled(resourceData: maxPlusMax)
+
+    #expect(firstResult == .disabled)
+    #expect(secondResult == .disabled)
+}
+
+@Test func manifestLoaderStillDisablesInsufficientEvidenceAndAcceptsValidEvidence() {
+    let insufficient = manifestData(sources: [validatedSource(coldSamples: 19, confirmedCount: 39)])
+    let valid = manifestData(sources: [validatedSource()])
+
+    #expect(SourceSupportManifest.loadBundled(resourceData: insufficient) == .disabled)
+    #expect(
+        SourceSupportManifest.loadBundled(resourceData: valid)
+            .eligibleBundleIDs(for: OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0))
+            == ["com.tinyspeck.slackmacgap"]
+    )
 }
 
 @Test func manifestRejectsMalformedAndWrongSchema() {
@@ -263,6 +306,7 @@ private final class StubRunningApplicationInspector: RunningApplicationInspectin
 private final class StubActivationObserver: ApplicationActivationObserving {
     private var handler: (@MainActor @Sendable (SourceApplication?) -> Void)?
     private var token: NSObject?
+    private var removalContinuations: [CheckedContinuation<Void, Never>] = []
     private(set) var removeCount = 0
 
     func observeActivations(_ handler: @escaping @MainActor @Sendable (SourceApplication?) -> Void) -> NSObjectProtocol {
@@ -273,10 +317,22 @@ private final class StubActivationObserver: ApplicationActivationObserving {
     }
 
     func removeObserver(_ observer: NSObjectProtocol) {
+        MainActor.preconditionIsolated()
         if observer === token {
             removeCount += 1
             handler = nil
             token = nil
+            let continuations = removalContinuations
+            removalContinuations = []
+            continuations.forEach { $0.resume() }
+        }
+    }
+
+    func waitForRemoval() async {
+        guard removeCount == 0 else { return }
+
+        await withCheckedContinuation { continuation in
+            removalContinuations.append(continuation)
         }
     }
 

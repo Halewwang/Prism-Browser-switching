@@ -92,11 +92,12 @@ struct SourceSupportEntry: Equatable {
             throw SourceSupportManifest.ValidationError.invalidOperatingSystemBounds
         }
 
-        let totalSamples = source.coldSamples + source.warmSamples
-        guard source.coldSamples >= 20,
+        let totalSamples = source.coldSamples.addingReportingOverflow(source.warmSamples)
+        guard !totalSamples.overflow,
+              source.coldSamples >= 20,
               source.warmSamples >= 20,
               source.confirmedCount >= 40,
-              source.confirmedCount == totalSamples,
+              source.confirmedCount == totalSamples.partialValue,
               source.falseAttributionCount == 0
         else {
             throw SourceSupportManifest.ValidationError.insufficientEvidence

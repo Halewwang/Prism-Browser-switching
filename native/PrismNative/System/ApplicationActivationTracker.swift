@@ -25,12 +25,8 @@ final class ApplicationActivationTracker {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            if let observerToken {
-                observer.removeObserver(observerToken)
-            }
-        }
+    isolated deinit {
+        stop()
     }
 
     func stop() {
