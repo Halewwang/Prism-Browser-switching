@@ -1,14 +1,14 @@
 #!/bin/zsh
 set -euo pipefail
 
-if (( $# > 1 )); then
-    print -u2 "usage: ${0:t} [source-icon.png]"
+if (( $# != 0 )); then
+    print -u2 "usage: ${0:t} (uses the approved repository-root build/icon.png source)"
     exit 64
 fi
 
 native_directory="${0:A:h}/.."
 repository_root="$(git -C "$native_directory" rev-parse --show-toplevel)"
-source_icon="${1:-$repository_root/build/icon.png}"
+source_icon="$repository_root/build/icon.png"
 destination_directory="$native_directory/PrismNative/Resources/Assets.xcassets/AppIcon.appiconset"
 
 if [[ ! -f "$source_icon" ]]; then
