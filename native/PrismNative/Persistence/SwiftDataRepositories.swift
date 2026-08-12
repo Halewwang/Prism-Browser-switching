@@ -44,7 +44,7 @@ final class SwiftDataRuleRepository: RuleRepository {
     func all() throws -> [RoutingRule] {
         try context.fetch(FetchDescriptor<RuleRecord>())
             .map { try $0.routingRule() }
-            .sorted(by: Self.sort)
+            .sorted(by: RoutingRuleOrdering.isOrderedBefore)
     }
 
     func upsert(_ rule: RoutingRule) throws {
@@ -63,20 +63,6 @@ final class SwiftDataRuleRepository: RuleRepository {
         }
     }
 
-    static func sort(_ lhs: RoutingRule, _ rhs: RoutingRule) -> Bool {
-        let lhsOrder = lhs.matcher.persistenceSortOrder
-        let rhsOrder = rhs.matcher.persistenceSortOrder
-        if lhsOrder != rhsOrder {
-            return lhsOrder < rhsOrder
-        }
-        if lhs.priority != rhs.priority {
-            return lhs.priority > rhs.priority
-        }
-        if lhs.createdAt != rhs.createdAt {
-            return lhs.createdAt < rhs.createdAt
-        }
-        return lhs.id.uuidString < rhs.id.uuidString
-    }
 }
 
 @MainActor
@@ -230,7 +216,7 @@ final class InMemoryRuleRepository: RuleRepository {
     private var rules: [UUID: RoutingRule] = [:]
 
     func all() throws -> [RoutingRule] {
-        try rules.values.sorted(by: SwiftDataRuleRepository.sort)
+        RoutingRuleOrdering.sorted(Array(rules.values))
     }
 
     func upsert(_ rule: RoutingRule) throws {

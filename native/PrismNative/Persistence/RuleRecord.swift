@@ -66,18 +66,3 @@ private struct VersionedRuleMatcher: Codable {
 enum PersistenceRecordError: Error {
     case invalidPayload
 }
-
-extension RuleMatcher {
-    var persistenceSortOrder: Int {
-        switch self {
-        case .exactHost:
-            return 0
-        case .hostAndSubdomains:
-            return 1
-        case .urlContains:
-            return 2
-        case .sourceBundleIdentifier:
-            return 3
-        }
-    }
-}

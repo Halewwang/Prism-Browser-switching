@@ -12,6 +12,33 @@ public enum RoutingDecision: Equatable, Sendable {
     case ask(reason: SelectorReason)
 }
 
+public enum RoutingRuleOrdering {
+    public static func sorted(_ rules: [RoutingRule]) -> [RoutingRule] {
+        rules.sorted(by: isOrderedBefore)
+    }
+
+    public static func isOrderedBefore(_ lhs: RoutingRule, _ rhs: RoutingRule) -> Bool {
+        let lhsCategory = category(for: lhs.matcher)
+        let rhsCategory = category(for: rhs.matcher)
+        if lhsCategory != rhsCategory {
+            return lhsCategory < rhsCategory
+        }
+        if lhs.priority != rhs.priority {
+            return lhs.priority < rhs.priority
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func category(for matcher: RuleMatcher) -> Int {
+        switch matcher {
+        case .exactHost, .hostAndSubdomains, .urlContains:
+            return 0
+        case .sourceBundleIdentifier:
+            return 1
+        }
+    }
+}
+
 public enum URLRuleMatcher {
     public static func matches(_ matcher: RuleMatcher, url: URL) -> Bool {
         switch matcher {
@@ -119,13 +146,7 @@ public struct RuleEngine: Sendable {
     }
 
     private func sorted(_ rules: [RoutingRule]) -> [RoutingRule] {
-        rules.sorted {
-            if $0.priority != $1.priority {
-                return $0.priority < $1.priority
-            }
-
-            return $0.id.uuidString < $1.id.uuidString
-        }
+        RoutingRuleOrdering.sorted(rules)
     }
 
     private func decision(

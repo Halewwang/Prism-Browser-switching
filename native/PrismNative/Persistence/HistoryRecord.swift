@@ -30,7 +30,7 @@ final class HistoryRecord {
         method = entry.method?.rawValue
         result = entry.result.rawValue
         matchingRuleID = entry.matchingRuleID
-        failureReason = entry.failureReason
+        failureReason = Self.persistedFailureReason(from: entry.failureReason)
         attemptCount = entry.attemptCount
         createdAt = entry.createdAt
         completedAt = entry.completedAt
@@ -72,9 +72,14 @@ final class HistoryRecord {
         method = entry.method?.rawValue
         result = entry.result.rawValue
         matchingRuleID = entry.matchingRuleID
-        failureReason = entry.failureReason
+        failureReason = Self.persistedFailureReason(from: entry.failureReason)
         attemptCount = entry.attemptCount
         createdAt = entry.createdAt
         completedAt = entry.completedAt
+    }
+
+    private static func persistedFailureReason(from failureReason: String?) -> String? {
+        guard let failureReason, !failureReason.isEmpty else { return nil }
+        return "launch_failed"
     }
 }

@@ -8,8 +8,18 @@ actor AtomicPendingRequestStore: PendingRequestStore, PersistenceWarningSource {
     private let directory: URL
     private var warnings: [PersistenceWarning] = []
 
-    init(directory: URL = AtomicPendingRequestStore.defaultDirectory()) {
+    init(directory: URL) {
         self.directory = directory
+    }
+
+    static func makeDefault() throws -> AtomicPendingRequestStore {
+        try AtomicPendingRequestStore(directory: defaultDirectory())
+    }
+
+    static func makeForTesting(
+        resolvingDefaultDirectoryWith resolver: () throws -> URL
+    ) throws -> AtomicPendingRequestStore {
+        try AtomicPendingRequestStore(directory: resolver())
     }
 
     func load() async throws -> PendingRequestSnapshot {
@@ -84,14 +94,14 @@ actor AtomicPendingRequestStore: PendingRequestStore, PersistenceWarningSource {
         return backupDirectory
     }
 
-    private static func defaultDirectory() -> URL {
+    private static func defaultDirectory() throws -> URL {
         let fileManager = FileManager.default
-        let applicationSupport = (try? fileManager.url(
+        let applicationSupport = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
-        )) ?? fileManager.temporaryDirectory
+        )
         return applicationSupport
             .appending(path: "Prism")
             .appending(path: "Recovery")

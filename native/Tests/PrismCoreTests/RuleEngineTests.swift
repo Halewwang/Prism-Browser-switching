@@ -157,6 +157,25 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
     #expect(decision == .open(browserID: safari, method: .urlRule, ruleID: firstByID.id))
 }
 
+@Test func interleavedURLMatchersUseSharedPriorityAndIDOrdering() {
+    let safari: BrowserID = "com.apple.Safari"
+    let chrome: BrowserID = "com.google.Chrome"
+    let firefox: BrowserID = "org.mozilla.firefox"
+    let exact = rule(id: .test(9), matcher: .exactHost("example.com"), browser: safari, priority: 8)
+    let subdomain = rule(id: .test(5), matcher: .hostAndSubdomains("example.com"), browser: chrome, priority: 1)
+    let contains = rule(id: .test(4), matcher: .urlContains("example.com"), browser: firefox, priority: 1)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(url: "https://example.com/path"),
+        rules: [exact, subdomain, contains],
+        availableBrowserIDs: [safari, chrome, firefox],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .open(browserID: firefox, method: .urlRule, ruleID: contains.id))
+}
+
 @Test func selectedUnavailableRuleTargetAsksWithoutFallingThrough() {
     let unavailableSafari: BrowserID = "com.apple.Safari"
     let chrome: BrowserID = "com.google.Chrome"

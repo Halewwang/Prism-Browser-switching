@@ -10,34 +10,50 @@ struct ModelContainerResult {
 @MainActor
 enum ModelContainerFactory {
     static func make(inMemory: Bool) throws -> ModelContainerResult {
-        try make(inMemory: inMemory, storeURL: nil, simulateInitialOpenFailure: false)
+        try make(inMemory: inMemory, storeURL: nil, simulatedOpenFailures: 0)
+    }
+
+    static func makeForTesting(
+        inMemory: Bool,
+        storeURL: URL
+    ) throws -> ModelContainerResult {
+        try make(
+            inMemory: inMemory,
+            storeURL: storeURL,
+            simulatedOpenFailures: 0
+        )
     }
 
     static func makeForTesting(
         inMemory: Bool,
         storeURL: URL,
-        simulateInitialOpenFailure: Bool
+        simulatedOpenFailures: Int
     ) throws -> ModelContainerResult {
         try make(
             inMemory: inMemory,
             storeURL: storeURL,
-            simulateInitialOpenFailure: simulateInitialOpenFailure
+            simulatedOpenFailures: simulatedOpenFailures
         )
     }
 
     private static func make(
         inMemory: Bool,
         storeURL: URL?,
-        simulateInitialOpenFailure: Bool
+        simulatedOpenFailures: Int
     ) throws -> ModelContainerResult {
         let resolvedStoreURL = inMemory ? nil : try storeURL ?? persistentStoreURL()
-
-        do {
-            if simulateInitialOpenFailure {
+        var remainingSimulatedOpenFailures = simulatedOpenFailures
+        let openContainer = {
+            if remainingSimulatedOpenFailures > 0 {
+                remainingSimulatedOpenFailures -= 1
                 throw ModelContainerFactoryError.simulatedOpenFailure
             }
+            return try newContainer(inMemory: inMemory, storeURL: resolvedStoreURL)
+        }
+
+        do {
             return ModelContainerResult(
-                container: try newContainer(inMemory: inMemory, storeURL: resolvedStoreURL),
+                container: try openContainer(),
                 warning: nil
             )
         } catch {
@@ -46,7 +62,7 @@ enum ModelContainerFactory {
             }
 
             let backupDirectory = try backupStoreArtifacts(at: resolvedStoreURL)
-            let container = try newContainer(inMemory: false, storeURL: resolvedStoreURL)
+            let container = try openContainer()
             try seedSafeSettings(in: container)
             return ModelContainerResult(
                 container: container,
