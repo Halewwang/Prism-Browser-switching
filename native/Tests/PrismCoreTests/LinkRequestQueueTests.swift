@@ -556,6 +556,47 @@ import Testing
     #expect(await store.latestSnapshot == expected)
 }
 
+@Test func explicitEnqueueRefusesAnAlreadyPendingRequestWithoutSaving() async throws {
+    let real = request(id: .test(132), url: "https://example.com/real")
+    let synthetic = request(id: .test(133), url: "https://example.com/synthetic")
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    #expect(try await queue.enqueue(real))
+    let saveCount = await store.saveCount
+
+    #expect(!(try await queue.enqueueIfNoPending(synthetic)))
+
+    #expect(await queue.snapshot() == [real])
+    #expect(await store.saveCount == saveCount)
+}
+
+@Test func explicitEnqueueCannotOvertakeARealEnqueueSuspendedInPersistence() async throws {
+    let real = request(id: .test(134), url: "https://example.com/real")
+    let synthetic = request(id: .test(135), url: "https://example.com/synthetic")
+    let store = InMemoryPendingRequestStore()
+    let (waiterEvents, waiterSignal) = AsyncStream<Void>.makeStream()
+    let queue = LinkRequestQueue(store: store, mutationWaiterObserver: {
+        _ = waiterSignal.yield()
+    })
+    var waiterIterator = waiterEvents.makeAsyncIterator()
+    await store.suspendNextSave()
+
+    let realEnqueue = Task { try await queue.enqueue(real) }
+    await store.waitUntilSaveSuspended()
+    let syntheticEnqueue = Task { try await queue.enqueueIfNoPending(synthetic) }
+    #expect(await waiterIterator.next() != nil)
+
+    await store.releaseSuspendedSave()
+
+    #expect(try await realEnqueue.value)
+    #expect(!(try await syntheticEnqueue.value))
+    #expect(await queue.snapshot() == [real])
+    #expect(await store.latestSnapshot == PendingRequestSnapshot(
+        pendingRequests: [real],
+        terminalRecords: []
+    ))
+}
+
 @Test func failedSerializedSaveReleasesTheNextQueuedMutation() async throws {
     let failed = request(id: .test(140), url: "https://example.com/failed")
     let succeeding = request(id: .test(141), url: "https://example.com/succeeding")

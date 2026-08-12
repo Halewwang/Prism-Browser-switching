@@ -154,7 +154,7 @@ import Testing
     #expect(bootstrap.snapshot().count == 1)
     #expect(await queue.snapshot().isEmpty)
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForDrainForTesting()
 
     #expect(bootstrap.snapshot().isEmpty)
@@ -207,7 +207,7 @@ import Testing
     #expect(coordinator.processNextCount == 0)
     #expect(intake.workerStartCount == 1)
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForDrainForTesting()
 
     #expect(bootstrap.snapshot().isEmpty)
@@ -222,6 +222,78 @@ import Testing
 
     #expect(coordinator.processNextCount == 1)
     #expect(intake.workerStartCount == 2)
+}
+
+@Test @MainActor func explicitSelectionPersistenceFailureNeverCreatesAnUnretryableBufferRecovery() async {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await store.failNextSave()
+
+    let requestID = await intake.captureForExplicitSelection(
+        url: URL(string: "https://explicit-save-failure.example")!,
+        senderPID: nil
+    )
+
+    #expect(requestID == nil)
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(intake.recoveryState == .none)
+    #expect(!(await intake.retryPendingPersistenceAfterUserAction()))
+}
+
+@Test @MainActor func concurrentPersistenceRetriesShareOneAttemptAndKeepNewCapturesInFIFO() async throws {
+    let store = SuspendedRetryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SpyRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://first-retry.example")!, senderPID: nil)
+    await store.failNextSave()
+    intake.finishRestorationAndStartDraining(routeAfterDraining: true)
+    await intake.waitForPersistenceForTesting()
+    #expect(intake.recoveryState == .persistenceRetryRequired)
+
+    await store.suspendNextSave()
+    let first = Task { @MainActor in
+        await intake.retryPendingPersistenceAfterUserAction()
+    }
+    await store.waitUntilSaveSuspended()
+    let second = Task { @MainActor in
+        await intake.retryPendingPersistenceAfterUserAction()
+    }
+    intake.capture(url: URL(string: "https://second-retry.example")!, senderPID: nil)
+    await Task.yield()
+
+    #expect(await store.saveCount == 2)
+    #expect(bootstrap.snapshot().map(\.url.host) == [
+        "first-retry.example",
+        "second-retry.example",
+    ])
+    await store.releaseSuspendedSave()
+
+    #expect(await first.value)
+    #expect(await second.value)
+    #expect(await store.saveCount == 3)
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "first-retry.example",
+        "second-retry.example",
+    ])
+    #expect(coordinator.processNextCount == 0)
+    #expect(intake.recoveryState == .routingResumeRequired)
 }
 
 @Test @MainActor func suspendedRoutingNeverBlocksANewerCaptureFromDurablePersistence() async throws {
@@ -526,7 +598,7 @@ import Testing
     #expect(launcher.openedURLs.map(\.host) == ["automatic-a.example"])
     #expect(bootstrap.snapshot().map(\.url.host) == ["automatic-c.example"])
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForPersistenceForTesting()
     #expect(launcher.openedURLs.map(\.host) == ["automatic-a.example"])
     #expect(bootstrap.snapshot().isEmpty)
@@ -603,7 +675,7 @@ import Testing
     #expect(bootstrap.snapshot().map(\.url.host) == ["buffered-by-pause.example"])
     #expect(presenter.presentationCount == 1)
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForPersistenceForTesting()
     #expect(launcher.openedURLs.map(\.host) == ["manual-before-pause.example"])
     #expect(bootstrap.snapshot().isEmpty)
@@ -659,7 +731,7 @@ import Testing
     #expect(coordinator.processNextCount == 1)
     #expect(intake.routingWorkerStartCount == 1)
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForPersistenceForTesting()
 
     #expect(bootstrap.snapshot().isEmpty)
@@ -695,7 +767,7 @@ import Testing
     intake.capture(url: URL(string: "https://waiting-for-resume.example")!, senderPID: nil)
     await intake.waitForPersistenceForTesting()
 
-    intake.retryPendingPersistenceAfterUserAction()
+    _ = await intake.retryPendingPersistenceAfterUserAction()
     await intake.waitForPersistenceForTesting()
     await intake.resumeRoutingAfterRecoveryUserAction()
 
@@ -1835,6 +1907,56 @@ private actor ScriptedPendingRequestStore: PendingRequestStore {
 
     func failSave(afterAdditionalSuccessfulSaves count: Int) {
         failingSaveCalls.insert(saveCount + count + 1)
+    }
+}
+
+private actor SuspendedRetryPendingRequestStore: PendingRequestStore {
+    private var snapshot = PendingRequestSnapshot(pendingRequests: [], terminalRecords: [])
+    private var shouldFailNextSave = false
+    private var shouldSuspendNextSave = false
+    private var suspendedSave: CheckedContinuation<Void, Never>?
+    private var suspensionObservers: [CheckedContinuation<Void, Never>] = []
+    private(set) var saveCount = 0
+
+    func load() -> PendingRequestSnapshot { snapshot }
+
+    func save(_ snapshot: PendingRequestSnapshot) async throws {
+        saveCount += 1
+        if shouldFailNextSave {
+            shouldFailNextSave = false
+            throw StubRoutingError.storageFailed
+        }
+        if shouldSuspendNextSave {
+            shouldSuspendNextSave = false
+            let observers = suspensionObservers
+            suspensionObservers.removeAll()
+            observers.forEach { $0.resume() }
+            await withCheckedContinuation { continuation in
+                suspendedSave = continuation
+            }
+        }
+        self.snapshot = snapshot
+    }
+
+    func failNextSave() {
+        shouldFailNextSave = true
+    }
+
+    func suspendNextSave() {
+        shouldSuspendNextSave = true
+    }
+
+    func waitUntilSaveSuspended() async {
+        if suspendedSave != nil { return }
+        await withCheckedContinuation { continuation in
+            suspensionObservers.append(continuation)
+        }
+    }
+
+    func releaseSuspendedSave() {
+        let continuation = suspendedSave
+        suspendedSave = nil
+        continuation?.resume()
     }
 }
 

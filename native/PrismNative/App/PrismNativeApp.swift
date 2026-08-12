@@ -8,13 +8,28 @@ struct PrismNativeApp: App {
         WindowGroup(id: "main", for: MainWindowIdentity.self) { _ in
             MainWindowRoot(mainWindowOpening: appDelegate.composition.mainWindowOpening) {
 #if DEBUG
-                if DebugUITestConfiguration.selectorVariant != nil {
+                switch DebugUITestConfiguration.mode {
+                case .selector:
                     DebugSelectorHarnessBootstrapView(appDelegate: appDelegate)
-                } else if ProcessInfo.processInfo.arguments.contains("--source-probe") {
-                    SourceProbeView(recorder: appDelegate.sourceProbeRecorder)
-                        .environment(appDelegate.environment)
-                } else {
-                    mainRoot
+                case .malformedSelector:
+                    Text("Invalid UI test configuration")
+                        .frame(minWidth: 760, minHeight: 520)
+                        .accessibilityIdentifier("uiTest.configurationError")
+                case .application:
+                    AppRootView(
+                        composition: appDelegate.composition,
+                        systemActions: .inert
+                    )
+                    .onAppear {
+                        appDelegate.finishDebugApplicationFixtureActivation()
+                    }
+                case .disabled:
+                    if ProcessInfo.processInfo.arguments.contains("--source-probe") {
+                        SourceProbeView(recorder: appDelegate.sourceProbeRecorder)
+                            .environment(appDelegate.environment)
+                    } else {
+                        mainRoot
+                    }
                 }
 #else
                 mainRoot
@@ -29,9 +44,7 @@ struct PrismNativeApp: App {
     }
 
     private var mainRoot: some View {
-        Text("Prism")
-            .frame(minWidth: 760, minHeight: 520)
-            .environment(appDelegate.environment)
+        AppRootView(composition: appDelegate.composition)
     }
 }
 

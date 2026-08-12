@@ -264,7 +264,13 @@ import Testing
     ])
     #expect(composition.environment.persistenceWarnings.filter {
         $0 == .recoveryStoreUnavailable
-    }.count == 1)
+    }.isEmpty)
+    #expect(AppRootPresentation(
+        startupPhase: composition.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            composition.environment.hasPendingTerminalHistoryReconciliation,
+        persistenceWarnings: composition.environment.persistenceWarnings
+    ).recovery == nil)
 }
 
 @Test @MainActor func capturesDuringSuspendedRestoreRemainAfterRestoredFIFO() async throws {
@@ -304,7 +310,52 @@ import Testing
     #expect(composition.linkIntakeService.workerStartCount == 1)
 }
 
-@Test @MainActor func persistenceRestorationRetryNeverHandsOffUntilRoutingIsExplicitlyResumed() async throws {
+@Test @MainActor func unfinishedOnboardingPersistsColdAndRunningLinksInFIFOUntilSavedCompletionResumes() async throws {
+    let restored = LinkRequest.fixture(id: UUID(), url: "https://restored-before-onboarding.example")
+    let store = ScriptedRestorationStore(snapshot: .init(
+        pendingRequests: [restored],
+        terminalRecords: []
+    ))
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    buffer.capture(URL(string: "https://cold-during-onboarding.example")!, senderPID: nil)
+    let launcher = CountingBrowserLauncher()
+    let graph = TestLaunchGraph(
+        queue: queue,
+        buffer: buffer,
+        automaticBrowserID: "com.apple.Safari",
+        onboardingCompleted: false,
+        browserCatalog: SingleBrowserCatalog(),
+        browserLauncher: launcher
+    )
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+
+    await composition.finishLaunchingOnce()
+    composition.linkIntakeService.capture(
+        url: URL(string: "https://running-during-onboarding.example")!,
+        senderPID: nil
+    )
+    await composition.linkIntakeService.waitForPersistenceForTesting()
+
+    #expect(launcher.handoffCount == 0)
+    #expect(buffer.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "restored-before-onboarding.example",
+        "cold-during-onboarding.example",
+        "running-during-onboarding.example"
+    ])
+
+    await composition.resumeRoutingAfterOnboardingCompletion()
+    #expect(launcher.handoffCount == 0)
+    #expect(graph.environment.mutateSettings { $0.onboardingCompleted = true })
+
+    await composition.resumeRoutingAfterOnboardingCompletion()
+
+    #expect(launcher.handoffCount == 3)
+    #expect(await queue.next() == nil)
+}
+
+@Test @MainActor func completedOnboardingRestorationRetrySafelyResumesInTheSameUserAction() async throws {
     let old = LinkRequest.fixture(id: UUID(), url: "https://automatic-old.example")
     let store = ScriptedRestorationStore(
         snapshot: .init(pendingRequests: [old], terminalRecords: []),
@@ -328,19 +379,42 @@ import Testing
     #expect(await composition.retryRestorationAfterUserAction())
     await composition.linkIntakeService.waitForDrainForTesting()
 
-    #expect(launcher.handoffCount == 0)
-    #expect(await queue.snapshot().map(\.url.host) == [
-        "automatic-old.example",
-        "automatic-new.example"
-    ])
+    #expect(launcher.handoffCount == 2)
     #expect(composition.linkIntakeService.workerStartCount == 1)
+    #expect(await queue.next() == nil)
+}
 
-    await composition.resumeRoutingAfterRecoveryUserAction()
+@Test @MainActor func unfinishedOnboardingRestorationRetryDoesNotExposeRuntimeResume() async throws {
+    let restored = LinkRequest.fixture(id: UUID(), url: "https://onboarding-restored.example")
+    let store = ScriptedRestorationStore(
+        snapshot: .init(pendingRequests: [restored], terminalRecords: []),
+        failingLoadCalls: [1]
+    )
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    buffer.capture(URL(string: "https://onboarding-new.example")!, senderPID: nil)
+    let launcher = CountingBrowserLauncher()
+    let graph = TestLaunchGraph(
+        queue: queue,
+        buffer: buffer,
+        automaticBrowserID: "com.apple.Safari",
+        onboardingCompleted: false,
+        browserCatalog: SingleBrowserCatalog(),
+        browserLauncher: launcher
+    )
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+
+    await composition.finishLaunchingOnce()
+    #expect(await composition.retryRestorationAfterUserAction())
     await composition.linkIntakeService.waitForDrainForTesting()
 
-    #expect(launcher.handoffCount == 2)
-    #expect(await queue.next() == nil)
-    #expect(composition.linkIntakeService.workerStartCount == 1)
+    #expect(launcher.handoffCount == 0)
+    #expect(composition.environment.startupPhase == .onboarding)
+    #expect(composition.runtimeLinkRecoveryState == .none)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "onboarding-restored.example",
+        "onboarding-new.example",
+    ])
 }
 
 @Test @MainActor func failedNormalStartupEnqueueBuffersNewLinksUntilPersistenceRetryThenRoutingResume() async throws {
@@ -374,9 +448,16 @@ import Testing
     ])
     #expect(await queue.snapshot().isEmpty)
     #expect(composition.linkIntakeService.workerStartCount == 1)
+    #expect(composition.runtimeLinkRecoveryState == .persistenceRetryRequired)
+    #expect(AppRootPresentation(
+        startupPhase: composition.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            composition.environment.hasPendingTerminalHistoryReconciliation,
+        runtimeLinkRecoveryState: composition.runtimeLinkRecoveryState,
+        persistenceWarnings: composition.environment.persistenceWarnings
+    ).recovery?.primaryAction.action == .retryPendingPersistence)
 
-    composition.linkIntakeService.retryPendingPersistenceAfterUserAction()
-    await composition.linkIntakeService.waitForDrainForTesting()
+    #expect(await composition.retryPendingPersistenceAfterUserAction())
 
     #expect(launcher.handoffCount == 0)
     #expect(buffer.snapshot().isEmpty)
@@ -385,12 +466,85 @@ import Testing
         "second-after-failure.example"
     ])
     #expect(composition.linkIntakeService.workerStartCount == 2)
+    #expect(composition.runtimeLinkRecoveryState == .routingResumeRequired)
+    #expect(AppRootPresentation(
+        startupPhase: composition.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            composition.environment.hasPendingTerminalHistoryReconciliation,
+        runtimeLinkRecoveryState: composition.runtimeLinkRecoveryState,
+        persistenceWarnings: composition.environment.persistenceWarnings
+    ).recovery?.primaryAction.action == .resumeRouting)
 
-    await composition.resumeRoutingAfterRecoveryUserAction()
+    #expect(await composition.resumeRoutingAfterRecoveryUserAction())
 
     #expect(launcher.handoffCount == 2)
     #expect(await queue.next() == nil)
     #expect(composition.linkIntakeService.workerStartCount == 2)
+    #expect(composition.runtimeLinkRecoveryState == .none)
+}
+
+@Test @MainActor func runtimePersistenceRetryDoesNotClearAnIndependentStorageWarning() async throws {
+    let store = ScriptedRestorationStore(failingSaveCalls: [1])
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    buffer.capture(URL(string: "https://retry-with-warning.example")!, senderPID: nil)
+    let graph = TestLaunchGraph(queue: queue, buffer: buffer)
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+
+    await composition.finishLaunchingOnce()
+    await composition.linkIntakeService.waitForDrainForTesting()
+    graph.environment.present(.recoveryStoreUnavailable)
+
+    #expect(await composition.retryPendingPersistenceAfterUserAction())
+
+    #expect(composition.runtimeLinkRecoveryState == .routingResumeRequired)
+    #expect(composition.environment.persistenceWarnings.contains(.recoveryStoreUnavailable))
+}
+
+@Test @MainActor func preexistingStorageWarningNeverMasksObservableRuntimeLinkRecovery() async throws {
+    let store = ScriptedRestorationStore(failingSaveCalls: [1])
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    let graph = TestLaunchGraph(queue: queue, buffer: buffer)
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+    await composition.finishLaunchingOnce()
+    graph.environment.present(.recoveryStoreUnavailable)
+
+    composition.linkIntakeService.capture(
+        url: URL(string: "https://observable-recovery.example")!,
+        senderPID: nil
+    )
+    await composition.linkIntakeService.waitForPersistenceForTesting()
+
+    #expect(graph.environment.runtimeLinkRecoveryState == .persistenceRetryRequired)
+    #expect(composition.runtimeLinkRecoveryState == .persistenceRetryRequired)
+    #expect(AppRootPresentation(
+        startupPhase: graph.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            graph.environment.hasPendingTerminalHistoryReconciliation,
+        runtimeLinkRecoveryState: graph.environment.runtimeLinkRecoveryState,
+        persistenceWarnings: graph.environment.persistenceWarnings
+    ).recovery?.primaryAction.action == .retryPendingPersistence)
+
+    #expect(await composition.retryPendingPersistenceAfterUserAction())
+    #expect(graph.environment.runtimeLinkRecoveryState == .routingResumeRequired)
+    #expect(AppRootPresentation(
+        startupPhase: graph.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            graph.environment.hasPendingTerminalHistoryReconciliation,
+        runtimeLinkRecoveryState: graph.environment.runtimeLinkRecoveryState,
+        persistenceWarnings: graph.environment.persistenceWarnings
+    ).recovery?.primaryAction.action == .resumeRouting)
+
+    #expect(await composition.resumeRoutingAfterRecoveryUserAction())
+    #expect(graph.environment.runtimeLinkRecoveryState == .none)
+    #expect(AppRootPresentation(
+        startupPhase: graph.environment.startupPhase,
+        hasPendingTerminalHistoryReconciliation:
+            graph.environment.hasPendingTerminalHistoryReconciliation,
+        runtimeLinkRecoveryState: graph.environment.runtimeLinkRecoveryState,
+        persistenceWarnings: graph.environment.persistenceWarnings
+    ).recovery?.primaryAction.action == .restart)
 }
 
 @Test @MainActor func productionCompositionRestoresOnlyOnce() async {
@@ -425,6 +579,44 @@ import Testing
     #expect(composition.selectorPresentationRelay.target === composition.windowCoordinator)
 }
 
+@Test @MainActor func compositionOnboardingRouterSharesItsRealIntakeSelectorAndOutcomeGraph() async throws {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let buffer = BootstrapLinkBuffer()
+    let launcher = CountingBrowserLauncher()
+    let graph = TestLaunchGraph(
+        queue: queue,
+        buffer: buffer,
+        onboardingCompleted: false,
+        browserCatalog: SingleBrowserCatalog(),
+        browserLauncher: launcher
+    )
+    let injectedOutcomes = LinkRoutingOutcomeCenter()
+    let composition = makeComposition(
+        graph: graph,
+        queue: queue,
+        buffer: buffer,
+        routingOutcomeCenter: injectedOutcomes
+    )
+    await composition.finishLaunchingOnce()
+    var outcomes: [LinkRoutingOutcome] = []
+
+    let session = await composition.onboardingTestLinkRouter.start(
+        url: URL(string: "https://example.com/composition-onboarding-test")!,
+        onPrepared: { _ in true }
+    ) { outcome in
+        outcomes.append(outcome)
+        return true
+    }
+    let requestID = try #require(session?.requestID)
+    #expect(composition.routingOutcomeCenter === injectedOutcomes)
+    #expect(graph.presenter.activeRequest?.id == requestID)
+
+    await graph.coordinator.select(browserID: "com.apple.Safari", for: requestID)
+
+    #expect(launcher.handoffCount == 1)
+    #expect(outcomes == [LinkRoutingOutcome(requestID: requestID, kind: .handoffAccepted)])
+}
+
 @Test @MainActor func appDelegateSynchronouslyBuffersOnlyWebURLsAndCopiedSenderPID() async throws {
     let buffer = BootstrapLinkBuffer()
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -449,6 +641,73 @@ import Testing
     #expect(buffer.snapshot().map(\.senderPID) == [321, 321])
     #expect(buffer.snapshot().map(\.sequence) == [0, 1])
     #expect(await composition.recoveryQueue.snapshot().isEmpty)
+}
+
+@Test @MainActor func appDelegateReopenUsesTheSingletonAdapterAndPreservesTheCurrentRoute() async throws {
+    let buffer = BootstrapLinkBuffer()
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let composition = ProductionAppComposition.makeForTesting(
+        bootstrapBuffer: buffer,
+        modelContainerFactory: { try ModelContainerFactory.make(inMemory: true) },
+        recoveryStoreFactory: { AtomicPendingRequestStore(directory: directory) }
+    )
+    composition.environment.updateRoute(.settings)
+    var openings: [(String, MainWindowIdentity)] = []
+    composition.mainWindowOpening.register { id, value in
+        openings.append((id, value))
+    }
+    let delegate = AppDelegate(
+        composition: composition,
+        copyCurrentSenderPID: { nil }
+    )
+
+    let handledVisible = delegate.applicationShouldHandleReopen(
+        NSApplication.shared,
+        hasVisibleWindows: true
+    )
+    let handledClosed = delegate.applicationShouldHandleReopen(
+        NSApplication.shared,
+        hasVisibleWindows: false
+    )
+
+    #expect(handledVisible)
+    #expect(handledClosed)
+    #expect(composition.environment.route == .settings)
+    #expect(openings.count == 2)
+    #expect(openings.allSatisfy { $0.0 == "main" && $0.1 == .singleton })
+}
+
+@Test @MainActor func appDelegateOwnsOneStatusItemControllerAcrossRepeatedLaunchCallbacks() async throws {
+    let buffer = BootstrapLinkBuffer()
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let composition = ProductionAppComposition.makeForTesting(
+        bootstrapBuffer: buffer,
+        modelContainerFactory: { try ModelContainerFactory.make(inMemory: true) },
+        recoveryStoreFactory: { AtomicPendingRequestStore(directory: directory) }
+    )
+    let statusItems = AppDelegateStatusItemFactorySpy()
+    let delegate = AppDelegate(
+        composition: composition,
+        copyCurrentSenderPID: { nil },
+        makeStatusItemController: { composition in
+            statusItems.make(composition: composition)
+        }
+    )
+
+    delegate.applicationDidFinishLaunching(
+        Notification(name: NSApplication.didFinishLaunchingNotification)
+    )
+    delegate.applicationDidFinishLaunching(
+        Notification(name: NSApplication.didFinishLaunchingNotification)
+    )
+    for _ in 0..<100 where composition.finishLaunchCount == 0 {
+        await Task.yield()
+    }
+
+    #expect(statusItems.makeCount == 1)
+    #expect(statusItems.weakController != nil)
+    #expect(delegate.retainedStatusItemController === statusItems.weakController)
+    #expect(composition.finishLaunchCount == 1)
 }
 
 @Test @MainActor func compositionFinishesRestoreBeforeBufferedLinksAndStartsOnce() async throws {
@@ -562,6 +821,31 @@ import Testing
 
 private enum TestCompositionFailure: Error {
     case unavailable
+}
+
+@MainActor
+private final class AppDelegateStatusItemFactorySpy {
+    private(set) var makeCount = 0
+    private(set) weak var weakController: StatusItemController?
+
+    func make(composition: ProductionAppComposition) -> StatusItemController {
+        makeCount += 1
+        let controller = StatusItemController(
+            host: AppDelegateStatusItemHostSpy(),
+            mainWindowOpening: composition.mainWindowOpening,
+            environment: composition.environment,
+            updateChecker: composition.environment.updateChecker,
+            terminate: {}
+        )
+        weakController = controller
+        return controller
+    }
+}
+
+@MainActor
+private final class AppDelegateStatusItemHostSpy: StatusItemHosting {
+    func install(menu _: NSMenu) {}
+    func setVisible(_: Bool) {}
 }
 
 private actor CountingLoadStore: PendingRequestStore {
@@ -695,6 +979,7 @@ private struct TestLaunchGraph {
         queue: LinkRequestQueue,
         buffer: BootstrapLinkBuffer,
         automaticBrowserID: BrowserID? = nil,
+        onboardingCompleted: Bool = true,
         browserCatalog: (any BrowserCataloging)? = nil,
         browserLauncher: (any BrowserLaunching)? = nil
     ) {
@@ -702,6 +987,7 @@ private struct TestLaunchGraph {
         let history = InMemoryHistoryRepository()
         let browserPreferences = InMemoryBrowserPreferenceRepository()
         var appSettings = AppSettings.defaults
+        appSettings.onboardingCompleted = onboardingCompleted
         if let automaticBrowserID {
             appSettings.unmatchedBehavior = .preferredBrowser
             appSettings.preferredBrowserID = automaticBrowserID
@@ -750,7 +1036,8 @@ private struct TestLaunchGraph {
 private func makeComposition(
     graph: TestLaunchGraph,
     queue: LinkRequestQueue,
-    buffer: BootstrapLinkBuffer
+    buffer: BootstrapLinkBuffer,
+    routingOutcomeCenter: LinkRoutingOutcomeCenter? = nil
 ) -> ProductionAppComposition {
     ProductionAppComposition(
         environment: graph.environment,
@@ -764,7 +1051,8 @@ private func makeComposition(
             applicationURL: URL(fileURLWithPath: "/Applications/Prism.app"),
             bundleIdentifier: "com.prism.app"
         ),
-        loginItemService: LoginItemService(client: NoopLoginItemClient())
+        loginItemService: LoginItemService(client: NoopLoginItemClient()),
+        routingOutcomeCenter: routingOutcomeCenter
     )
 }
 

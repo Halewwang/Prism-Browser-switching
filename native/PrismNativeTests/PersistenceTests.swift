@@ -404,6 +404,243 @@ import Testing
     #expect(environment.persistenceWarnings.contains(.recoveryStoreUnavailable))
 }
 
+@Test @MainActor func pendingTerminalHistoryRetrySucceedsWithoutClearingExistingWarnings() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/retry")
+    let store = InMemoryPendingRequestStore(snapshot: terminalSnapshot(request: request, entry: entry))
+    let queue = LinkRequestQueue(store: store)
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let environment = makeEnvironment(historyRepository: history)
+    environment.present(.settingsNotSaved)
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().map(\.requestID) == [request.id])
+
+    history.failingRequestIDs = []
+    #expect(await environment.retryPendingTerminalHistory(queue: queue))
+
+    #expect(!environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(history.persistedEntries.map(\.requestID) == [request.id])
+    #expect(environment.persistenceWarnings.contains(.historyNotSaved))
+    #expect(environment.persistenceWarnings.contains(.settingsNotSaved))
+}
+
+@Test @MainActor func pendingTerminalHistoryRetryKeepsStateWhenHistoryContinuesFailing() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/still-failing")
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore(
+        snapshot: terminalSnapshot(request: request, entry: entry)
+    ))
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let settings = MutableSettingsRepository()
+    let environment = makeEnvironment(
+        historyRepository: history,
+        settingsRepository: settings
+    )
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    #expect(!(await environment.retryPendingTerminalHistory(queue: queue)))
+
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().map(\.requestID) == [request.id])
+    #expect(history.upsertAttempts == [request.id, request.id])
+    #expect(settings.loadCount == 2)
+}
+
+@Test @MainActor func pendingTerminalHistoryRetryRepeatsIdempotentUpsertAfterCompactionFailure() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/compact-retry")
+    let store = ScriptedPendingRequestStore(
+        snapshot: terminalSnapshot(request: request, entry: entry),
+        failingSaveCalls: [1]
+    )
+    let queue = LinkRequestQueue(store: store)
+    let history = ScriptedHistoryRepository()
+    let environment = makeEnvironment(historyRepository: history)
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().map(\.requestID) == [request.id])
+    #expect(history.upsertAttempts == [request.id])
+
+    #expect(await environment.retryPendingTerminalHistory(queue: queue))
+
+    #expect(!environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(history.upsertAttempts == [request.id, request.id])
+    #expect(history.persistedEntries.map(\.requestID) == [request.id])
+    #expect(environment.persistenceWarnings.contains(.recoveryStoreUnavailable))
+}
+
+@Test @MainActor func reconciliationCompactsSuccessfulTerminalsAndRetainsOnlyFailedTerminals() async throws {
+    let first = LinkRequest.fixture(id: fixedUUID(921))
+    let second = LinkRequest.fixture(id: fixedUUID(922))
+    let firstEntry = historyEntry(requestID: first.id, url: "https://example.com/first")
+    let secondEntry = historyEntry(requestID: second.id, url: "https://example.com/second")
+    let snapshot = PendingRequestSnapshot(
+        pendingRequests: [],
+        terminalRecords: [
+            terminalRecord(request: first, entry: firstEntry),
+            terminalRecord(request: second, entry: secondEntry)
+        ]
+    )
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore(snapshot: snapshot))
+    let history = ScriptedHistoryRepository(failingRequestIDs: [second.id])
+    let environment = makeEnvironment(historyRepository: history)
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().map(\.requestID) == [second.id])
+    #expect(history.persistedEntries.map(\.requestID) == [first.id])
+    #expect(history.upsertAttempts == [first.id, second.id])
+}
+
+@Test @MainActor func retryReloadsHistoryDisabledSettingAndScrubsBeforeCompacting() async throws {
+    let request = LinkRequest.fixture()
+    let pending = LinkRequest.fixture(id: fixedUUID(931), url: "https://example.com/pending")
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/disable-history")
+    let snapshot = PendingRequestSnapshot(
+        pendingRequests: [pending],
+        terminalRecords: [terminalRecord(request: request, entry: entry)]
+    )
+    let store = ScriptedPendingRequestStore(snapshot: snapshot)
+    let queue = LinkRequestQueue(store: store)
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let settings = MutableSettingsRepository()
+    let environment = makeEnvironment(
+        historyRepository: history,
+        settingsRepository: settings
+    )
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    settings.update { $0.historyEnabled = false }
+
+    #expect(await environment.retryPendingTerminalHistory(queue: queue))
+
+    #expect(!environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(await queue.snapshot() == [pending])
+    #expect(history.upsertAttempts == [request.id])
+    let saves = await store.savedSnapshots
+    #expect(saves.count == 2)
+    #expect(saves[0].terminalRecords.first?.historyEntry == nil)
+    #expect(saves[1].terminalRecords.isEmpty)
+}
+
+@Test @MainActor func retrySettingsLoadFailureDoesNotWriteHistoryOrCompactTerminal() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/settings-failure")
+    let store = ScriptedPendingRequestStore(snapshot: terminalSnapshot(request: request, entry: entry))
+    let queue = LinkRequestQueue(store: store)
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let settings = MutableSettingsRepository()
+    let environment = makeEnvironment(
+        historyRepository: history,
+        settingsRepository: settings
+    )
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    settings.shouldFailLoad = true
+    let attemptsBeforeRetry = history.upsertAttempts
+
+    #expect(!(await environment.retryPendingTerminalHistory(queue: queue)))
+
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    #expect(await queue.terminalSnapshot().map(\.requestID) == [request.id])
+    #expect(history.upsertAttempts == attemptsBeforeRetry)
+    #expect(await store.saveCount == 0)
+    #expect(settings.loadCount == 2)
+    #expect(environment.persistenceWarnings.contains(.settingsNotSaved))
+}
+
+@Test @MainActor func concurrentPendingTerminalHistoryRetriesShareOneOperation() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/single-flight")
+    let store = ScriptedPendingRequestStore(
+        snapshot: terminalSnapshot(request: request, entry: entry),
+        suspendedSaveCalls: [1]
+    )
+    let queue = LinkRequestQueue(store: store)
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let settings = MutableSettingsRepository()
+    let environment = makeEnvironment(
+        historyRepository: history,
+        settingsRepository: settings
+    )
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    history.failingRequestIDs = []
+
+    let first = Task { @MainActor in
+        await environment.retryPendingTerminalHistory(queue: queue)
+    }
+    await store.waitUntilSaveSuspended(call: 1)
+    let second = Task { @MainActor in
+        await environment.retryPendingTerminalHistory(queue: queue)
+    }
+    await Task.yield()
+
+    #expect(settings.loadCount == 2)
+    #expect(history.upsertAttempts == [request.id, request.id])
+
+    await store.releaseSuspendedSave(call: 1)
+    #expect(await first.value)
+    #expect(await second.value)
+    #expect(settings.loadCount == 2)
+    #expect(history.upsertAttempts == [request.id, request.id])
+    #expect(!environment.hasPendingTerminalHistoryReconciliation)
+}
+
+@Test @MainActor func retryLeavesOrdinaryPendingRequestsUnchanged() async throws {
+    let terminalRequest = LinkRequest.fixture(id: fixedUUID(941))
+    let pending = LinkRequest.fixture(
+        id: fixedUUID(942),
+        url: "https://example.com/ordinary-pending",
+        state: .presenting
+    )
+    let entry = historyEntry(requestID: terminalRequest.id, url: "https://example.com/terminal")
+    let snapshot = PendingRequestSnapshot(
+        pendingRequests: [pending],
+        terminalRecords: [terminalRecord(request: terminalRequest, entry: entry)]
+    )
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore(snapshot: snapshot))
+    let history = ScriptedHistoryRepository(failingRequestIDs: [terminalRequest.id])
+    let environment = makeEnvironment(historyRepository: history)
+
+    #expect(await environment.restoreAndReconcile(queue: queue, warningSource: nil))
+    history.failingRequestIDs = []
+    #expect(await environment.retryPendingTerminalHistory(queue: queue))
+
+    #expect(await queue.snapshot() == [pending])
+    #expect(await queue.terminalSnapshot().isEmpty)
+}
+
+@Test @MainActor func productionCompositionRetriesPendingTerminalHistoryOnItsSharedQueue() async throws {
+    let request = LinkRequest.fixture()
+    let entry = historyEntry(requestID: request.id, url: "https://example.com/composition-retry")
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore(
+        snapshot: terminalSnapshot(request: request, entry: entry)
+    ))
+    let history = ScriptedHistoryRepository(failingRequestIDs: [request.id])
+    let environment = makeEnvironment(historyRepository: history)
+    let composition = ProductionAppComposition(
+        environment: environment,
+        recoveryQueue: queue,
+        warningSource: nil
+    )
+
+    #expect(await composition.restoreOnce())
+    #expect(environment.hasPendingTerminalHistoryReconciliation)
+    history.failingRequestIDs = []
+
+    #expect(await composition.retryPendingTerminalHistory())
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(!environment.hasPendingTerminalHistoryReconciliation)
+}
+
 private func historyEntry(
     id: UUID = UUID(),
     requestID: UUID = UUID(),
@@ -425,6 +662,28 @@ private func historyEntry(
         attemptCount: 1,
         createdAt: createdAt,
         completedAt: createdAt
+    )
+}
+
+private func terminalRecord(
+    request: LinkRequest,
+    entry: HistoryEntry?
+) -> TerminalRequestRecord {
+    TerminalRequestRecord(
+        requestID: request.id,
+        outcome: .succeeded,
+        historyEntry: entry,
+        completedAt: Date(timeIntervalSince1970: 100)
+    )
+}
+
+private func terminalSnapshot(
+    request: LinkRequest,
+    entry: HistoryEntry?
+) -> PendingRequestSnapshot {
+    PendingRequestSnapshot(
+        pendingRequests: [],
+        terminalRecords: [terminalRecord(request: request, entry: entry)]
     )
 }
 
@@ -525,6 +784,51 @@ private final class FailingHistoryRepository: HistoryRepository {
     func enforceRetention(limit _: Int, cutoff _: Date) throws {}
 }
 
+@MainActor
+private final class ScriptedHistoryRepository: HistoryRepository {
+    private enum Failure: Error { case unavailable }
+
+    var failingRequestIDs: Set<UUID>
+    private(set) var upsertAttempts: [UUID] = []
+    private(set) var persistedEntries: [HistoryEntry] = []
+
+    init(failingRequestIDs: Set<UUID> = []) {
+        self.failingRequestIDs = failingRequestIDs
+    }
+
+    func upsert(_ entry: HistoryEntry) throws {
+        upsertAttempts.append(entry.requestID)
+        guard !failingRequestIDs.contains(entry.requestID) else {
+            throw Failure.unavailable
+        }
+        if let index = persistedEntries.firstIndex(where: { $0.id == entry.id }) {
+            persistedEntries[index] = entry
+        } else {
+            persistedEntries.append(entry)
+        }
+    }
+
+    func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
+        Array(persistedEntries.filter { $0.createdAt >= newerThan }.prefix(max(limit, 0)))
+    }
+
+    func delete(id: UUID) throws {
+        persistedEntries.removeAll { $0.id == id }
+    }
+
+    func clear() throws {
+        persistedEntries.removeAll()
+    }
+
+    func enforceRetention(limit: Int, cutoff: Date) throws {
+        persistedEntries = Array(
+            persistedEntries
+                .filter { $0.createdAt >= cutoff }
+                .prefix(max(limit, 0))
+        )
+    }
+}
+
 private enum TestPersistenceFailure: Error {
     case unavailable
 }
@@ -554,6 +858,61 @@ private actor ControlledPendingRequestStore: PendingRequestStore {
 
     func failFutureSaves() {
         failSaves = true
+    }
+}
+
+private actor ScriptedPendingRequestStore: PendingRequestStore {
+    private var snapshot: PendingRequestSnapshot
+    private var failingSaveCalls: Set<Int>
+    private var suspendedSaveCalls: Set<Int>
+    private var activeSuspendedSaveCalls: Set<Int> = []
+    private var suspendedSaveContinuations: [Int: CheckedContinuation<Void, Never>] = [:]
+    private var suspendedSaveObservers: [Int: [CheckedContinuation<Void, Never>]] = [:]
+    private(set) var saveCount = 0
+    private(set) var savedSnapshots: [PendingRequestSnapshot] = []
+
+    init(
+        snapshot: PendingRequestSnapshot,
+        failingSaveCalls: Set<Int> = [],
+        suspendedSaveCalls: Set<Int> = []
+    ) {
+        self.snapshot = snapshot
+        self.failingSaveCalls = failingSaveCalls
+        self.suspendedSaveCalls = suspendedSaveCalls
+    }
+
+    func load() async throws -> PendingRequestSnapshot {
+        snapshot
+    }
+
+    func save(_ snapshot: PendingRequestSnapshot) async throws {
+        saveCount += 1
+        let call = saveCount
+        if suspendedSaveCalls.remove(call) != nil {
+            activeSuspendedSaveCalls.insert(call)
+            let observers = suspendedSaveObservers.removeValue(forKey: call) ?? []
+            observers.forEach { $0.resume() }
+            await withCheckedContinuation { continuation in
+                suspendedSaveContinuations[call] = continuation
+            }
+            activeSuspendedSaveCalls.remove(call)
+        }
+        guard failingSaveCalls.remove(call) == nil else {
+            throw TestPersistenceFailure.unavailable
+        }
+        savedSnapshots.append(snapshot)
+        self.snapshot = snapshot
+    }
+
+    func waitUntilSaveSuspended(call: Int) async {
+        if activeSuspendedSaveCalls.contains(call) { return }
+        await withCheckedContinuation { continuation in
+            suspendedSaveObservers[call, default: []].append(continuation)
+        }
+    }
+
+    func releaseSuspendedSave(call: Int) {
+        suspendedSaveContinuations.removeValue(forKey: call)?.resume()
     }
 }
 
@@ -600,6 +959,33 @@ private final class CountingSettingsRepository: SettingsRepository {
     }
 
     func save(_: AppSettings) throws {}
+}
+
+@MainActor
+private final class MutableSettingsRepository: SettingsRepository {
+    private(set) var settings: AppSettings
+    var shouldFailLoad = false
+    private(set) var loadCount = 0
+
+    init(settings: AppSettings = .defaults) {
+        self.settings = settings
+    }
+
+    func load() throws -> AppSettings {
+        loadCount += 1
+        guard !shouldFailLoad else {
+            throw TestPersistenceFailure.unavailable
+        }
+        return settings
+    }
+
+    func save(_ settings: AppSettings) throws {
+        self.settings = settings
+    }
+
+    func update(_ transform: (inout AppSettings) -> Void) {
+        transform(&settings)
+    }
 }
 
 @MainActor

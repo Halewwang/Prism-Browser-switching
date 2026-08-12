@@ -38,19 +38,25 @@ final class BootstrapLinkBuffer {
 
     @discardableResult
     func capture(_ url: URL, senderPID: Int32?) -> Bool {
-        guard Self.accepts(url) else { return false }
-        let increment = nextSequence.addingReportingOverflow(1)
-        guard !increment.overflow else { return false }
+        captureRequest(url, senderPID: senderPID) != nil
+    }
 
+    @discardableResult
+    func captureRequest(_ url: URL, senderPID: Int32?) -> UUID? {
+        guard Self.accepts(url) else { return nil }
+        let increment = nextSequence.addingReportingOverflow(1)
+        guard !increment.overflow else { return nil }
+
+        let id = makeID()
         captures.append(BufferedLinkCapture(
-            id: makeID(),
+            id: id,
             sequence: nextSequence,
             url: url,
             senderPID: senderPID,
             receivedAt: now()
         ))
         nextSequence = increment.partialValue
-        return true
+        return id
     }
 
     func snapshot() -> [BufferedLinkCapture] {
@@ -76,6 +82,17 @@ final class BootstrapLinkBuffer {
 
 @MainActor
 final class LinkIntakeService: LinkRoutingContinuationRequesting {
+    enum RecoveryState: Equatable, Sendable {
+        case none
+        case persistenceRetryRequired
+        case routingResumeRequired
+    }
+
+    private struct PersistenceRetryFlight {
+        let id: UUID
+        let task: Task<Bool, Never>
+    }
+
     private let queue: LinkRequestQueue
     private let bootstrap: BootstrapLinkBuffer
     private let sourceAttributor: any SourceAttributing
@@ -86,12 +103,24 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     private var restorationFinished = false
     private var routingEnabled = false
     private var persistencePaused = false
+    private var runtimeRoutingResumeRequired = false
     private var drainTask: Task<Void, Never>?
     private var routingTask: Task<Void, Never>?
     private var routingKickPending = false
     private var routingKickGeneration: UInt64 = 0
+    private var persistenceRetryFlight: PersistenceRetryFlight?
     private(set) var workerStartCount = 0
     private(set) var routingWorkerStartCount = 0
+
+    var recoveryState: RecoveryState {
+        if persistencePaused || persistenceRetryFlight != nil {
+            return .persistenceRetryRequired
+        }
+        if runtimeRoutingResumeRequired {
+            return .routingResumeRequired
+        }
+        return .none
+    }
 
     init(
         queue: LinkRequestQueue,
@@ -113,21 +142,59 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
 
     @discardableResult
     func capture(url: URL, senderPID: Int32?) -> Bool {
-        let accepted = bootstrap.capture(url, senderPID: senderPID)
-        if accepted, restorationFinished, !persistencePaused {
+        captureRequest(url: url, senderPID: senderPID) != nil
+    }
+
+    @discardableResult
+    func captureRequest(url: URL, senderPID: Int32?) -> UUID? {
+        let requestID = bootstrap.captureRequest(url, senderPID: senderPID)
+        if requestID != nil, restorationFinished, !persistencePaused {
             startDrainWorkerIfNeeded(routeAfterDraining: routingEnabled)
         }
-        return accepted
+        return requestID
+    }
+
+    func captureForExplicitSelection(url: URL, senderPID: Int32?) async -> UUID? {
+        guard restorationFinished, !routingEnabled, !persistencePaused,
+              BootstrapLinkBuffer.accepts(url)
+        else {
+            return nil
+        }
+        while let drainTask {
+            await drainTask.value
+        }
+        guard !persistencePaused, bootstrap.first() == nil else {
+            return nil
+        }
+
+        let request = LinkRequest(
+            id: UUID(),
+            url: url,
+            receivedAt: Date(),
+            source: sourceAttributor.resolve(
+                senderPID: senderPID,
+                lastActivated: lastActivatedSource()
+            )
+        )
+        do {
+            return try await queue.enqueueIfNoPending(request) ? request.id : nil
+        } catch {
+            warningPresenter?.present(.recoveryStoreUnavailable)
+            return nil
+        }
     }
 
     func finishRestorationAndStartDraining(routeAfterDraining: Bool = true) {
         guard !restorationFinished else { return }
         restorationFinished = true
         routingEnabled = routeAfterDraining
+        runtimeRoutingResumeRequired = false
+        reportRecoveryState()
         startDrainWorkerIfNeeded(routeAfterDraining: routeAfterDraining)
     }
 
-    func resumeRoutingAfterRecoveryUserAction() async {
+    @discardableResult
+    func resumeRoutingAfterRecoveryUserAction() async -> Bool {
         guard restorationFinished,
               !routingEnabled,
               !persistencePaused,
@@ -135,20 +202,48 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
               routingTask == nil,
               bootstrap.first() == nil
         else {
-            return
+            return false
         }
         routingEnabled = true
+        runtimeRoutingResumeRequired = false
+        reportRecoveryState()
         requestRoutingIfEnabled()
         while let routingTask {
             await routingTask.value
         }
+        return true
     }
 
-    func retryPendingPersistenceAfterUserAction() {
-        guard restorationFinished, bootstrap.first() != nil else { return }
-        persistencePaused = false
-        routingEnabled = false
-        startDrainWorkerIfNeeded(routeAfterDraining: false)
+    @discardableResult
+    func retryPendingPersistenceAfterUserAction() async -> Bool {
+        if let persistenceRetryFlight {
+            return await persistenceRetryFlight.task.value
+        }
+        guard restorationFinished, persistencePaused, bootstrap.first() != nil else {
+            return false
+        }
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            self.persistencePaused = false
+            self.routingEnabled = false
+            self.reportRecoveryState()
+            self.startDrainWorkerIfNeeded(routeAfterDraining: false)
+            await self.waitForPersistenceForTesting()
+            let succeeded = !self.persistencePaused && self.bootstrap.first() == nil
+            if succeeded {
+                self.runtimeRoutingResumeRequired = true
+            }
+            return succeeded
+        }
+        persistenceRetryFlight = PersistenceRetryFlight(id: id, task: task)
+        reportRecoveryState()
+        let succeeded = await task.value
+        if persistenceRetryFlight?.id == id {
+            persistenceRetryFlight = nil
+        }
+        reportRecoveryState()
+        return succeeded
     }
 
     func requestRoutingContinuation() {
@@ -192,8 +287,9 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
                 failed = true
                 routingEnabled = false
                 persistencePaused = true
+                runtimeRoutingResumeRequired = false
                 routingKickPending = false
-                warningPresenter?.present(.recoveryStoreUnavailable)
+                reportRecoveryState()
             }
             drainTask = nil
             if !failed, restorationFinished, bootstrap.first() != nil {
@@ -283,6 +379,14 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
                 senderPIDPresent: capture.senderPID != nil,
                 confidence: source.confidence
             ))
+        }
+    }
+
+    private func reportRecoveryState() {
+        if let presenter = warningPresenter as? any RuntimeLinkPersistenceWarningPresenting {
+            presenter.updateRuntimeLinkRecoveryState(RuntimeLinkRecoveryState(recoveryState))
+        } else if recoveryState == .persistenceRetryRequired {
+            warningPresenter?.present(.recoveryStoreUnavailable)
         }
     }
 }

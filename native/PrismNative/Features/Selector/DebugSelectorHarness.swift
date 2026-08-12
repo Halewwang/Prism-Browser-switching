@@ -3,6 +3,38 @@ import AppKit
 import PrismCore
 import SwiftUI
 
+enum DebugUITestMode: Equatable {
+    case disabled
+    case application
+    case selector(
+        variant: DebugUITestConfiguration.SelectorVariant,
+        appearance: DebugUITestConfiguration.SelectorAppearance,
+        captureURL: URL?
+    )
+    case malformedSelector
+
+    var isUITesting: Bool {
+        self != .disabled
+    }
+
+    var blocksNormalLaunch: Bool {
+        switch self {
+        case .selector, .malformedSelector:
+            true
+        case .disabled, .application:
+            false
+        }
+    }
+
+    var mayInstallSystemStatusItem: Bool {
+        self == .disabled
+    }
+
+    var mayUseSystemServices: Bool {
+        self == .disabled
+    }
+}
+
 enum DebugUITestConfiguration {
     enum SelectorVariant: String {
         case three
@@ -46,35 +78,68 @@ enum DebugUITestConfiguration {
         }
     }
 
+    static var mode: DebugUITestMode {
+        parse(arguments: ProcessInfo.processInfo.arguments)
+    }
+
     static var isEnabled: Bool {
-        ProcessInfo.processInfo.arguments.contains("--ui-testing")
+        mode.isUITesting
     }
 
     static var selectorVariant: SelectorVariant? {
-        guard isEnabled else { return nil }
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flagIndex = arguments.firstIndex(of: "--selector-harness"),
-              arguments.indices.contains(flagIndex + 1)
-        else { return nil }
-        return SelectorVariant(rawValue: arguments[flagIndex + 1])
+        guard case let .selector(variant, _, _) = mode else { return nil }
+        return variant
     }
 
     static var selectorAppearance: SelectorAppearance? {
-        guard isEnabled, selectorVariant != nil else { return nil }
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flagIndex = arguments.firstIndex(of: "--selector-appearance"),
-              arguments.indices.contains(flagIndex + 1)
-        else { return nil }
-        return SelectorAppearance(rawValue: arguments[flagIndex + 1])
+        guard case let .selector(_, appearance, _) = mode else { return nil }
+        return appearance
     }
 
     static var selectorCaptureURL: URL? {
-        guard isEnabled, selectorVariant != nil else { return nil }
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flagIndex = arguments.firstIndex(of: "--selector-capture-path"),
+        guard case let .selector(_, _, captureURL) = mode else { return nil }
+        return captureURL
+    }
+
+    static func parse(arguments: [String]) -> DebugUITestMode {
+        guard arguments.contains("--ui-testing") else { return .disabled }
+        guard arguments.contains("--selector-harness") else { return .application }
+
+        guard let variantValue = value(after: "--selector-harness", in: arguments),
+              let variant = SelectorVariant(rawValue: variantValue),
+              let appearanceValue = value(after: "--selector-appearance", in: arguments),
+              let appearance = SelectorAppearance(rawValue: appearanceValue)
+        else {
+            return .malformedSelector
+        }
+
+        var captureURL: URL?
+        if arguments.contains("--selector-capture-path") {
+            guard let capturePath = value(after: "--selector-capture-path", in: arguments),
+                  let validatedCaptureURL = validatedCaptureURL(path: capturePath)
+            else {
+                return .malformedSelector
+            }
+            captureURL = validatedCaptureURL
+        }
+
+        return .selector(
+            variant: variant,
+            appearance: appearance,
+            captureURL: captureURL
+        )
+    }
+
+    private static func value(after flag: String, in arguments: [String]) -> String? {
+        guard let flagIndex = arguments.firstIndex(of: flag),
               arguments.indices.contains(flagIndex + 1)
         else { return nil }
-        let url = URL(fileURLWithPath: arguments[flagIndex + 1]).standardizedFileURL
+        let value = arguments[flagIndex + 1]
+        return value.hasPrefix("--") ? nil : value
+    }
+
+    private static func validatedCaptureURL(path: String) -> URL? {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
         let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory()).standardizedFileURL
         let isAppTemporaryFile = url.path.hasPrefix(temporaryDirectory.path + "/")
         let isSharedTestCapture = url.path.hasPrefix("/tmp/prism-selector-")
@@ -85,9 +150,17 @@ enum DebugUITestConfiguration {
 
 actor DebugUITestPendingRequestStore: PendingRequestStore, PersistenceWarningSource {
     private var snapshot = PendingRequestSnapshot(pendingRequests: [], terminalRecords: [])
+    private let failsLoad: Bool
+
+    init(failsLoad: Bool = false) {
+        self.failsLoad = failsLoad
+    }
 
     func load() async throws -> PendingRequestSnapshot {
-        snapshot
+        if failsLoad {
+            throw DebugUITestPendingRequestStoreError.unavailable
+        }
+        return snapshot
     }
 
     func save(_ snapshot: PendingRequestSnapshot) async throws {
@@ -97,6 +170,10 @@ actor DebugUITestPendingRequestStore: PendingRequestStore, PersistenceWarningSou
     func drainPersistenceWarnings() async -> [PersistenceWarning] {
         []
     }
+}
+
+private enum DebugUITestPendingRequestStoreError: Error {
+    case unavailable
 }
 
 struct DebugSelectorHarnessBootstrapView: View {

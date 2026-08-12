@@ -22,16 +22,24 @@ enum LinkRoutingPassDisposition: Sendable {
     case paused
 }
 
+enum LinkRoutingCancellationResult: Equatable, Sendable {
+    case cancelled
+    case notCancelled
+}
+
 @MainActor
 protocol LinkRoutingCoordinating: AnyObject {
     @discardableResult
     func processNext(
         while shouldContinue: @escaping @MainActor () -> Bool
     ) async -> LinkRoutingPassDisposition
+    @discardableResult
+    func presentForExplicitSelection(requestID: UUID) async -> Bool
     func select(browserID: BrowserID, for requestID: UUID) async
     func retry(browserID: BrowserID, for requestID: UUID) async
     func markUncertainAttemptCompleted(requestID: UUID) async
     func cancel(requestID: UUID) async
+    func cancelForExplicitSelection(requestID: UUID) async -> LinkRoutingCancellationResult
 }
 
 @MainActor
@@ -44,11 +52,23 @@ extension LinkRoutingCoordinating {
     func processNext() async -> LinkRoutingPassDisposition {
         await processNext(while: { true })
     }
+
+    @discardableResult
+    func presentForExplicitSelection(requestID _: UUID) async -> Bool { false }
+
+    func cancelForExplicitSelection(requestID: UUID) async -> LinkRoutingCancellationResult {
+        await cancel(requestID: requestID)
+        return .notCancelled
+    }
 }
 
 @MainActor
 protocol PersistenceWarningPresenting: AnyObject {
     func present(_ warning: PersistenceWarning)
+}
+
+protocol RuntimeLinkPersistenceWarningPresenting: PersistenceWarningPresenting {
+    func updateRuntimeLinkRecoveryState(_ state: RuntimeLinkRecoveryState)
 }
 
 @MainActor
@@ -106,6 +126,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     private let operatingSystemVersion: OperatingSystemVersion
     private let presenter: any LinkSelectionPresenting
     private let warningPresenter: any PersistenceWarningPresenting
+    private weak var outcomeReporter: (any LinkRoutingOutcomeReporting)?
     private let ruleEngine = RuleEngine()
     private let historyStateMachine = HistoryStateMachine()
     private let sanitizer = URLSanitizer.default
@@ -129,7 +150,8 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         sourceManifest: SourceSupportManifest,
         operatingSystemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
         presenter: any LinkSelectionPresenting,
-        warningPresenter: any PersistenceWarningPresenting
+        warningPresenter: any PersistenceWarningPresenting,
+        outcomeReporter: (any LinkRoutingOutcomeReporting)? = nil
     ) {
         self.queue = queue
         self.ruleRepository = ruleRepository
@@ -141,6 +163,11 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         self.operatingSystemVersion = operatingSystemVersion
         self.presenter = presenter
         self.warningPresenter = warningPresenter
+        self.outcomeReporter = outcomeReporter
+    }
+
+    func connectOutcomeReporter(_ reporter: any LinkRoutingOutcomeReporting) {
+        outcomeReporter = reporter
     }
 
     @discardableResult
@@ -227,6 +254,42 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         }
     }
 
+    @discardableResult
+    func presentForExplicitSelection(requestID: UUID) async -> Bool {
+        guard !isProcessing,
+              activeUserActionRequestIDs.isEmpty,
+              attemptingRequestIDs.isEmpty,
+              let request = await request(withID: requestID)
+        else {
+            await report(.storageUnavailable, requestID: requestID)
+            return false
+        }
+
+        do {
+            let hasAvailableBrowser = try await browserCatalog.scan().contains {
+                $0.availability == .available
+            }
+            guard hasAvailableBrowser else {
+                await present(request, as: .noAvailableBrowsers)
+                await report(.unavailable, requestID: requestID)
+                return false
+            }
+        } catch {
+            blockForStorage(request)
+            await report(.storageUnavailable, requestID: requestID)
+            return false
+        }
+
+        await present(request, as: .normal)
+        guard let presented = await self.request(withID: requestID),
+              presented.state == .presenting
+        else {
+            await report(.storageUnavailable, requestID: requestID)
+            return false
+        }
+        return true
+    }
+
     func select(browserID: BrowserID, for requestID: UUID) async {
         guard beginUserAction(for: requestID) else { return }
         var shouldRequestContinuation = false
@@ -248,11 +311,13 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         do {
             guard let available = try await availableBrowser(id: browserID) else {
                 presenter.present(request, context: .noAvailableBrowsers)
+                await report(.unavailable, requestID: requestID)
                 return
             }
             browser = available
         } catch {
             blockForStorage(request)
+            await report(.storageUnavailable, requestID: requestID)
             return
         }
         let settings = loadSettingsForRouting()
@@ -293,6 +358,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
                     context: .outcomeUnknown(browserID: uncertain.context.browser.id)
                 )
                 warningPresenter.present(.recoveryStoreUnavailable)
+                await report(.outcomeUnknown, requestID: requestID)
                 return
             }
         }
@@ -303,11 +369,13 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         do {
             guard let available = try await availableBrowser(id: browserID) else {
                 presenter.present(request, context: .noAvailableBrowsers)
+                await report(.unavailable, requestID: requestID)
                 return
             }
             browser = available
         } catch {
             blockForStorage(request)
+            await report(.storageUnavailable, requestID: requestID)
             return
         }
         let settings = loadSettingsForRouting()
@@ -379,6 +447,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
                 context: .outcomeUnknown(browserID: request.lastAttemptedBrowserID)
             )
             warningPresenter.present(.recoveryStoreUnavailable)
+            await report(.outcomeUnknown, requestID: requestID)
             return
         }
 
@@ -391,11 +460,16 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             history: completedHistory,
             settings: settings.values
         )
+        await report(.completedWithoutConfirmedHandoff, requestID: requestID)
         shouldRequestContinuation = true
     }
 
     func cancel(requestID: UUID) async {
-        guard beginUserAction(for: requestID) else { return }
+        _ = await cancelForExplicitSelection(requestID: requestID)
+    }
+
+    func cancelForExplicitSelection(requestID: UUID) async -> LinkRoutingCancellationResult {
+        guard beginUserAction(for: requestID) else { return .notCancelled }
         var shouldRequestContinuation = false
         defer {
             endUserAction(for: requestID)
@@ -404,7 +478,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             }
         }
 
-        guard let request = await request(withID: requestID) else { return }
+        guard let request = await request(withID: requestID) else { return .notCancelled }
         let settings = loadSettingsForRouting()
         let history = settings.values.historyEnabled ? cancellationHistory(for: request) : nil
 
@@ -414,7 +488,8 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             presenter.present(request, context: .storageUnavailable)
             warningPresenter.present(.recoveryStoreUnavailable)
             storageBlockedRequests[requestID] = request
-            return
+            await report(.storageUnavailable, requestID: requestID)
+            return .notCancelled
         }
 
         uncertainAttempts[requestID] = nil
@@ -426,7 +501,9 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             history: history,
             settings: settings.values
         )
+        await report(.cancelled, requestID: requestID)
         shouldRequestContinuation = true
+        return .cancelled
     }
 
     private func attempt(
@@ -455,6 +532,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             storageBlockedRequests[request.id] = request
             presenter.present(request, context: .storageUnavailable)
             warningPresenter.present(.recoveryStoreUnavailable)
+            await report(.storageUnavailable, requestID: request.id)
             return false
         }
 
@@ -486,6 +564,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             )
             presenter.present(request, context: .outcomeUnknown(browserID: browser.id))
             warningPresenter.present(.recoveryStoreUnavailable)
+            await report(.outcomeUnknown, requestID: request.id)
             return false
         }
 
@@ -501,6 +580,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             history: successfulHistory,
             settings: settings.values
         )
+        await report(.handoffAccepted, requestID: request.id)
         return true
     }
 
@@ -519,6 +599,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             }
             presenter.present(context.request, context: .storageUnavailable)
             warningPresenter.present(.recoveryStoreUnavailable)
+            await report(.storageUnavailable, requestID: context.request.id)
             return
         }
 
@@ -531,6 +612,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             presented,
             context: .launchFailed(browserID: context.browser.id, message: "launch_failed")
         )
+        await report(.handoffFailed, requestID: context.request.id)
     }
 
     private func retryFailedHandoffPersistence(_ blocked: FailedHandoffPersistence) async {
@@ -540,6 +622,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         } catch {
             presenter.present(blocked.context.request, context: .storageUnavailable)
             warningPresenter.present(.recoveryStoreUnavailable)
+            await report(.storageUnavailable, requestID: blocked.context.request.id)
             return
         }
         failedHandoffPersistence[blocked.context.request.id] = nil
@@ -552,6 +635,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             request,
             context: .launchFailed(browserID: blocked.context.browser.id, message: "launch_failed")
         )
+        await report(.handoffFailed, requestID: blocked.context.request.id)
     }
 
     private func present(_ request: LinkRequest, as context: SelectorPresentationContext) async {
@@ -799,5 +883,9 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         } catch {
             warningPresenter.present(.settingsNotSaved)
         }
+    }
+
+    private func report(_ kind: LinkRoutingOutcome.Kind, requestID: UUID) async {
+        await outcomeReporter?.report(LinkRoutingOutcome(requestID: requestID, kind: kind))
     }
 }

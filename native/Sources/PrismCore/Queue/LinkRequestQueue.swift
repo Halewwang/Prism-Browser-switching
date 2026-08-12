@@ -105,6 +105,27 @@ public actor LinkRequestQueue {
         return true
     }
 
+    /// Enqueues only when no request is currently pending. The empty check and
+    /// durable insert share the queue's mutation permit, so another enqueue
+    /// cannot be overtaken between them.
+    @discardableResult
+    public func enqueueIfNoPending(_ request: LinkRequest) async throws -> Bool {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
+        guard pendingRequests.isEmpty, !requestIDs.contains(request.id) else {
+            return false
+        }
+
+        let candidatePending = [request]
+        try await save(pending: candidatePending, terminal: terminalRecords)
+        let previousPendingCount = pendingRequests.count
+        pendingRequests = candidatePending
+        requestIDs.insert(request.id)
+        publishPendingCountIfChanged(from: previousPendingCount)
+        return true
+    }
+
     public func next() -> LinkRequest? {
         pendingRequests.first { request in
             switch request.state {

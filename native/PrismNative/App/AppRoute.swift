@@ -4,6 +4,7 @@ enum AppRoute: Hashable {
     case history
     case rules
     case browsers
+    case settings
 }
 
 enum MainWindowIdentity: String, Codable, Hashable {

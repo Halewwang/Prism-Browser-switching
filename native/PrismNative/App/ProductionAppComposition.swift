@@ -59,12 +59,22 @@ final class ProductionAppComposition {
     let operatingSystemVersion: OperatingSystemVersion
     let selectorSessionFactory: SelectorSessionFactory
     let windowCoordinator: WindowCoordinator
+    let routingOutcomeCenter: LinkRoutingOutcomeCenter
+    let onboardingTestLinkRouter: OnboardingTestLinkRouter
 
     private let warningSource: (any PersistenceWarningSource)?
     private var restorationState = RestorationState.notStarted
     private var didFinishRestoration = false
     private var didFinishLaunching = false
     private(set) var finishLaunchCount = 0
+
+    var runtimeLinkRecoveryState: RuntimeLinkRecoveryState {
+        let state = environment.runtimeLinkRecoveryState
+        if state == .routingResumeRequired, !environment.settings.onboardingCompleted {
+            return .none
+        }
+        return state
+    }
 
     init(
         environment: AppEnvironment,
@@ -83,7 +93,8 @@ final class ProductionAppComposition {
         operatingSystemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
         iconProvider: (any ApplicationIconProviding)? = nil,
         selectorSessionFactory: SelectorSessionFactory? = nil,
-        windowCoordinator: WindowCoordinator? = nil
+        windowCoordinator: WindowCoordinator? = nil,
+        routingOutcomeCenter: LinkRoutingOutcomeCenter? = nil
     ) {
         let relay = selectorPresentationRelay ?? SelectorPresentationRelay()
         let opening = mainWindowOpening ?? MainWindowOpening { [weak environment] route in
@@ -110,6 +121,8 @@ final class ProductionAppComposition {
             mainWindowOpening: opening,
             contentProvider: sessions
         )
+        let outcomes = routingOutcomeCenter ?? LinkRoutingOutcomeCenter()
+        linkRoutingCoordinator.connectOutcomeReporter(outcomes)
 
         self.environment = environment
         self.recoveryQueue = recoveryQueue
@@ -127,6 +140,12 @@ final class ProductionAppComposition {
         self.operatingSystemVersion = operatingSystemVersion
         self.selectorSessionFactory = sessions
         self.windowCoordinator = windows
+        self.routingOutcomeCenter = outcomes
+        self.onboardingTestLinkRouter = OnboardingTestLinkRouter(
+            intake: linkIntakeService,
+            coordinator: linkRoutingCoordinator,
+            outcomes: outcomes
+        )
         relay.target = windows
     }
 
@@ -224,23 +243,48 @@ final class ProductionAppComposition {
         await restore(retryFailed: false)
     }
 
+    @discardableResult
+    func retryPendingTerminalHistory() async -> Bool {
+        await environment.retryPendingTerminalHistory(queue: recoveryQueue)
+    }
+
     func finishLaunchingOnce() async {
         guard !didFinishLaunching else { return }
         didFinishLaunching = true
         finishLaunchCount += 1
         guard await restoreOnce() else { return }
-        await finishRestoration(allowAutomaticRouting: true)
+        await finishRestoration(
+            allowAutomaticRouting: environment.settings.onboardingCompleted
+        )
     }
 
     @discardableResult
     func retryRestorationAfterUserAction() async -> Bool {
         guard await restore(retryFailed: true) else { return false }
         await finishRestoration(allowAutomaticRouting: false)
+        if environment.settings.onboardingCompleted {
+            await linkIntakeService.waitForPersistenceForTesting()
+            _ = await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
+        }
         return true
     }
 
-    func resumeRoutingAfterRecoveryUserAction() async {
-        guard didFinishRestoration else { return }
+    @discardableResult
+    func retryPendingPersistenceAfterUserAction() async -> Bool {
+        guard didFinishRestoration else { return false }
+        return await linkIntakeService.retryPendingPersistenceAfterUserAction()
+    }
+
+    @discardableResult
+    func resumeRoutingAfterRecoveryUserAction() async -> Bool {
+        guard didFinishRestoration, environment.settings.onboardingCompleted else { return false }
+        return await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
+    }
+
+    func resumeRoutingAfterOnboardingCompletion() async {
+        guard didFinishRestoration, environment.settings.onboardingCompleted else {
+            return
+        }
         await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
     }
 
