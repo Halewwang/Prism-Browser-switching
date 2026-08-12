@@ -113,6 +113,7 @@ final class ProductionAppComposition {
             coordinator: coordinator,
             warningPresenter: environment
         )
+        coordinator.continuationRequester = intake
         let defaultBrowser = DefaultBrowserService()
         let loginItem = LoginItemService()
         if environment.linkRoutingCoordinator == nil {
@@ -305,6 +306,7 @@ final class ProductionAppComposition {
             warningPresenter: environment,
             diagnosticRecorder: diagnosticRecorder
         )
+        coordinator.continuationRequester = intake
         let defaultBrowser = DefaultBrowserService()
         let loginItem = LoginItemService()
         environment.connectLinkRouting(

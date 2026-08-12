@@ -27,7 +27,7 @@ public actor LinkRequestQueue {
         self.mutationWaiterObserver = mutationWaiterObserver
     }
 
-    public func restore() async throws {
+    public func restore(discardTerminalHistory: Bool = false) async throws {
         await acquireMutationPermit()
         defer { releaseMutationPermit() }
 
@@ -35,11 +35,27 @@ public actor LinkRequestQueue {
         try Self.validateSnapshot(in: loaded)
 
         var recovered = loaded
+        var requiresSave = false
         let hasInterruptedLaunch = recovered.pendingRequests.contains { $0.state == .launching }
         if hasInterruptedLaunch {
             for index in recovered.pendingRequests.indices where recovered.pendingRequests[index].state == .launching {
                 recovered.pendingRequests[index].state = .outcomeUnknown
             }
+            requiresSave = true
+        }
+        if discardTerminalHistory,
+           recovered.terminalRecords.contains(where: { $0.historyEntry != nil }) {
+            recovered.terminalRecords = recovered.terminalRecords.map { record in
+                TerminalRequestRecord(
+                    requestID: record.requestID,
+                    outcome: record.outcome,
+                    historyEntry: nil,
+                    completedAt: record.completedAt
+                )
+            }
+            requiresSave = true
+        }
+        if requiresSave {
             try await store.save(recovered)
         }
 

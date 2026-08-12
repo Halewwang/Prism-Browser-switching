@@ -224,6 +224,547 @@ import Testing
     #expect(intake.workerStartCount == 2)
 }
 
+@Test @MainActor func suspendedRoutingNeverBlocksANewerCaptureFromDurablePersistence() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SuspendedRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://first-durable.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await coordinator.waitUntilSuspended()
+
+    intake.capture(url: URL(string: "https://second-durable.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "first-durable.example",
+        "second-durable.example"
+    ])
+    #expect(coordinator.processNextCount == 1)
+    #expect(intake.workerStartCount == 2)
+    #expect(intake.routingWorkerStartCount == 1)
+
+    let restartedQueue = LinkRequestQueue(store: store)
+    try await restartedQueue.restore()
+    #expect(await restartedQueue.snapshot().map(\.url.host) == [
+        "first-durable.example",
+        "second-durable.example"
+    ])
+
+    coordinator.release()
+    await intake.waitForDrainForTesting()
+
+    #expect(coordinator.processNextCount == 2)
+    #expect(intake.routingWorkerStartCount == 1)
+}
+
+@Test @MainActor func productionRoutingPersistsANewerCaptureWhileBrowserHandoffIsSuspended() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SequencedSuspendedBrowserLauncher()
+    let history = StubHistoryRepository()
+    var settingsValue = AppSettings.defaults
+    settingsValue.unmatchedBehavior = .preferredBrowser
+    settingsValue.preferredBrowserID = "com.apple.Safari"
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: history,
+        settingsRepository: StubSettingsRepository(settings: settingsValue),
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: SpySelectionPresenter(),
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+
+    intake.capture(url: URL(string: "https://first-handoff.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await launcher.waitUntilStarted(count: 1)
+
+    intake.capture(url: URL(string: "https://second-handoff.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.state) == [.launching, .queued])
+    #expect(launcher.openedURLs.map(\.host) == ["first-handoff.example"])
+
+    let crashSnapshot = await store.currentSnapshot()
+    let restartedQueue = LinkRequestQueue(
+        store: ScriptedPendingRequestStore(snapshot: crashSnapshot)
+    )
+    try await restartedQueue.restore()
+    let restartedRequests = await restartedQueue.snapshot()
+    #expect(restartedRequests.map(\.url.host) == [
+        "first-handoff.example",
+        "second-handoff.example"
+    ])
+    #expect(restartedRequests.map(\.state) == [.outcomeUnknown, .queued])
+
+    launcher.succeedNext()
+    await launcher.waitUntilStarted(count: 2)
+    #expect(launcher.openedURLs.map(\.host) == [
+        "first-handoff.example",
+        "second-handoff.example"
+    ])
+    launcher.succeedNext()
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.openedURLs.count == 2)
+    #expect(await queue.next() == nil)
+    #expect(history.entries.count == 2)
+    #expect(history.entries.allSatisfy { $0.result == .success })
+}
+
+@Test @MainActor func productionRoutingDoesNotPresentANewerAskRequestTwiceAfterSuspendedHandoff() async throws {
+    let queue = LinkRequestQueue(store: ScriptedPendingRequestStore())
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SuspendedBrowserLauncher()
+    let presenter = SpySelectionPresenter()
+    var automaticSettings = AppSettings.defaults
+    automaticSettings.unmatchedBehavior = .preferredBrowser
+    automaticSettings.preferredBrowserID = "com.apple.Safari"
+    let settings = StubSettingsRepository(settings: automaticSettings)
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: StubHistoryRepository(),
+        settingsRepository: settings,
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: presenter,
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+
+    intake.capture(url: URL(string: "https://automatic-first.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await launcher.waitUntilStarted()
+    intake.capture(url: URL(string: "https://ask-second.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+    var askSettings = automaticSettings
+    askSettings.unmatchedBehavior = .alwaysAsk
+    askSettings.preferredBrowserID = nil
+    settings.replaceForTesting(askSettings)
+
+    launcher.succeed()
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.handoffCount == 1)
+    #expect(presenter.request?.url.host == "ask-second.example")
+    #expect(presenter.presentationCount == 1)
+    #expect((await queue.snapshot()).map(\.state) == [.presenting])
+}
+
+@Test @MainActor func productionRoutingKeepsNewerAutomaticFailureContextAfterSuspendedHandoff() async throws {
+    let queue = LinkRequestQueue(store: ScriptedPendingRequestStore())
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SequencedSuspendedBrowserLauncher()
+    let presenter = SpySelectionPresenter()
+    var settingsValue = AppSettings.defaults
+    settingsValue.unmatchedBehavior = .preferredBrowser
+    settingsValue.preferredBrowserID = "com.apple.Safari"
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: StubHistoryRepository(),
+        settingsRepository: StubSettingsRepository(settings: settingsValue),
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: presenter,
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+
+    intake.capture(url: URL(string: "https://successful-first.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await launcher.waitUntilStarted(count: 1)
+    intake.capture(url: URL(string: "https://failed-second.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    launcher.succeedNext()
+    await launcher.waitUntilStarted(count: 2)
+    launcher.failNext()
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.openedURLs.map(\.host) == [
+        "successful-first.example",
+        "failed-second.example"
+    ])
+    #expect(presenter.request?.url.host == "failed-second.example")
+    guard case .launchFailed(let browserID, _) = presenter.context else {
+        Issue.record("Expected the failed automatic handoff context to remain visible")
+        return
+    }
+    #expect(browserID == "com.apple.Safari")
+    #expect(presenter.presentationCount == 1)
+    #expect((await queue.snapshot()).map(\.state) == [.presenting])
+}
+
+@Test @MainActor func manualHandoffOwnsRoutingUntilANewerAskCaptureIsDurable() async throws {
+    let queue = LinkRequestQueue(store: ScriptedPendingRequestStore())
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SuspendedBrowserLauncher()
+    let presenter = SpySelectionPresenter()
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: StubHistoryRepository(),
+        settingsRepository: StubSettingsRepository(settings: .defaults),
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: presenter,
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    coordinator.continuationRequester = intake
+
+    intake.capture(url: URL(string: "https://manual-first.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await intake.waitForDrainForTesting()
+    let firstRequest = try #require(presenter.request)
+    #expect(presenter.presentationCount == 1)
+
+    let manualSelection = Task { @MainActor in
+        await coordinator.select(browserID: "com.apple.Safari", for: firstRequest.id)
+    }
+    await launcher.waitUntilStarted()
+    intake.capture(url: URL(string: "https://ask-after-manual.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(launcher.handoffCount == 1)
+    #expect(presenter.request?.url.host == "manual-first.example")
+    #expect(presenter.presentationCount == 1)
+    #expect(await queue.snapshot().map(\.state) == [.launching, .queued])
+
+    launcher.succeed()
+    await manualSelection.value
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.handoffCount == 1)
+    #expect(presenter.request?.url.host == "ask-after-manual.example")
+    #expect(presenter.presentationCount == 2)
+    #expect((await queue.snapshot()).map(\.state) == [.presenting])
+}
+
+@Test @MainActor func persistenceFailureDuringProductionHandoffStopsLaterAutomaticRequestsUntilResume() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SequencedSuspendedBrowserLauncher()
+    var settingsValue = AppSettings.defaults
+    settingsValue.unmatchedBehavior = .preferredBrowser
+    settingsValue.preferredBrowserID = "com.apple.Safari"
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: StubHistoryRepository(),
+        settingsRepository: StubSettingsRepository(settings: settingsValue),
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: SpySelectionPresenter(),
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    coordinator.continuationRequester = intake
+
+    intake.capture(url: URL(string: "https://automatic-a.example")!, senderPID: nil)
+    intake.capture(url: URL(string: "https://automatic-b.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await launcher.waitUntilStarted(count: 1)
+    await store.failNextSave()
+    intake.capture(url: URL(string: "https://automatic-c.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    launcher.succeedNext()
+    await intake.waitForDrainForTesting()
+    #expect(launcher.openedURLs.map(\.host) == ["automatic-a.example"])
+    #expect(bootstrap.snapshot().map(\.url.host) == ["automatic-c.example"])
+
+    intake.retryPendingPersistenceAfterUserAction()
+    await intake.waitForPersistenceForTesting()
+    #expect(launcher.openedURLs.map(\.host) == ["automatic-a.example"])
+    #expect(bootstrap.snapshot().isEmpty)
+
+    let resumedRouting = Task { @MainActor in
+        await intake.resumeRoutingAfterRecoveryUserAction()
+    }
+    await launcher.waitUntilStarted(count: 2)
+    launcher.succeedNext()
+    await launcher.waitUntilStarted(count: 3)
+    launcher.succeedNext()
+    await resumedRouting.value
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.openedURLs.map(\.host) == [
+        "automatic-a.example",
+        "automatic-b.example",
+        "automatic-c.example"
+    ])
+    #expect(await queue.next() == nil)
+}
+
+@Test @MainActor func persistenceFailureDuringManualHandoffBlocksItsContinuationUntilResume() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let launcher = SequencedSuspendedBrowserLauncher()
+    let presenter = SpySelectionPresenter()
+    let settings = StubSettingsRepository(settings: .defaults)
+    let coordinator = LinkRoutingCoordinator(
+        queue: queue,
+        ruleRepository: StubRuleRepository(),
+        historyRepository: StubHistoryRepository(),
+        settingsRepository: settings,
+        browserCatalog: StubBrowserCatalog(browsers: [testSafariDescriptor]),
+        browserLauncher: launcher,
+        sourceManifest: .disabled,
+        presenter: presenter,
+        warningPresenter: SpyWarningPresenter()
+    )
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    coordinator.continuationRequester = intake
+
+    intake.capture(url: URL(string: "https://manual-before-pause.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await intake.waitForDrainForTesting()
+    let manualRequest = try #require(presenter.request)
+    var automaticSettings = AppSettings.defaults
+    automaticSettings.unmatchedBehavior = .preferredBrowser
+    automaticSettings.preferredBrowserID = "com.apple.Safari"
+    settings.replaceForTesting(automaticSettings)
+
+    let manualSelection = Task { @MainActor in
+        await coordinator.select(browserID: "com.apple.Safari", for: manualRequest.id)
+    }
+    await launcher.waitUntilStarted(count: 1)
+    intake.capture(url: URL(string: "https://durable-before-pause.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+    await store.failNextSave()
+    intake.capture(url: URL(string: "https://buffered-by-pause.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    launcher.succeedNext()
+    await manualSelection.value
+    await intake.waitForDrainForTesting()
+
+    #expect(launcher.openedURLs.map(\.host) == ["manual-before-pause.example"])
+    #expect(bootstrap.snapshot().map(\.url.host) == ["buffered-by-pause.example"])
+    #expect(presenter.presentationCount == 1)
+
+    intake.retryPendingPersistenceAfterUserAction()
+    await intake.waitForPersistenceForTesting()
+    #expect(launcher.openedURLs.map(\.host) == ["manual-before-pause.example"])
+    #expect(bootstrap.snapshot().isEmpty)
+
+    let resumedRouting = Task { @MainActor in
+        await intake.resumeRoutingAfterRecoveryUserAction()
+    }
+    await launcher.waitUntilStarted(count: 2)
+    launcher.succeedNext()
+    await launcher.waitUntilStarted(count: 3)
+    launcher.succeedNext()
+    await resumedRouting.value
+
+    #expect(launcher.openedURLs.map(\.host) == [
+        "manual-before-pause.example",
+        "durable-before-pause.example",
+        "buffered-by-pause.example"
+    ])
+    #expect(await queue.next() == nil)
+}
+
+@Test @MainActor func persistenceFailureDuringSuspendedRoutingPausesEveryLaterKick() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SuspendedRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://already-durable.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await coordinator.waitUntilSuspended()
+    await store.failNextSave()
+
+    intake.capture(url: URL(string: "https://failed-persistence.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+    intake.capture(url: URL(string: "https://queued-behind-failure.example")!, senderPID: nil)
+
+    #expect(bootstrap.snapshot().map(\.url.host) == [
+        "failed-persistence.example",
+        "queued-behind-failure.example"
+    ])
+    #expect(await queue.snapshot().map(\.url.host) == ["already-durable.example"])
+    #expect(coordinator.processNextCount == 1)
+
+    coordinator.release()
+    await intake.waitForDrainForTesting()
+
+    #expect(coordinator.processNextCount == 1)
+    #expect(intake.routingWorkerStartCount == 1)
+
+    intake.retryPendingPersistenceAfterUserAction()
+    await intake.waitForPersistenceForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "already-durable.example",
+        "failed-persistence.example",
+        "queued-behind-failure.example"
+    ])
+    #expect(coordinator.processNextCount == 1)
+
+    await intake.resumeRoutingAfterRecoveryUserAction()
+
+    #expect(coordinator.processNextCount == 2)
+    #expect(intake.routingWorkerStartCount == 2)
+}
+
+@Test @MainActor func routingResumeWaitsForAnOlderSuspendedPassToFinish() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SuspendedRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://active-old-pass.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await coordinator.waitUntilSuspended()
+    await store.failNextSave()
+    intake.capture(url: URL(string: "https://waiting-for-resume.example")!, senderPID: nil)
+    await intake.waitForPersistenceForTesting()
+
+    intake.retryPendingPersistenceAfterUserAction()
+    await intake.waitForPersistenceForTesting()
+    await intake.resumeRoutingAfterRecoveryUserAction()
+
+    #expect(coordinator.processNextCount == 1)
+    #expect(intake.routingWorkerStartCount == 1)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "active-old-pass.example",
+        "waiting-for-resume.example"
+    ])
+
+    coordinator.release()
+    await intake.waitForDrainForTesting()
+    await intake.resumeRoutingAfterRecoveryUserAction()
+
+    #expect(coordinator.processNextCount == 2)
+    #expect(intake.routingWorkerStartCount == 2)
+}
+
+@Test @MainActor func routingExitAndNewCaptureCannotLoseTheNextRoutingKick() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = HookRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    coordinator.onFirstProcess = {
+        intake.capture(url: URL(string: "https://captured-at-route-exit.example")!, senderPID: nil)
+    }
+    intake.capture(url: URL(string: "https://initial-route.example")!, senderPID: nil)
+
+    intake.finishRestorationAndStartDraining()
+    await intake.waitForDrainForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "initial-route.example",
+        "captured-at-route-exit.example"
+    ])
+    #expect(coordinator.processNextCount == 2)
+}
+
+@Test @MainActor func newerContinuationSurvivesAnOlderBusyRoutingPass() async throws {
+    let queue = LinkRequestQueue(store: ScriptedPendingRequestStore())
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = BusyThenDrainedRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://busy-generation.example")!, senderPID: nil)
+    intake.finishRestorationAndStartDraining()
+    await coordinator.waitUntilBusyPassIsSuspended()
+
+    intake.requestRoutingContinuation()
+    coordinator.releaseBusyPass()
+    await intake.waitForDrainForTesting()
+
+    #expect(coordinator.processNextCount == 2)
+    #expect(intake.routingWorkerStartCount == 1)
+}
+
 @Test @MainActor func tenRapidLinksRemainDistinctAndFIFO() async throws {
     let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
     let intake = LinkIntakeService(
@@ -362,7 +903,7 @@ import Testing
     #expect(history.entries.first?.result == .processing)
 
     launcher.succeed()
-    await processing.value
+    _ = await processing.value
 
     #expect(launcher.handoffCount == 1)
     #expect(await queue.next() == nil)
@@ -957,8 +1498,10 @@ private final class SpySelectionPresenter: LinkSelectionPresenting {
     private(set) var request: LinkRequest?
     private(set) var context: SelectorPresentationContext?
     private(set) var dismissals: [UUID] = []
+    private(set) var presentationCount = 0
 
     func present(_ request: LinkRequest, context: SelectorPresentationContext) {
+        presentationCount += 1
         self.request = request
         self.context = context
     }
@@ -986,8 +1529,102 @@ private final class SpyWarningPresenter: PersistenceWarningPresenting {
 private final class SpyRoutingCoordinator: LinkRoutingCoordinating {
     private(set) var processNextCount = 0
 
-    func processNext() async {
+    func processNext(
+        while _: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition {
         processNextCount += 1
+        return .drained
+    }
+
+    func select(browserID _: BrowserID, for _: UUID) async {}
+    func retry(browserID _: BrowserID, for _: UUID) async {}
+    func markUncertainAttemptCompleted(requestID _: UUID) async {}
+    func cancel(requestID _: UUID) async {}
+}
+
+@MainActor
+private final class SuspendedRoutingCoordinator: LinkRoutingCoordinating {
+    private(set) var processNextCount = 0
+    private var suspension: CheckedContinuation<Void, Never>?
+    private var shouldSuspend = true
+
+    func processNext(
+        while _: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition {
+        processNextCount += 1
+        guard shouldSuspend else { return .drained }
+        shouldSuspend = false
+        await withCheckedContinuation { continuation in
+            suspension = continuation
+        }
+        return .drained
+    }
+
+    func waitUntilSuspended() async {
+        while suspension == nil {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        let continuation = suspension
+        suspension = nil
+        continuation?.resume()
+    }
+
+    func select(browserID _: BrowserID, for _: UUID) async {}
+    func retry(browserID _: BrowserID, for _: UUID) async {}
+    func markUncertainAttemptCompleted(requestID _: UUID) async {}
+    func cancel(requestID _: UUID) async {}
+}
+
+@MainActor
+private final class HookRoutingCoordinator: LinkRoutingCoordinating {
+    var onFirstProcess: (@MainActor () -> Void)?
+    private(set) var processNextCount = 0
+
+    func processNext(
+        while _: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition {
+        processNextCount += 1
+        if processNextCount == 1 {
+            onFirstProcess?()
+        }
+        return .drained
+    }
+
+    func select(browserID _: BrowserID, for _: UUID) async {}
+    func retry(browserID _: BrowserID, for _: UUID) async {}
+    func markUncertainAttemptCompleted(requestID _: UUID) async {}
+    func cancel(requestID _: UUID) async {}
+}
+
+@MainActor
+private final class BusyThenDrainedRoutingCoordinator: LinkRoutingCoordinating {
+    private var busyContinuation: CheckedContinuation<Void, Never>?
+    private(set) var processNextCount = 0
+
+    func processNext(
+        while _: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition {
+        processNextCount += 1
+        guard processNextCount == 1 else { return .drained }
+        await withCheckedContinuation { continuation in
+            busyContinuation = continuation
+        }
+        return .busy
+    }
+
+    func waitUntilBusyPassIsSuspended() async {
+        while busyContinuation == nil {
+            await Task.yield()
+        }
+    }
+
+    func releaseBusyPass() {
+        let continuation = busyContinuation
+        busyContinuation = nil
+        continuation?.resume()
     }
 
     func select(browserID _: BrowserID, for _: UUID) async {}
@@ -1062,6 +1699,35 @@ private final class SuspendedBrowserLauncher: BrowserLaunching {
 }
 
 @MainActor
+private final class SequencedSuspendedBrowserLauncher: BrowserLaunching {
+    private var continuations: [CheckedContinuation<BrowserLaunchResult, Error>] = []
+    private(set) var openedURLs: [URL] = []
+
+    func open(_ url: URL, with _: BrowserDescriptor) async throws -> BrowserLaunchResult {
+        openedURLs.append(url)
+        return try await withCheckedThrowingContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func waitUntilStarted(count: Int) async {
+        while openedURLs.count < count {
+            await Task.yield()
+        }
+    }
+
+    func succeedNext() {
+        guard !continuations.isEmpty else { return }
+        continuations.removeFirst().resume(returning: .handoffSucceeded)
+    }
+
+    func failNext() {
+        guard !continuations.isEmpty else { return }
+        continuations.removeFirst().resume(throwing: StubRoutingError.launchFailed)
+    }
+}
+
+@MainActor
 private final class StubHistoryRepository: HistoryRepository {
     enum FailureMode {
         case never
@@ -1119,6 +1785,10 @@ private final class StubSettingsRepository: SettingsRepository {
         if failSave { throw StubRoutingError.storageFailed }
         self.settings = settings
     }
+
+    func replaceForTesting(_ settings: AppSettings) {
+        self.settings = settings
+    }
 }
 
 @MainActor
@@ -1144,6 +1814,10 @@ private actor ScriptedPendingRequestStore: PendingRequestStore {
     }
 
     func load() async throws -> PendingRequestSnapshot {
+        snapshot
+    }
+
+    func currentSnapshot() -> PendingRequestSnapshot {
         snapshot
     }
 

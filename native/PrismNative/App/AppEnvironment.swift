@@ -72,19 +72,6 @@ final class AppEnvironment: PersistenceWarningPresenting {
         queue: LinkRequestQueue,
         warningSource: (any PersistenceWarningSource)?
     ) async -> Bool {
-        do {
-            try await queue.restore()
-        } catch {
-            addWarning(.recoveryStoreUnavailable)
-            return false
-        }
-
-        if let warningSource {
-            for warning in await warningSource.drainPersistenceWarnings() {
-                addWarning(warning)
-            }
-        }
-
         let settings: AppSettings
         let settingsAvailable: Bool
         do {
@@ -98,13 +85,23 @@ final class AppEnvironment: PersistenceWarningPresenting {
             unmatchedBehavior = settings.unmatchedBehavior
         }
 
+        do {
+            try await queue.restore(
+                discardTerminalHistory: !settingsAvailable || !settings.historyEnabled
+            )
+        } catch {
+            addWarning(.recoveryStoreUnavailable)
+            return false
+        }
+
+        if let warningSource {
+            for warning in await warningSource.drainPersistenceWarnings() {
+                addWarning(warning)
+            }
+        }
+
         for terminalRecord in await queue.terminalSnapshot() {
             if !settingsAvailable {
-                do {
-                    try await queue.discardTerminalHistory(terminalRecord.requestID)
-                } catch {
-                    addWarning(.recoveryStoreUnavailable)
-                }
                 continue
             }
 

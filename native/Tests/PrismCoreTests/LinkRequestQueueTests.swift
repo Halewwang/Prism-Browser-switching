@@ -40,6 +40,65 @@ import Testing
     #expect((await store.latestSnapshot).pendingRequests.first?.state == .outcomeUnknown)
 }
 
+@Test func restoreAtomicallyScrubsEveryTerminalHistoryWhileRecoveringPendingStates() async throws {
+    let launching = request(id: .test(201), url: "https://example.com/launching", state: .launching)
+    let presenting = request(id: .test(202), url: "https://example.com/presenting", state: .presenting)
+    let unknown = request(id: .test(203), url: "https://example.com/unknown", state: .outcomeUnknown)
+    let firstTerminalID = UUID.test(204)
+    let secondTerminalID = UUID.test(205)
+    let firstTerminal = TerminalRequestRecord(
+        requestID: firstTerminalID,
+        outcome: .succeeded,
+        historyEntry: history(requestID: firstTerminalID, sanitizedURL: "https://example.com/first"),
+        completedAt: Date(timeIntervalSince1970: 2)
+    )
+    let secondTerminal = TerminalRequestRecord(
+        requestID: secondTerminalID,
+        outcome: .cancelled,
+        historyEntry: history(requestID: secondTerminalID, sanitizedURL: "https://example.com/second"),
+        completedAt: Date(timeIntervalSince1970: 3)
+    )
+    let store = InMemoryPendingRequestStore(
+        seed: [launching, presenting, unknown],
+        terminal: [firstTerminal, secondTerminal]
+    )
+    let queue = LinkRequestQueue(store: store)
+
+    try await queue.restore(discardTerminalHistory: true)
+
+    let pending = await queue.snapshot()
+    #expect(pending.map(\.id) == [launching.id, presenting.id, unknown.id])
+    #expect(pending.map(\.state) == [.outcomeUnknown, .presenting, .outcomeUnknown])
+    let terminal = await queue.terminalSnapshot()
+    #expect(terminal.map(\.requestID) == [firstTerminalID, secondTerminalID])
+    #expect(terminal.allSatisfy { $0.historyEntry == nil })
+    #expect((await store.latestSnapshot).terminalRecords.allSatisfy { $0.historyEntry == nil })
+    #expect(await store.saveCount == 1)
+}
+
+@Test func failedAtomicRestoreScrubDoesNotCommitPartialQueueMemory() async throws {
+    let launching = request(id: .test(206), url: "https://example.com/launching", state: .launching)
+    let terminalID = UUID.test(207)
+    let terminal = TerminalRequestRecord(
+        requestID: terminalID,
+        outcome: .succeeded,
+        historyEntry: history(requestID: terminalID, sanitizedURL: "https://example.com/private"),
+        completedAt: Date(timeIntervalSince1970: 2)
+    )
+    let store = InMemoryPendingRequestStore(seed: [launching], terminal: [terminal])
+    let queue = LinkRequestQueue(store: store)
+    await store.failNextSave()
+
+    await expectStoreFailure {
+        try await queue.restore(discardTerminalHistory: true)
+    }
+
+    #expect(await queue.snapshot().isEmpty)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect((await store.latestSnapshot).pendingRequests == [launching])
+    #expect((await store.latestSnapshot).terminalRecords == [terminal])
+}
+
 @Test func restoreContinuesWithFirstUnfinishedRequest() async throws {
     let first = request(id: .test(21), url: "https://example.com/first")
     let second = request(id: .test(22), url: "https://example.com/second", state: .presenting)

@@ -15,13 +15,35 @@ protocol LinkSelectionPresenting: AnyObject {
     func dismiss(requestID: UUID)
 }
 
+enum LinkRoutingPassDisposition: Sendable {
+    case drained
+    case moreWork
+    case busy
+    case paused
+}
+
 @MainActor
 protocol LinkRoutingCoordinating: AnyObject {
-    func processNext() async
+    @discardableResult
+    func processNext(
+        while shouldContinue: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition
     func select(browserID: BrowserID, for requestID: UUID) async
     func retry(browserID: BrowserID, for requestID: UUID) async
     func markUncertainAttemptCompleted(requestID: UUID) async
     func cancel(requestID: UUID) async
+}
+
+@MainActor
+protocol LinkRoutingContinuationRequesting: AnyObject {
+    func requestRoutingContinuation()
+}
+
+extension LinkRoutingCoordinating {
+    @discardableResult
+    func processNext() async -> LinkRoutingPassDisposition {
+        await processNext(while: { true })
+    }
 }
 
 @MainActor
@@ -95,6 +117,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     private var attemptingRequestIDs: Set<UUID> = []
     private var activeUserActionRequestIDs: Set<UUID> = []
     private var isProcessing = false
+    weak var continuationRequester: (any LinkRoutingContinuationRequesting)?
 
     init(
         queue: LinkRequestQueue,
@@ -120,90 +143,99 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         self.warningPresenter = warningPresenter
     }
 
-    func processNext() async {
-        guard !isProcessing else { return }
+    @discardableResult
+    func processNext(
+        while shouldContinue: @escaping @MainActor () -> Bool
+    ) async -> LinkRoutingPassDisposition {
+        guard !isProcessing, activeUserActionRequestIDs.isEmpty else { return .busy }
         isProcessing = true
         defer { isProcessing = false }
 
-        while true {
-            if let uncertain = firstUncertainAttempt() {
-                presenter.present(
-                    uncertain.context.request,
-                    context: .outcomeUnknown(browserID: uncertain.context.browser.id)
-                )
-                return
-            }
-            if let blocked = firstStorageBlockedRequest() {
-                presenter.present(blocked, context: .storageUnavailable)
-                return
-            }
-            guard let request = await queue.next() else { return }
-
-            if request.state == .outcomeUnknown {
-                presenter.present(
-                    request,
-                    context: .outcomeUnknown(browserID: request.lastAttemptedBrowserID)
-                )
-                return
-            }
-
-            let browsers: [BrowserDescriptor]
-            do {
-                browsers = try await browserCatalog.scan().filter { $0.availability == .available }
-            } catch {
-                blockForStorage(request)
-                return
-            }
-            guard !browsers.isEmpty else {
-                await present(request, as: .noAvailableBrowsers)
-                return
-            }
-
-            if request.state == .presenting {
-                presenter.present(request, context: .normal)
-                return
-            }
-
-            let settings = loadSettingsForRouting()
-            let rules: [RoutingRule]
-            do {
-                rules = try ruleRepository.all()
-            } catch {
-                blockForStorage(request)
-                return
-            }
-            let decision = ruleEngine.decide(
-                request: request,
-                rules: rules,
-                availableBrowserIDs: Set(browsers.map(\.id)),
-                eligibleSourceBundleIDs: sourceManifest.eligibleBundleIDs(for: operatingSystemVersion),
-                settings: settings.values
+        guard shouldContinue() else { return .paused }
+        if let uncertain = firstUncertainAttempt() {
+            presenter.present(
+                uncertain.context.request,
+                context: .outcomeUnknown(browserID: uncertain.context.browser.id)
             )
+            return .paused
+        }
+        if let blocked = firstStorageBlockedRequest() {
+            presenter.present(blocked, context: .storageUnavailable)
+            return .paused
+        }
+        guard let request = await queue.next() else { return .drained }
 
-            switch decision {
-            case let .open(browserID, method, ruleID):
-                guard let browser = browsers.first(where: { $0.id == browserID }) else {
-                    await present(request, as: .normal)
-                    return
-                }
-                let completed = await attempt(
-                    request: request,
-                    browser: browser,
-                    method: method,
-                    ruleID: ruleID,
-                    settings: settings
-                )
-                if !completed { return }
-            case .ask:
+        if request.state == .outcomeUnknown {
+            presenter.present(
+                request,
+                context: .outcomeUnknown(browserID: request.lastAttemptedBrowserID)
+            )
+            return .paused
+        }
+
+        let browsers: [BrowserDescriptor]
+        do {
+            browsers = try await browserCatalog.scan().filter { $0.availability == .available }
+        } catch {
+            blockForStorage(request)
+            return .paused
+        }
+        guard !browsers.isEmpty else {
+            await present(request, as: .noAvailableBrowsers)
+            return .paused
+        }
+
+        if request.state == .presenting {
+            presenter.present(request, context: .normal)
+            return .paused
+        }
+
+        let settings = loadSettingsForRouting()
+        let rules: [RoutingRule]
+        do {
+            rules = try ruleRepository.all()
+        } catch {
+            blockForStorage(request)
+            return .paused
+        }
+        let decision = ruleEngine.decide(
+            request: request,
+            rules: rules,
+            availableBrowserIDs: Set(browsers.map(\.id)),
+            eligibleSourceBundleIDs: sourceManifest.eligibleBundleIDs(for: operatingSystemVersion),
+            settings: settings.values
+        )
+
+        switch decision {
+        case let .open(browserID, method, ruleID):
+            guard let browser = browsers.first(where: { $0.id == browserID }) else {
                 await present(request, as: .normal)
-                return
+                return .paused
             }
+            let completed = await attempt(
+                request: request,
+                browser: browser,
+                method: method,
+                ruleID: ruleID,
+                settings: settings
+            )
+            guard completed, shouldContinue() else { return .paused }
+            return await queue.next() == nil ? .drained : .moreWork
+        case .ask:
+            await present(request, as: .normal)
+            return .paused
         }
     }
 
     func select(browserID: BrowserID, for requestID: UUID) async {
         guard beginUserAction(for: requestID) else { return }
-        defer { endUserAction(for: requestID) }
+        var shouldRequestContinuation = false
+        defer {
+            endUserAction(for: requestID)
+            if shouldRequestContinuation {
+                continuationRequester?.requestRoutingContinuation()
+            }
+        }
 
         guard uncertainAttempts[requestID] == nil,
               failedHandoffPersistence[requestID] == nil,
@@ -232,13 +264,19 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             settings: settings,
             ownsUserAction: true
         ) {
-            await processNext()
+            shouldRequestContinuation = true
         }
     }
 
     func retry(browserID: BrowserID, for requestID: UUID) async {
         guard beginUserAction(for: requestID) else { return }
-        defer { endUserAction(for: requestID) }
+        var shouldRequestContinuation = false
+        defer {
+            endUserAction(for: requestID)
+            if shouldRequestContinuation {
+                continuationRequester?.requestRoutingContinuation()
+            }
+        }
 
         if let failedPersistence = failedHandoffPersistence[requestID] {
             await retryFailedHandoffPersistence(failedPersistence)
@@ -281,13 +319,19 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             settings: settings,
             ownsUserAction: true
         ) {
-            await processNext()
+            shouldRequestContinuation = true
         }
     }
 
     func markUncertainAttemptCompleted(requestID: UUID) async {
         guard beginUserAction(for: requestID) else { return }
-        defer { endUserAction(for: requestID) }
+        var shouldRequestContinuation = false
+        defer {
+            endUserAction(for: requestID)
+            if shouldRequestContinuation {
+                continuationRequester?.requestRoutingContinuation()
+            }
+        }
 
         guard let request = await request(withID: requestID) else { return }
         let settings = loadSettingsForRouting()
@@ -347,12 +391,18 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             history: completedHistory,
             settings: settings.values
         )
-        await processNext()
+        shouldRequestContinuation = true
     }
 
     func cancel(requestID: UUID) async {
         guard beginUserAction(for: requestID) else { return }
-        defer { endUserAction(for: requestID) }
+        var shouldRequestContinuation = false
+        defer {
+            endUserAction(for: requestID)
+            if shouldRequestContinuation {
+                continuationRequester?.requestRoutingContinuation()
+            }
+        }
 
         guard let request = await request(withID: requestID) else { return }
         let settings = loadSettingsForRouting()
@@ -376,7 +426,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             history: history,
             settings: settings.values
         )
-        await processNext()
+        shouldRequestContinuation = true
     }
 
     private func attempt(
@@ -524,7 +574,12 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     }
 
     private func beginUserAction(for requestID: UUID) -> Bool {
-        guard !attemptingRequestIDs.contains(requestID) else { return false }
+        guard !isProcessing,
+              attemptingRequestIDs.isEmpty,
+              activeUserActionRequestIDs.isEmpty
+        else {
+            return false
+        }
         return activeUserActionRequestIDs.insert(requestID).inserted
     }
 

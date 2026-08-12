@@ -735,6 +735,7 @@ private struct TestLaunchGraph {
             coordinator: coordinator,
             warningPresenter: environment
         )
+        coordinator.continuationRequester = intake
         environment.connectLinkRouting(
             coordinator: coordinator,
             intake: intake,

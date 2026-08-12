@@ -272,7 +272,7 @@ import Testing
     await environment.restoreAndReconcile(queue: queue, warningSource: warnings)
 
     #expect(environment.persistenceWarnings == [.recoveryStoreUnavailable])
-    #expect(settings.loadCount == 0)
+    #expect(settings.loadCount == 1)
     #expect(await warnings.drainCount == 0)
 }
 
@@ -309,6 +309,61 @@ import Testing
     #expect(terminal.requestID == request.id)
     #expect(terminal.historyEntry == nil)
     #expect(try history.recent(limit: 10, newerThan: .distantPast).isEmpty)
+}
+
+@Test @MainActor func settingsFailureScrubsEveryTerminalHistoryFromTheFirstRecoverySave() async throws {
+    let recovery = sensitiveRecoverySnapshot()
+    let store = RecordingPendingRequestStore(snapshot: recovery.snapshot)
+    let queue = LinkRequestQueue(store: store)
+    let history = InMemoryHistoryRepository()
+    let environment = makeEnvironment(
+        unmatchedBehavior: .preferredBrowser,
+        historyRepository: history,
+        settingsRepository: FailingSettingsRepository()
+    )
+
+    let restored = await environment.restoreAndReconcile(queue: queue, warningSource: nil)
+
+    #expect(restored)
+    #expect(environment.unmatchedBehavior == .alwaysAsk)
+    #expect(environment.persistenceWarnings == [.settingsNotSaved])
+    #expect(try history.recent(limit: 10, newerThan: .distantPast).isEmpty)
+    let pending = await queue.snapshot()
+    #expect(pending.map(\.id) == recovery.pendingIDs)
+    #expect(pending.map(\.state) == [.outcomeUnknown, .presenting, .outcomeUnknown])
+    let terminal = await queue.terminalSnapshot()
+    #expect(terminal.map(\.requestID) == recovery.terminalIDs)
+    #expect(terminal.allSatisfy { $0.historyEntry == nil })
+    let saves = await store.savedSnapshots
+    #expect(!saves.isEmpty)
+    #expect(saves.allSatisfy { snapshot in
+        snapshot.terminalRecords.allSatisfy { $0.historyEntry == nil }
+    })
+}
+
+@Test @MainActor func historyDisabledScrubsEveryTerminalHistoryBeforeCompactionSaves() async throws {
+    let recovery = sensitiveRecoverySnapshot()
+    let store = RecordingPendingRequestStore(snapshot: recovery.snapshot)
+    let queue = LinkRequestQueue(store: store)
+    let history = InMemoryHistoryRepository()
+    var settings = AppSettings.defaults
+    settings.historyEnabled = false
+    let environment = makeEnvironment(
+        historyRepository: history,
+        settingsRepository: InMemorySettingsRepository(settings: settings)
+    )
+
+    let restored = await environment.restoreAndReconcile(queue: queue, warningSource: nil)
+
+    #expect(restored)
+    #expect(try history.recent(limit: 10, newerThan: .distantPast).isEmpty)
+    #expect(await queue.snapshot().map(\.id) == recovery.pendingIDs)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    let saves = await store.savedSnapshots
+    #expect(!saves.isEmpty)
+    #expect(saves.allSatisfy { snapshot in
+        snapshot.terminalRecords.allSatisfy { $0.historyEntry == nil }
+    })
 }
 
 @Test @MainActor func reconciliationCompactsHistoryDisabledAndEntrylessTerminalRecords() async throws {
@@ -370,6 +425,58 @@ private func historyEntry(
         attemptCount: 1,
         createdAt: createdAt,
         completedAt: createdAt
+    )
+}
+
+private func sensitiveRecoverySnapshot() -> (
+    snapshot: PendingRequestSnapshot,
+    pendingIDs: [UUID],
+    terminalIDs: [UUID]
+) {
+    let launching = LinkRequest.fixture(
+        id: fixedUUID(901),
+        url: "https://example.com/launching?token=secret",
+        state: .launching
+    )
+    let presenting = LinkRequest.fixture(
+        id: fixedUUID(902),
+        url: "https://example.com/presenting?token=secret",
+        state: .presenting
+    )
+    let unknown = LinkRequest.fixture(
+        id: fixedUUID(903),
+        url: "https://example.com/unknown?token=secret",
+        state: .outcomeUnknown
+    )
+    let firstTerminalID = fixedUUID(904)
+    let secondTerminalID = fixedUUID(905)
+    let terminalRecords = [
+        TerminalRequestRecord(
+            requestID: firstTerminalID,
+            outcome: .succeeded,
+            historyEntry: historyEntry(
+                requestID: firstTerminalID,
+                url: "https://example.com/first-private"
+            ),
+            completedAt: Date(timeIntervalSince1970: 10)
+        ),
+        TerminalRequestRecord(
+            requestID: secondTerminalID,
+            outcome: .cancelled,
+            historyEntry: historyEntry(
+                requestID: secondTerminalID,
+                url: "https://example.com/second-private"
+            ),
+            completedAt: Date(timeIntervalSince1970: 11)
+        )
+    ]
+    return (
+        PendingRequestSnapshot(
+            pendingRequests: [launching, presenting, unknown],
+            terminalRecords: terminalRecords
+        ),
+        [launching.id, presenting.id, unknown.id],
+        [firstTerminalID, secondTerminalID]
     )
 }
 
@@ -447,6 +554,24 @@ private actor ControlledPendingRequestStore: PendingRequestStore {
 
     func failFutureSaves() {
         failSaves = true
+    }
+}
+
+private actor RecordingPendingRequestStore: PendingRequestStore {
+    private var snapshot: PendingRequestSnapshot
+    private(set) var savedSnapshots: [PendingRequestSnapshot] = []
+
+    init(snapshot: PendingRequestSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func load() async throws -> PendingRequestSnapshot {
+        snapshot
+    }
+
+    func save(_ snapshot: PendingRequestSnapshot) async throws {
+        savedSnapshots.append(snapshot)
+        self.snapshot = snapshot
     }
 }
 

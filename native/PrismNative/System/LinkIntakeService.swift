@@ -75,7 +75,7 @@ final class BootstrapLinkBuffer {
 }
 
 @MainActor
-final class LinkIntakeService {
+final class LinkIntakeService: LinkRoutingContinuationRequesting {
     private let queue: LinkRequestQueue
     private let bootstrap: BootstrapLinkBuffer
     private let sourceAttributor: any SourceAttributing
@@ -87,7 +87,11 @@ final class LinkIntakeService {
     private var routingEnabled = false
     private var persistencePaused = false
     private var drainTask: Task<Void, Never>?
+    private var routingTask: Task<Void, Never>?
+    private var routingKickPending = false
+    private var routingKickGeneration: UInt64 = 0
     private(set) var workerStartCount = 0
+    private(set) var routingWorkerStartCount = 0
 
     init(
         queue: LinkRequestQueue,
@@ -128,12 +132,16 @@ final class LinkIntakeService {
               !routingEnabled,
               !persistencePaused,
               drainTask == nil,
+              routingTask == nil,
               bootstrap.first() == nil
         else {
             return
         }
         routingEnabled = true
-        await coordinator?.processNext()
+        requestRoutingIfEnabled()
+        while let routingTask {
+            await routingTask.value
+        }
     }
 
     func retryPendingPersistenceAfterUserAction() {
@@ -143,15 +151,30 @@ final class LinkIntakeService {
         startDrainWorkerIfNeeded(routeAfterDraining: false)
     }
 
+    func requestRoutingContinuation() {
+        requestRoutingIfEnabled()
+    }
+
     func drainForTesting() async throws {
         while let drainTask {
             await drainTask.value
         }
         try await drainBufferedLinks()
-        await coordinator?.processNext()
+        _ = await coordinator?.processNext()
     }
 
     func waitForDrainForTesting() async {
+        while drainTask != nil || routingTask != nil {
+            if let drainTask {
+                await drainTask.value
+            }
+            if let routingTask {
+                await routingTask.value
+            }
+        }
+    }
+
+    func waitForPersistenceForTesting() async {
         while let drainTask {
             await drainTask.value
         }
@@ -165,13 +188,11 @@ final class LinkIntakeService {
             var failed = false
             do {
                 try await drainBufferedLinks()
-                if routeAfterDraining, routingEnabled {
-                    await coordinator?.processNext()
-                }
             } catch {
                 failed = true
                 routingEnabled = false
                 persistencePaused = true
+                routingKickPending = false
                 warningPresenter?.present(.recoveryStoreUnavailable)
             }
             drainTask = nil
@@ -179,7 +200,61 @@ final class LinkIntakeService {
                 startDrainWorkerIfNeeded(
                     routeAfterDraining: routeAfterDraining && routingEnabled
                 )
+            } else if !failed, routeAfterDraining {
+                requestRoutingIfEnabled()
             }
+        }
+    }
+
+    private func requestRoutingIfEnabled() {
+        guard routingEnabled, !persistencePaused else { return }
+        routingKickPending = true
+        routingKickGeneration &+= 1
+        startRoutingWorkerIfNeeded()
+    }
+
+    private func startRoutingWorkerIfNeeded() {
+        guard routingTask == nil else { return }
+        routingWorkerStartCount += 1
+        routingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while routingEnabled, !persistencePaused, routingKickPending {
+                routingKickPending = false
+                let passGeneration = routingKickGeneration
+                let disposition = await coordinator?.processNext(while: { [weak self] in
+                    self?.routingEnabled == true && self?.persistencePaused == false
+                }) ?? .drained
+                guard routingEnabled, !persistencePaused else {
+                    routingKickPending = false
+                    break
+                }
+                switch disposition {
+                case .paused:
+                    routingKickPending = false
+                case .busy:
+                    routingKickPending = routingKickGeneration != passGeneration
+                case .moreWork:
+                    routingKickPending = routingEnabled && !persistencePaused
+                case .drained:
+                    routingKickPending = await hasQueuedRequestFromNewerKick(
+                        than: passGeneration
+                    )
+                }
+            }
+            routingTask = nil
+            if routingEnabled, !persistencePaused, routingKickPending {
+                startRoutingWorkerIfNeeded()
+            }
+        }
+    }
+
+    private func hasQueuedRequestFromNewerKick(than passGeneration: UInt64) async -> Bool {
+        while true {
+            let generationBeforeSnapshot = routingKickGeneration
+            guard generationBeforeSnapshot != passGeneration else { return false }
+            let requests = await queue.snapshot()
+            guard generationBeforeSnapshot == routingKickGeneration else { continue }
+            return requests.contains { $0.state == .queued }
         }
     }
 
