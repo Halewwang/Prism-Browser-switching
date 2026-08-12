@@ -13,12 +13,17 @@ public actor LinkRequestQueue {
     private var pendingRequests: [LinkRequest] = []
     private var terminalRecords: [TerminalRequestRecord] = []
     private var requestIDs: Set<UUID> = []
+    private var mutationPermitHeld = false
+    private var mutationWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(store: any PendingRequestStore) {
         self.store = store
     }
 
     public func restore() async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         let loaded = try await store.load()
         try Self.validateUniqueIDs(in: loaded)
 
@@ -33,11 +38,14 @@ public actor LinkRequestQueue {
 
         pendingRequests = recovered.pendingRequests
         terminalRecords = recovered.terminalRecords
-        requestIDs = Self.requestIDs(in: recovered)
+        requestIDs.formUnion(Self.requestIDs(in: recovered))
     }
 
     @discardableResult
     public func enqueue(_ request: LinkRequest) async throws -> Bool {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         guard !requestIDs.contains(request.id) else { return false }
 
         let candidatePending = pendingRequests + [request]
@@ -67,8 +75,11 @@ public actor LinkRequestQueue {
     }
 
     public func markPresenting(_ id: UUID) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         try await mutateRequest(id) { request in
-            guard request.state == .queued || request.state == .outcomeUnknown else {
+            guard request.state == .queued || request.state == .launching || request.state == .outcomeUnknown else {
                 throw LinkRequestQueueError.illegalTransition(id: id, from: request.state, to: .presenting)
             }
             request.state = .presenting
@@ -76,8 +87,11 @@ public actor LinkRequestQueue {
     }
 
     public func markLaunching(_ id: UUID, browserID: BrowserID) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         try await mutateRequest(id) { request in
-            guard request.state == .presenting || request.state == .outcomeUnknown else {
+            guard request.state == .queued || request.state == .presenting || request.state == .outcomeUnknown else {
                 throw LinkRequestQueueError.illegalTransition(id: id, from: request.state, to: .launching)
             }
             request.state = .launching
@@ -87,6 +101,9 @@ public actor LinkRequestQueue {
     }
 
     public func markOutcomeUnknown(_ id: UUID) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         try await mutateRequest(id) { request in
             guard request.state == .launching else {
                 throw LinkRequestQueueError.illegalTransition(id: id, from: request.state, to: .outcomeUnknown)
@@ -96,14 +113,23 @@ public actor LinkRequestQueue {
     }
 
     public func markCompleted(_ id: UUID, historyEntry: HistoryEntry?) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         try await moveToTerminal(id, outcome: .succeeded, historyEntry: historyEntry)
     }
 
     public func markCancelled(_ id: UUID, historyEntry: HistoryEntry?) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         try await moveToTerminal(id, outcome: .cancelled, historyEntry: historyEntry)
     }
 
     public func compactTerminal(_ id: UUID) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
         guard let index = terminalRecords.firstIndex(where: { $0.requestID == id }) else {
             throw LinkRequestQueueError.terminalRecordNotFound(id)
         }
@@ -112,7 +138,6 @@ public actor LinkRequestQueue {
         candidateTerminal.remove(at: index)
         try await save(pending: pendingRequests, terminal: candidateTerminal)
         terminalRecords = candidateTerminal
-        requestIDs.remove(id)
     }
 
     private func mutateRequest(
@@ -162,6 +187,24 @@ public actor LinkRequestQueue {
 
     private func save(pending: [LinkRequest], terminal: [TerminalRequestRecord]) async throws {
         try await store.save(PendingRequestSnapshot(pendingRequests: pending, terminalRecords: terminal))
+    }
+
+    private func acquireMutationPermit() async {
+        guard mutationPermitHeld else {
+            mutationPermitHeld = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            mutationWaiters.append(continuation)
+        }
+    }
+
+    private func releaseMutationPermit() {
+        guard !mutationWaiters.isEmpty else {
+            mutationPermitHeld = false
+            return
+        }
+        mutationWaiters.removeFirst().resume()
     }
 
     private static func validateUniqueIDs(in snapshot: PendingRequestSnapshot) throws {

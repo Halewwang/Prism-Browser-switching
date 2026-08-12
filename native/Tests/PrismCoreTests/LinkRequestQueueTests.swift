@@ -76,7 +76,22 @@ import Testing
 
     #expect(await queue.terminalSnapshot().isEmpty)
     #expect(await queue.snapshot() == [second])
-    #expect(try await queue.enqueue(first))
+    #expect(!(try await queue.enqueue(first)))
+}
+
+@Test func repeatedRestoreRetainsSeenIDsAfterTerminalCompaction() async throws {
+    let first = request(id: .test(32), url: "https://example.com/first")
+    let store = InMemoryPendingRequestStore(seed: [first])
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    try await queue.markCompleted(first.id, historyEntry: nil)
+    try await queue.compactTerminal(first.id)
+
+    try await queue.restore()
+
+    #expect(await queue.snapshot().isEmpty)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(!(try await queue.enqueue(first)))
 }
 
 @Test func identicalURLsWithDistinctIDsRemainSeparateFIFORequests() async throws {
@@ -125,6 +140,53 @@ import Testing
     #expect(unknown.state == .outcomeUnknown)
     #expect(unknown.attemptCount == 1)
     #expect(unknown.lastAttemptedBrowserID == "com.apple.Safari")
+}
+
+@Test func automaticLaunchFromQueuedPersistsOnceAndRollsBackOnSaveFailure() async throws {
+    let automatic = request(id: .test(61), url: "https://example.com/automatic")
+    let rollback = request(id: .test(62), url: "https://example.com/rollback")
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    _ = try await queue.enqueue(automatic)
+    _ = try await queue.enqueue(rollback)
+
+    try await queue.markLaunching(automatic.id, browserID: "com.apple.Safari")
+
+    let launched = try #require(await queue.snapshot().first)
+    #expect(launched.state == .launching)
+    #expect(launched.attemptCount == 1)
+    #expect(launched.lastAttemptedBrowserID == "com.apple.Safari")
+    #expect((await store.latestSnapshot).pendingRequests.first == launched)
+
+    await expectQueueError(.illegalTransition(id: automatic.id, from: .launching, to: .launching)) {
+        try await queue.markLaunching(automatic.id, browserID: "com.google.Chrome")
+    }
+    await store.failNextSave()
+    await expectStoreFailure { try await queue.markLaunching(rollback.id, browserID: "com.apple.Safari") }
+
+    #expect(await queue.snapshot() == [launched, rollback])
+    #expect((await store.latestSnapshot).pendingRequests == [launched, rollback])
+}
+
+@Test func handoffFailureCanReturnLaunchingRequestToPresentingWithoutLosingContext() async throws {
+    let original = request(id: .test(63), url: "https://example.com/handoff")
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    _ = try await queue.enqueue(original)
+    try await queue.markLaunching(original.id, browserID: "com.apple.Safari")
+
+    try await queue.markPresenting(original.id)
+
+    let recovered = try #require(await queue.snapshot().first)
+    #expect(recovered.state == .presenting)
+    #expect(recovered.url == original.url)
+    #expect(recovered.attemptCount == 1)
+    #expect(recovered.lastAttemptedBrowserID == "com.apple.Safari")
+    #expect(await queue.snapshot().map(\.id) == [original.id])
+    #expect((await store.latestSnapshot).pendingRequests == [recovered])
+    await expectQueueError(.illegalTransition(id: original.id, from: .presenting, to: .presenting)) {
+        try await queue.markPresenting(original.id)
+    }
 }
 
 @Test func cancellationCreatesTerminalRecordAndRejectsMismatchedHistory() async throws {
@@ -193,8 +255,8 @@ import Testing
     await expectQueueError(.requestNotFound(.test(101))) {
         try await queue.markPresenting(.test(101))
     }
-    await expectQueueError(.illegalTransition(id: original.id, from: .queued, to: .launching)) {
-        try await queue.markLaunching(original.id, browserID: "com.apple.Safari")
+    await expectQueueError(.illegalTransition(id: original.id, from: .queued, to: .outcomeUnknown)) {
+        try await queue.markOutcomeUnknown(original.id)
     }
     await expectQueueError(.terminalRecordNotFound(.test(101))) {
         try await queue.compactTerminal(.test(101))
@@ -264,6 +326,49 @@ import Testing
     #expect((await recoveryStore.latestSnapshot).pendingRequests == [launching])
 }
 
+@Test func serializesConcurrentEnqueuesWithoutLosingTheFirstRequest() async throws {
+    let first = request(id: .test(130), url: "https://example.com/first")
+    let second = request(id: .test(131), url: "https://example.com/second")
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    await store.suspendNextSave()
+
+    let firstEnqueue = Task { try await queue.enqueue(first) }
+    await store.waitUntilSaveSuspended()
+    let secondEnqueue = Task { try await queue.enqueue(second) }
+    for _ in 0..<10 { await Task.yield() }
+
+    #expect(await store.saveCount == 1)
+
+    await store.releaseSuspendedSave()
+    #expect(try await firstEnqueue.value)
+    #expect(try await secondEnqueue.value)
+    let expected = PendingRequestSnapshot(pendingRequests: [first, second], terminalRecords: [])
+    #expect(await queue.snapshot() == [first, second])
+    #expect(await store.latestSnapshot == expected)
+}
+
+@Test func failedSerializedSaveReleasesTheNextQueuedMutation() async throws {
+    let failed = request(id: .test(140), url: "https://example.com/failed")
+    let succeeding = request(id: .test(141), url: "https://example.com/succeeding")
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    await store.suspendNextSave()
+    await store.failNextSave()
+
+    let failedEnqueue = Task { try await queue.enqueue(failed) }
+    await store.waitUntilSaveSuspended()
+    let succeedingEnqueue = Task { try await queue.enqueue(succeeding) }
+    for _ in 0..<10 { await Task.yield() }
+    #expect(await store.saveCount == 1)
+
+    await store.releaseSuspendedSave()
+    await expectStoreFailure { _ = try await failedEnqueue.value }
+    #expect(try await succeedingEnqueue.value)
+    #expect(await queue.snapshot() == [succeeding])
+    #expect((await store.latestSnapshot).pendingRequests == [succeeding])
+}
+
 private actor InMemoryPendingRequestStore: PendingRequestStore {
     enum StoreError: Error, Equatable {
         case saveFailed
@@ -273,6 +378,10 @@ private actor InMemoryPendingRequestStore: PendingRequestStore {
     private(set) var latestSnapshot: PendingRequestSnapshot
     private(set) var saveCount = 0
     private var failedSavesRemaining = 0
+    private var shouldSuspendNextSave = false
+    private var suspendedSaveContinuations: [CheckedContinuation<Void, Never>] = []
+    private var suspendedSaveObservers: [CheckedContinuation<Void, Never>] = []
+    private var suspendedSaveCount = 0
 
     init(seed: [LinkRequest] = [], terminal: [TerminalRequestRecord] = []) {
         let snapshot = PendingRequestSnapshot(pendingRequests: seed, terminalRecords: terminal)
@@ -286,6 +395,17 @@ private actor InMemoryPendingRequestStore: PendingRequestStore {
 
     func save(_ snapshot: PendingRequestSnapshot) async throws {
         saveCount += 1
+        if shouldSuspendNextSave {
+            shouldSuspendNextSave = false
+            suspendedSaveCount += 1
+            let observers = suspendedSaveObservers
+            suspendedSaveObservers.removeAll()
+            observers.forEach { $0.resume() }
+            await withCheckedContinuation { continuation in
+                suspendedSaveContinuations.append(continuation)
+            }
+            suspendedSaveCount -= 1
+        }
         if failedSavesRemaining > 0 {
             failedSavesRemaining -= 1
             throw StoreError.saveFailed
@@ -296,6 +416,22 @@ private actor InMemoryPendingRequestStore: PendingRequestStore {
 
     func failNextSave() {
         failedSavesRemaining += 1
+    }
+
+    func suspendNextSave() {
+        shouldSuspendNextSave = true
+    }
+
+    func waitUntilSaveSuspended() async {
+        if suspendedSaveCount > 0 { return }
+        await withCheckedContinuation { continuation in
+            suspendedSaveObservers.append(continuation)
+        }
+    }
+
+    func releaseSuspendedSave() {
+        let continuation = suspendedSaveContinuations.removeFirst()
+        continuation.resume()
     }
 
     func replaceLoadedSnapshot(_ snapshot: PendingRequestSnapshot) {
