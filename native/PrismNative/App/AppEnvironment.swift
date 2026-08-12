@@ -20,7 +20,7 @@ extension AppSettings {
 @MainActor
 @Observable
 final class AppEnvironment: PersistenceWarningPresenting {
-    let route: AppRoute
+    private(set) var route: AppRoute
     private(set) var unmatchedBehavior: UnmatchedBehavior
     let updateChecker: any UpdateChecking
     let ruleRepository: any RuleRepository
@@ -134,6 +134,10 @@ final class AppEnvironment: PersistenceWarningPresenting {
         linkIntakeService = intake
         self.defaultBrowserService = defaultBrowserService
         self.loginItemService = loginItemService
+    }
+
+    func updateRoute(_ route: AppRoute) {
+        self.route = route
     }
 
     func present(_ warning: PersistenceWarning) {

@@ -53,6 +53,8 @@ final class ProductionAppComposition {
     let loginItemService: LoginItemService
     let selectorPresentationRelay: SelectorPresentationRelay
     let activationTracker: ApplicationActivationTracker
+    let mainWindowOpening: MainWindowOpening
+    let windowCoordinator: WindowCoordinator
 
     private let warningSource: (any PersistenceWarningSource)?
     private var restorationState = RestorationState.notStarted
@@ -70,8 +72,16 @@ final class ProductionAppComposition {
         defaultBrowserService: DefaultBrowserService,
         loginItemService: LoginItemService,
         selectorPresentationRelay: SelectorPresentationRelay? = nil,
-        activationTracker: ApplicationActivationTracker? = nil
+        activationTracker: ApplicationActivationTracker? = nil,
+        mainWindowOpening: MainWindowOpening? = nil,
+        windowCoordinator: WindowCoordinator? = nil
     ) {
+        let relay = selectorPresentationRelay ?? SelectorPresentationRelay()
+        let opening = mainWindowOpening ?? MainWindowOpening { [weak environment] route in
+            environment?.updateRoute(route)
+        }
+        let windows = windowCoordinator ?? WindowCoordinator(mainWindowOpening: opening)
+
         self.environment = environment
         self.recoveryQueue = recoveryQueue
         self.warningSource = warningSource
@@ -80,8 +90,11 @@ final class ProductionAppComposition {
         self.linkIntakeService = linkIntakeService
         self.defaultBrowserService = defaultBrowserService
         self.loginItemService = loginItemService
-        self.selectorPresentationRelay = selectorPresentationRelay ?? SelectorPresentationRelay()
+        self.selectorPresentationRelay = relay
         self.activationTracker = activationTracker ?? ApplicationActivationTracker()
+        self.mainWindowOpening = opening
+        self.windowCoordinator = windows
+        relay.target = windows
     }
 
     convenience init(

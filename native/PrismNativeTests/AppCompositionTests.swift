@@ -422,6 +422,7 @@ import Testing
     #expect(composition.environment.loginItemService === composition.loginItemService)
     #expect(composition.bootstrapBuffer === buffer)
     #expect(composition.environment.persistenceWarnings.isEmpty)
+    #expect(composition.selectorPresentationRelay.target === composition.windowCoordinator)
 }
 
 @Test @MainActor func appDelegateSynchronouslyBuffersOnlyWebURLsAndCopiedSenderPID() async throws {
