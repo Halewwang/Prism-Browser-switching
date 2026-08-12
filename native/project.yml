@@ -1,0 +1,81 @@
+name: PrismNative
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    macOS: "15.0"
+packages:
+  PrismCore:
+    path: .
+targets:
+  PrismNative:
+    type: application
+    platform: macOS
+    sources: [PrismNative]
+    dependencies:
+      - package: PrismCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prism.app
+        PRODUCT_NAME: Prism
+        PRODUCT_MODULE_NAME: PrismNative
+        MACOSX_DEPLOYMENT_TARGET: 15.0
+        SWIFT_VERSION: 6.0
+        ENABLE_HARDENED_RUNTIME: YES
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+    info:
+      path: PrismNative/Resources/Info.plist
+      properties:
+        CFBundleName: Prism
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.prism.app.http
+            CFBundleURLSchemes: [http]
+          - CFBundleURLName: com.prism.app.https
+            CFBundleURLSchemes: [https]
+        LSMinimumSystemVersion: "15.0"
+        NSPrincipalClass: NSApplication
+        SUFeedURL: https://github.com/Halewwang/Prism-Browser-switching/releases/latest/download/appcast.xml
+    entitlements:
+      path: PrismNative/Resources/PrismNative.entitlements
+  PrismNativeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [PrismNativeTests]
+    dependencies:
+      - target: PrismNative
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Prism.app/Contents/MacOS/Prism
+        BUNDLE_LOADER: $(TEST_HOST)
+  PrismNativeUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [PrismNativeUITests]
+    dependencies:
+      - target: PrismNative
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  PrismNative-Unit:
+    build:
+      targets:
+        PrismNative: all
+        PrismNativeTests: [test]
+    test:
+      targets: [PrismNativeTests]
+  PrismNative-UI:
+    build:
+      targets:
+        PrismNative: all
+        PrismNativeUITests: [test]
+    test:
+      targets: [PrismNativeUITests]
+  PrismNative-Release:
+    build:
+      targets:
+        PrismNative: all
+    archive:
+      config: Release

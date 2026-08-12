@@ -28,3 +28,5 @@ release/
 
 # User data
 dev-user-data/
+native/PrismNative.xcodeproj/
+native/build/
