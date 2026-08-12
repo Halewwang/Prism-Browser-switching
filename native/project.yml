@@ -11,6 +11,8 @@ targets:
     type: application
     platform: macOS
     sources: [PrismNative]
+    resources:
+      - path: PrismNative/Resources/SupportedSources.json
     dependencies:
       - package: PrismCore
     settings:
