@@ -82,7 +82,12 @@ struct WorkspaceOpenCompletionAdapter: WorkspaceOpenCompletionAdapting {
                 NSFileReadNoPermissionError,
                 NSFileReadInvalidFileNameError,
                 NSFileReadCorruptFileError,
-                NSFileReadNoSuchFileError
+                NSFileReadNoSuchFileError,
+                NSExecutableNotLoadableError,
+                NSExecutableArchitectureMismatchError,
+                NSExecutableRuntimeMismatchError,
+                NSExecutableLoadError,
+                NSExecutableLinkError
             ].contains(error.code)
         }
         if error.domain == NSPOSIXErrorDomain {
@@ -96,13 +101,18 @@ struct WorkspaceOpenCompletionAdapter: WorkspaceOpenCompletionAdapting {
         }
         guard error.domain == NSOSStatusErrorDomain else { return false }
         return [
+            Int(kLSNo32BitEnvironmentErr),
             Int(kLSAppInTrashErr),
+            Int(kLSExecutableIncorrectFormat),
             Int(kLSIncompatibleApplicationVersionErr),
+            Int(kLSNoRosettaEnvironmentErr),
+            Int(kLSGarbageCollectionUnsupportedErr),
             Int(kLSNotAnApplicationErr),
             Int(kLSApplicationNotFoundErr),
             Int(kLSNoRegistrationInfoErr),
             Int(kLSIncompatibleSystemVersionErr),
-            Int(kLSNoExecutableErr)
+            Int(kLSNoExecutableErr),
+            Int(kLSNoClassicEnvironmentErr)
         ].contains(error.code)
     }
 }

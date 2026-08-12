@@ -290,6 +290,90 @@ final class BrowserServiceContractTests: XCTestCase {
         XCTAssertEqual(surfacedError.code, originalError.code)
     }
 
+    func testWorkspaceCompletionAdapterClassifiesIncompatibleApplicationErrors() {
+        let adapter = WorkspaceOpenCompletionAdapter()
+        let incompatibleErrors = [
+            NSError(domain: NSCocoaErrorDomain, code: NSExecutableNotLoadableError),
+            NSError(domain: NSCocoaErrorDomain, code: NSExecutableArchitectureMismatchError),
+            NSError(domain: NSCocoaErrorDomain, code: NSExecutableRuntimeMismatchError),
+            NSError(domain: NSCocoaErrorDomain, code: NSExecutableLoadError),
+            NSError(domain: NSCocoaErrorDomain, code: NSExecutableLinkError),
+            NSError(domain: NSOSStatusErrorDomain, code: Int(kLSNo32BitEnvironmentErr)),
+            NSError(domain: NSOSStatusErrorDomain, code: Int(kLSExecutableIncorrectFormat)),
+            NSError(domain: NSOSStatusErrorDomain, code: Int(kLSNoRosettaEnvironmentErr)),
+            NSError(domain: NSOSStatusErrorDomain, code: Int(kLSGarbageCollectionUnsupportedErr)),
+            NSError(domain: NSOSStatusErrorDomain, code: Int(kLSNoClassicEnvironmentErr))
+        ]
+
+        for error in incompatibleErrors {
+            XCTAssertEqual(
+                workspaceCompletionCategory(adapter.resolve(didLaunchApplication: false, error: error)),
+                .applicationUnavailable,
+                "Expected \(error.domain) \(error.code) to make the application unavailable"
+            )
+        }
+    }
+
+    func testWorkspaceCompletionAdapterClassifiesKnownUnderlyingErrorsAndPreservesOuterUnknownError() {
+        let adapter = WorkspaceOpenCompletionAdapter()
+        let incompatibleApplication = NSError(
+            domain: NSCocoaErrorDomain,
+            code: NSExecutableArchitectureMismatchError
+        )
+        let unavailableOuterError = NSError(
+            domain: "com.prism.tests.outer",
+            code: 100,
+            userInfo: [NSUnderlyingErrorKey: incompatibleApplication]
+        )
+        let rejectionOuterError = NSError(
+            domain: "com.prism.tests.outer",
+            code: 101,
+            userInfo: [
+                NSUnderlyingErrorKey: NSError(
+                    domain: NSCocoaErrorDomain,
+                    code: NSUserCancelledError
+                )
+            ]
+        )
+        let unknownInnerError = NSError(domain: "com.prism.tests.inner", code: 102)
+        let unknownOuterError = NSError(
+            domain: "com.prism.tests.outer",
+            code: 103,
+            userInfo: [NSUnderlyingErrorKey: unknownInnerError]
+        )
+        let duplicateOuterError = NSError(
+            domain: "com.prism.tests.duplicate",
+            code: 104,
+            userInfo: [
+                NSUnderlyingErrorKey: NSError(
+                    domain: "com.prism.tests.duplicate",
+                    code: 104
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            workspaceCompletionCategory(
+                adapter.resolve(didLaunchApplication: false, error: unavailableOuterError)
+            ),
+            .applicationUnavailable
+        )
+        XCTAssertEqual(
+            workspaceCompletionCategory(
+                adapter.resolve(didLaunchApplication: false, error: rejectionOuterError)
+            ),
+            .rejected
+        )
+        assertOuterSystemError(
+            adapter.resolve(didLaunchApplication: false, error: unknownOuterError),
+            expected: unknownOuterError
+        )
+        assertOuterSystemError(
+            adapter.resolve(didLaunchApplication: false, error: duplicateOuterError),
+            expected: duplicateOuterError
+        )
+    }
+
     func testLauncherMapsWorkspaceFailureCategories() async throws {
         try await Task { @MainActor in
             let fixtures = try TemporaryApplicationBundles([
@@ -574,6 +658,13 @@ private func workspaceCompletionCategory(_ result: WorkspaceOpenCompletion) -> W
     case .failure(.system):
         .system
     }
+}
+
+private func assertOuterSystemError(_ result: WorkspaceOpenCompletion, expected: NSError) {
+    guard case let .failure(.system(error)) = result else {
+        return XCTFail("Expected the unknown outer error to remain a system error")
+    }
+    XCTAssertTrue(error as NSError === expected)
 }
 
 private func browserDescriptor(
