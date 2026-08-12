@@ -8,7 +8,9 @@ struct PrismNativeApp: App {
         WindowGroup(id: "main", for: MainWindowIdentity.self) { _ in
             MainWindowRoot(mainWindowOpening: appDelegate.composition.mainWindowOpening) {
 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("--source-probe") {
+                if DebugUITestConfiguration.selectorVariant != nil {
+                    DebugSelectorHarnessBootstrapView(appDelegate: appDelegate)
+                } else if ProcessInfo.processInfo.arguments.contains("--source-probe") {
                     SourceProbeView(recorder: appDelegate.sourceProbeRecorder)
                         .environment(appDelegate.environment)
                 } else {

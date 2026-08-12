@@ -21,6 +21,7 @@ extension AppSettings {
 @Observable
 final class AppEnvironment: PersistenceWarningPresenting {
     private(set) var route: AppRoute
+    private(set) var pendingSelectorRulePrefill: SelectorRulePrefill?
     private(set) var unmatchedBehavior: UnmatchedBehavior
     let updateChecker: any UpdateChecking
     let ruleRepository: any RuleRepository
@@ -44,6 +45,7 @@ final class AppEnvironment: PersistenceWarningPresenting {
         persistenceWarnings: [PersistenceWarning] = []
     ) {
         self.route = route
+        pendingSelectorRulePrefill = nil
         self.unmatchedBehavior = unmatchedBehavior
         self.updateChecker = updateChecker
         self.ruleRepository = ruleRepository
@@ -138,6 +140,16 @@ final class AppEnvironment: PersistenceWarningPresenting {
 
     func updateRoute(_ route: AppRoute) {
         self.route = route
+    }
+
+    func stageSelectorRulePrefill(_ prefill: SelectorRulePrefill) {
+        pendingSelectorRulePrefill = prefill
+        route = .rules
+    }
+
+    func consumeSelectorRulePrefill() -> SelectorRulePrefill? {
+        defer { pendingSelectorRulePrefill = nil }
+        return pendingSelectorRulePrefill
     }
 
     func present(_ warning: PersistenceWarning) {

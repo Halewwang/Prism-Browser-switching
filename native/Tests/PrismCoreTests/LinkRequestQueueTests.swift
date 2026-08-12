@@ -1,6 +1,99 @@
 import Foundation
 import Testing
-@testable import PrismCore
+@_spi(Testing) @testable import PrismCore
+
+@Test func pendingCountStreamPublishesOnlyCommittedCountChanges() async throws {
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    var iterator = await queue.pendingCountUpdates().makeAsyncIterator()
+    let request = request(id: .test(9), url: "https://example.com/live-count")
+
+    #expect(await iterator.next() == 0)
+    #expect(try await queue.enqueue(request))
+    #expect(await iterator.next() == 1)
+    try await queue.markCancelled(request.id, historyEntry: nil)
+    #expect(await iterator.next() == 0)
+}
+
+@Test func suspendedSavePublishesOnlyAfterTheSnapshotCommits() async throws {
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let recorder = PendingCountRecorder()
+    let stream = await queue.pendingCountUpdates()
+    let consumer = Task {
+        for await count in stream {
+            await recorder.record(count)
+        }
+    }
+    await recorder.waitUntilValueCount(1)
+    await store.suspendNextSave()
+
+    let enqueue = Task {
+        try await queue.enqueue(request(id: .test(905), url: "https://example.com/suspended"))
+    }
+    await store.waitUntilSaveSuspended()
+
+    #expect(await recorder.snapshot() == [0])
+    #expect(await queue.snapshot().isEmpty)
+
+    await store.releaseSuspendedSave()
+    #expect(try await enqueue.value)
+    await recorder.waitUntilValueCount(2)
+    #expect(await recorder.snapshot() == [0, 1])
+    consumer.cancel()
+    _ = await consumer.result
+}
+
+@Test func pendingCountStreamBuffersOnlyTheNewestValueForSlowConsumers() async throws {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    var iterator = await queue.pendingCountUpdates().makeAsyncIterator()
+    _ = await iterator.next()
+
+    #expect(try await queue.enqueue(request(id: .test(901), url: "https://example.com/one")))
+    #expect(try await queue.enqueue(request(id: .test(902), url: "https://example.com/two")))
+    #expect(try await queue.enqueue(request(id: .test(903), url: "https://example.com/three")))
+
+    #expect(await iterator.next() == 3)
+}
+
+@Test func failedSaveNeverPublishesAnUncommittedPendingCount() async throws {
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let stream = await queue.pendingCountUpdates()
+    let recorder = PendingCountRecorder()
+    let consumer = Task {
+        for await count in stream {
+            await recorder.record(count)
+        }
+    }
+    await recorder.waitUntilValueCount(1)
+    #expect(await recorder.snapshot() == [0])
+    await store.failNextSave()
+
+    await expectStoreFailure {
+        _ = try await queue.enqueue(request(id: .test(904), url: "https://example.com/fails"))
+    }
+
+    #expect(await queue.snapshot().isEmpty)
+    #expect((await store.latestSnapshot).pendingRequests.isEmpty)
+    #expect(await recorder.snapshot() == [0])
+    consumer.cancel()
+    _ = await consumer.result
+}
+
+@Test func cancellingConsumerRemovesPendingCountSubscriber() async {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let stream = await queue.pendingCountUpdates()
+    let consumer = Task {
+        for await _ in stream {}
+    }
+
+    await waitForPendingCountSubscriberCount(1, in: queue)
+    consumer.cancel()
+    _ = await consumer.result
+    await waitForPendingCountSubscriberCount(0, in: queue)
+    #expect(await queue.pendingCountSubscriberCountForTesting() == 0)
+}
 
 @Test func queuePreservesOrderAndRejectsDuplicateID() async throws {
     let store = InMemoryPendingRequestStore()
@@ -556,6 +649,44 @@ private actor InMemoryPendingRequestStore: PendingRequestStore {
     func replaceLoadedSnapshot(_ snapshot: PendingRequestSnapshot) {
         storedSnapshot = snapshot
     }
+}
+
+private actor PendingCountRecorder {
+    private var values: [Int] = []
+    private var waiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    func record(_ value: Int) {
+        values.append(value)
+        let ready = waiters.filter { values.count >= $0.count }
+        waiters.removeAll { values.count >= $0.count }
+        ready.forEach { $0.continuation.resume() }
+    }
+
+    func snapshot() -> [Int] {
+        values
+    }
+
+    func waitUntilValueCount(_ count: Int) async {
+        if values.count >= count { return }
+        await withCheckedContinuation { continuation in
+            waiters.append((count, continuation))
+        }
+    }
+}
+
+private func waitForPendingCountSubscriberCount(
+    _ expected: Int,
+    in queue: LinkRequestQueue,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    for _ in 0 ..< 1_000 {
+        if await queue.pendingCountSubscriberCountForTesting() == expected { return }
+        await Task.yield()
+    }
+    Issue.record(
+        "Timed out waiting for pending count subscriber count \(expected)",
+        sourceLocation: sourceLocation
+    )
 }
 
 private func request(id: UUID, url: String, state: LinkRequestState = .queued) -> LinkRequest {

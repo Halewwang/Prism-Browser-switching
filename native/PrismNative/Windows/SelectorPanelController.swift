@@ -36,14 +36,27 @@ final class SelectorPanelController: SelectorPanelControlling {
     }
 
     func present(content: AnyView, at origin: CGPoint) {
+        hostingView.rootView = AnyView(EmptyView())
+        hostingView.layoutSubtreeIfNeeded()
         hostingView.rootView = content
+        hostingView.layoutSubtreeIfNeeded()
         panel.setFrameOrigin(origin)
         panel.initialFirstResponder = hostingView
         panel.makeFirstResponder(hostingView)
+#if DEBUG
+        if DebugUITestConfiguration.isEnabled {
+            let supported: [NSAppearance.Name] = [.darkAqua, .aqua]
+            let panelAppearance = panel.effectiveAppearance.bestMatch(from: supported)?.rawValue ?? "unknown"
+            let hostingAppearance = hostingView.effectiveAppearance.bestMatch(from: supported)?.rawValue ?? "unknown"
+            panel.setAccessibilityValue("panel=\(panelAppearance);hosting=\(hostingAppearance)")
+        }
+#endif
         orderFront(panel)
     }
 
     func hide() {
+        hostingView.rootView = AnyView(EmptyView())
+        hostingView.layoutSubtreeIfNeeded()
         panel.orderOut(nil)
     }
 }

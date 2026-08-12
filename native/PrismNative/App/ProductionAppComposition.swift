@@ -54,6 +54,10 @@ final class ProductionAppComposition {
     let selectorPresentationRelay: SelectorPresentationRelay
     let activationTracker: ApplicationActivationTracker
     let mainWindowOpening: MainWindowOpening
+    let browserCatalog: any BrowserCataloging
+    let sourceManifest: SourceSupportManifest
+    let operatingSystemVersion: OperatingSystemVersion
+    let selectorSessionFactory: SelectorSessionFactory
     let windowCoordinator: WindowCoordinator
 
     private let warningSource: (any PersistenceWarningSource)?
@@ -74,13 +78,38 @@ final class ProductionAppComposition {
         selectorPresentationRelay: SelectorPresentationRelay? = nil,
         activationTracker: ApplicationActivationTracker? = nil,
         mainWindowOpening: MainWindowOpening? = nil,
+        browserCatalog: (any BrowserCataloging)? = nil,
+        sourceManifest: SourceSupportManifest = .disabled,
+        operatingSystemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
+        iconProvider: (any ApplicationIconProviding)? = nil,
+        selectorSessionFactory: SelectorSessionFactory? = nil,
         windowCoordinator: WindowCoordinator? = nil
     ) {
         let relay = selectorPresentationRelay ?? SelectorPresentationRelay()
         let opening = mainWindowOpening ?? MainWindowOpening { [weak environment] route in
             environment?.updateRoute(route)
         }
-        let windows = windowCoordinator ?? WindowCoordinator(mainWindowOpening: opening)
+        let catalog = browserCatalog ?? BrowserCatalogService(
+            browserPreferences: environment.browserPreferenceRepository
+        )
+        let pendingCountProvider = RecoveryQueuePendingCountProvider(queue: recoveryQueue)
+        let navigationHandler = AppSelectorNavigationHandler(
+            environment: environment,
+            mainWindowOpening: opening
+        )
+        let sessions = selectorSessionFactory ?? SelectorSessionFactory(
+            browserCatalog: catalog,
+            routingCoordinator: linkRoutingCoordinator,
+            pendingCountProvider: pendingCountProvider,
+            navigationHandler: navigationHandler,
+            iconProvider: iconProvider ?? ApplicationIconProvider(),
+            sourceManifest: sourceManifest,
+            operatingSystemVersion: operatingSystemVersion
+        )
+        let windows = windowCoordinator ?? WindowCoordinator(
+            mainWindowOpening: opening,
+            contentProvider: sessions
+        )
 
         self.environment = environment
         self.recoveryQueue = recoveryQueue
@@ -93,6 +122,10 @@ final class ProductionAppComposition {
         self.selectorPresentationRelay = relay
         self.activationTracker = activationTracker ?? ApplicationActivationTracker()
         self.mainWindowOpening = opening
+        self.browserCatalog = catalog
+        self.sourceManifest = sourceManifest
+        self.operatingSystemVersion = operatingSystemVersion
+        self.selectorSessionFactory = sessions
         self.windowCoordinator = windows
         relay.target = windows
     }
@@ -107,6 +140,8 @@ final class ProductionAppComposition {
         let relay = SelectorPresentationRelay()
         let tracker = ApplicationActivationTracker()
         let catalog = BrowserCatalogService(browserPreferences: environment.browserPreferenceRepository)
+        let sourceManifest = SourceSupportManifest.disabled
+        let operatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
         let coordinator = LinkRoutingCoordinator(
             queue: queue,
             ruleRepository: environment.ruleRepository,
@@ -114,7 +149,8 @@ final class ProductionAppComposition {
             settingsRepository: environment.settingsRepository,
             browserCatalog: catalog,
             browserLauncher: BrowserLauncherService(),
-            sourceManifest: .disabled,
+            sourceManifest: sourceManifest,
+            operatingSystemVersion: operatingSystemVersion,
             presenter: relay,
             warningPresenter: environment
         )
@@ -147,7 +183,10 @@ final class ProductionAppComposition {
             defaultBrowserService: defaultBrowser,
             loginItemService: loginItem,
             selectorPresentationRelay: relay,
-            activationTracker: tracker
+            activationTracker: tracker,
+            browserCatalog: catalog,
+            sourceManifest: sourceManifest,
+            operatingSystemVersion: operatingSystemVersion
         )
     }
 
@@ -299,6 +338,8 @@ final class ProductionAppComposition {
         let relay = SelectorPresentationRelay()
         let tracker = ApplicationActivationTracker()
         let sourceAttributor = SourceAttributionProvider()
+        let sourceManifest = SourceSupportManifest.bundled()
+        let operatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
         let coordinator = LinkRoutingCoordinator(
             queue: queue,
             ruleRepository: repositories.rules,
@@ -306,7 +347,8 @@ final class ProductionAppComposition {
             settingsRepository: repositories.settings,
             browserCatalog: catalog,
             browserLauncher: launcher,
-            sourceManifest: SourceSupportManifest.bundled(),
+            sourceManifest: sourceManifest,
+            operatingSystemVersion: operatingSystemVersion,
             presenter: relay,
             warningPresenter: environment
         )
@@ -339,7 +381,11 @@ final class ProductionAppComposition {
             defaultBrowserService: defaultBrowser,
             loginItemService: loginItem,
             selectorPresentationRelay: relay,
-            activationTracker: tracker
+            activationTracker: tracker,
+            browserCatalog: catalog,
+            sourceManifest: sourceManifest,
+            operatingSystemVersion: operatingSystemVersion,
+            iconProvider: ApplicationIconProvider(workspace: workspace)
         )
     }
 }

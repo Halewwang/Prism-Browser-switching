@@ -25,14 +25,13 @@ final class MainWindowOpening {
 
 @MainActor
 final class WindowCoordinator: LinkSelectionPresenting {
-    typealias ContentFactory = @MainActor (LinkRequest, SelectorPresentationContext) -> AnyView
-
     private let mainWindowOpening: MainWindowOpening
     private let panelController: any SelectorPanelControlling
     private let positioner: SelectorPositioner
     private let pointerLocation: @MainActor () -> CGPoint
     private let visibleFrames: @MainActor () -> [CGRect]
-    private let contentFactory: ContentFactory
+    let contentProvider: any SelectorContentProviding
+    private var activeSession: SelectorSession?
     private(set) var activeRequestID: UUID?
 
     init(
@@ -41,29 +40,27 @@ final class WindowCoordinator: LinkSelectionPresenting {
         positioner: SelectorPositioner = SelectorPositioner(),
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         visibleFrames: @escaping @MainActor () -> [CGRect] = { NSScreen.screens.map(\.visibleFrame) },
-        contentFactory: @escaping ContentFactory = { _, _ in
-            AnyView(
-                Text("Choose a browser")
-                    .frame(width: SelectorPanel.contentSize.width, height: SelectorPanel.contentSize.height)
-            )
-        }
+        contentProvider: any SelectorContentProviding
     ) {
         self.mainWindowOpening = mainWindowOpening
         self.panelController = panelController
         self.positioner = positioner
         self.pointerLocation = pointerLocation
         self.visibleFrames = visibleFrames
-        self.contentFactory = contentFactory
+        self.contentProvider = contentProvider
     }
 
     func present(_ request: LinkRequest, context: SelectorPresentationContext) {
-        activeRequestID = request.id
+        activeSession?.cancel()
+        let session = contentProvider.makeSession(request: request, context: context)
+        activeSession = session
+        activeRequestID = session.requestID
         let origin = positioner.origin(
             panelSize: SelectorPanel.contentSize,
             pointer: pointerLocation(),
             visibleFrames: visibleFrames()
         )
-        panelController.present(content: contentFactory(request, context), at: origin)
+        panelController.present(content: session.content, at: origin)
     }
 
     func dismiss(requestID: UUID) {
@@ -72,6 +69,8 @@ final class WindowCoordinator: LinkSelectionPresenting {
     }
 
     func hideSelector() {
+        activeSession?.cancel()
+        activeSession = nil
         activeRequestID = nil
         panelController.hide()
     }

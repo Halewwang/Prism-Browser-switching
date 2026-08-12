@@ -23,5 +23,10 @@ final class SelectorPanel: NSPanel {
         backgroundColor = .clear
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        setAccessibilityIdentifier("selector.panel")
+        setAccessibilityTitle(String(
+            localized: "selector.panel.accessibilityTitle",
+            defaultValue: "Browser selector"
+        ))
     }
 }

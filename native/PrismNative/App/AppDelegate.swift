@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 #if DEBUG
     let sourceProbeRecorder: SourceProbeRecorder
+    private var debugSelectorHarness: DebugSelectorHarness?
 #endif
 
     var environment: AppEnvironment {
@@ -20,12 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #if DEBUG
         let recorder = SourceProbeRecorder.makeDefault()
         sourceProbeRecorder = recorder
-        composition = ProductionAppComposition.make(
-            bootstrapBuffer: buffer,
-            diagnosticRecorder: { [weak recorder] diagnostic in
-                recorder?.record(diagnostic)
-            }
-        )
+        if DebugUITestConfiguration.isEnabled {
+            composition = ProductionAppComposition.makeForTesting(
+                bootstrapBuffer: buffer,
+                modelContainerFactory: { try ModelContainerFactory.make(inMemory: true) },
+                recoveryStoreFactory: { DebugUITestPendingRequestStore() }
+            )
+        } else {
+            composition = ProductionAppComposition.make(
+                bootstrapBuffer: buffer,
+                diagnosticRecorder: { [weak recorder] diagnostic in
+                    recorder?.record(diagnostic)
+                }
+            )
+        }
 #else
         composition = ProductionAppComposition.make(bootstrapBuffer: buffer)
 #endif
@@ -48,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+#if DEBUG
+        guard !DebugUITestConfiguration.isEnabled else { return }
+#endif
         let senderPID = copyCurrentSenderPID()
         for url in urls where BootstrapLinkBuffer.accepts(url) {
             composition.linkIntakeService.capture(url: url, senderPID: senderPID)
@@ -55,6 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+#if DEBUG
+        if DebugUITestConfiguration.isEnabled {
+            presentDebugSelectorHarness()
+            return
+        }
+#endif
         guard launchTask == nil else { return }
         let composition = composition
         launchTask = Task { @MainActor in
@@ -65,4 +83,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         composition.activationTracker.stop()
     }
+
+#if DEBUG
+    func presentDebugSelectorHarness() {
+        guard let variant = DebugUITestConfiguration.selectorVariant,
+              let appearance = DebugUITestConfiguration.selectorAppearance
+        else { return }
+        if debugSelectorHarness == nil {
+            debugSelectorHarness = DebugSelectorHarness(variant: variant, appearance: appearance)
+        }
+        debugSelectorHarness?.present()
+    }
+#endif
 }

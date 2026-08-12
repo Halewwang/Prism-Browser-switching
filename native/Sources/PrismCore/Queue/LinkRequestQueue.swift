@@ -13,6 +13,7 @@ public actor LinkRequestQueue {
     private var pendingRequests: [LinkRequest] = []
     private var terminalRecords: [TerminalRequestRecord] = []
     private var requestIDs: Set<UUID> = []
+    private var pendingCountContinuations: [UUID: AsyncStream<Int>.Continuation] = [:]
     private var mutationPermitHeld = false
     private var mutationWaiters: [CheckedContinuation<Void, Never>] = []
     private let mutationWaiterObserver: (@Sendable () -> Void)?
@@ -59,9 +60,33 @@ public actor LinkRequestQueue {
             try await store.save(recovered)
         }
 
+        let previousPendingCount = pendingRequests.count
         pendingRequests = recovered.pendingRequests
         terminalRecords = recovered.terminalRecords
         requestIDs.formUnion(Self.requestIDs(in: recovered))
+        publishPendingCountIfChanged(from: previousPendingCount)
+    }
+
+    public func pendingCountUpdates() -> AsyncStream<Int> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<Int>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        pendingCountContinuations[id] = continuation
+        if case .terminated = continuation.yield(pendingRequests.count) {
+            pendingCountContinuations[id] = nil
+        }
+        continuation.onTermination = { [weak self] _ in
+            Task {
+                await self?.removePendingCountContinuation(id: id)
+            }
+        }
+        return stream
+    }
+
+    @_spi(Testing)
+    public func pendingCountSubscriberCountForTesting() -> Int {
+        pendingCountContinuations.count
     }
 
     @discardableResult
@@ -73,8 +98,10 @@ public actor LinkRequestQueue {
 
         let candidatePending = pendingRequests + [request]
         try await save(pending: candidatePending, terminal: terminalRecords)
+        let previousPendingCount = pendingRequests.count
         pendingRequests = candidatePending
         requestIDs.insert(request.id)
+        publishPendingCountIfChanged(from: previousPendingCount)
         return true
     }
 
@@ -225,8 +252,27 @@ public actor LinkRequestQueue {
         )
         let candidateTerminal = terminalRecords + [record]
         try await save(pending: candidatePending, terminal: candidateTerminal)
+        let previousPendingCount = pendingRequests.count
         pendingRequests = candidatePending
         terminalRecords = candidateTerminal
+        publishPendingCountIfChanged(from: previousPendingCount)
+    }
+
+    private func publishPendingCountIfChanged(from previousCount: Int) {
+        guard pendingRequests.count != previousCount else { return }
+        var terminatedIDs: [UUID] = []
+        for (id, continuation) in pendingCountContinuations {
+            if case .terminated = continuation.yield(pendingRequests.count) {
+                terminatedIDs.append(id)
+            }
+        }
+        for id in terminatedIDs {
+            pendingCountContinuations[id] = nil
+        }
+    }
+
+    private func removePendingCountContinuation(id: UUID) {
+        pendingCountContinuations[id] = nil
     }
 
     private func save(pending: [LinkRequest], terminal: [TerminalRequestRecord]) async throws {
