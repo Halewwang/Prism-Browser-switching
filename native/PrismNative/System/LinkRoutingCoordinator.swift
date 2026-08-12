@@ -51,6 +51,11 @@ final class SelectorPresentationRelay: LinkSelectionPresenting {
 
 @MainActor
 final class LinkRoutingCoordinator: LinkRoutingCoordinating {
+    private struct RoutingSettings {
+        let values: AppSettings
+        let canWriteBack: Bool
+    }
+
     private struct AttemptContext {
         let request: LinkRequest
         let browser: BrowserDescriptor
@@ -172,7 +177,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
                 rules: rules,
                 availableBrowserIDs: Set(browsers.map(\.id)),
                 eligibleSourceBundleIDs: sourceManifest.eligibleBundleIDs(for: operatingSystemVersion),
-                settings: settings
+                settings: settings.values
             )
 
             switch decision {
@@ -288,7 +293,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         let settings = loadSettingsForRouting()
         var completedHistory = uncertainAttempts[requestID]?.successfulHistory
 
-        if settings.historyEnabled, completedHistory == nil,
+        if settings.values.historyEnabled, completedHistory == nil,
            let browserID = request.lastAttemptedBrowserID {
             let browserName = (try? await availableBrowser(id: browserID))?.displayName ?? browserID.rawValue
             var entry = existingOrNewHistory(for: request)
@@ -320,7 +325,10 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         }
 
         do {
-            try await queue.markCompleted(requestID, historyEntry: settings.historyEnabled ? completedHistory : nil)
+            try await queue.markCompleted(
+                requestID,
+                historyEntry: settings.values.historyEnabled ? completedHistory : nil
+            )
         } catch {
             presenter.present(
                 request,
@@ -334,7 +342,11 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         failedHandoffPersistence[requestID] = nil
         storageBlockedRequests[requestID] = nil
         presenter.dismiss(requestID: requestID)
-        await persistTerminalHistoryAndCompact(requestID: requestID, history: completedHistory, settings: settings)
+        await persistTerminalHistoryAndCompact(
+            requestID: requestID,
+            history: completedHistory,
+            settings: settings.values
+        )
         await processNext()
     }
 
@@ -344,7 +356,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
 
         guard let request = await request(withID: requestID) else { return }
         let settings = loadSettingsForRouting()
-        let history = settings.historyEnabled ? cancellationHistory(for: request) : nil
+        let history = settings.values.historyEnabled ? cancellationHistory(for: request) : nil
 
         do {
             try await queue.markCancelled(requestID, historyEntry: history)
@@ -359,7 +371,11 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         failedHandoffPersistence[requestID] = nil
         storageBlockedRequests[requestID] = nil
         presenter.dismiss(requestID: requestID)
-        await persistTerminalHistoryAndCompact(requestID: requestID, history: history, settings: settings)
+        await persistTerminalHistoryAndCompact(
+            requestID: requestID,
+            history: history,
+            settings: settings.values
+        )
         await processNext()
     }
 
@@ -368,14 +384,14 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         browser: BrowserDescriptor,
         method: RoutingMethod,
         ruleID: UUID?,
-        settings: AppSettings,
+        settings: RoutingSettings,
         ownsUserAction: Bool = false
     ) async -> Bool {
         guard ownsUserAction || !activeUserActionRequestIDs.contains(request.id) else { return false }
         guard attemptingRequestIDs.insert(request.id).inserted else { return false }
         defer { attemptingRequestIDs.remove(request.id) }
 
-        let startedHistory = settings.historyEnabled
+        let startedHistory = settings.values.historyEnabled
             ? makeStartedHistory(for: request, browser: browser, method: method, ruleID: ruleID)
             : nil
         if let startedHistory {
@@ -411,7 +427,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         do {
             try await queue.markCompleted(
                 request.id,
-                historyEntry: settings.historyEnabled ? successfulHistory : nil
+                historyEntry: settings.values.historyEnabled ? successfulHistory : nil
             )
         } catch {
             uncertainAttempts[request.id] = UncertainAttempt(
@@ -427,13 +443,13 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             historyByRequestID[request.id] = successfulHistory
         }
         presenter.dismiss(requestID: request.id)
-        if method == .manual {
-            saveLastUsedBrowserBestEffort(browser.id, settings: settings)
+        if method == .manual, settings.canWriteBack {
+            saveLastUsedBrowserBestEffort(browser.id, settings: settings.values)
         }
         await persistTerminalHistoryAndCompact(
             requestID: request.id,
             history: successfulHistory,
-            settings: settings
+            settings: settings.values
         )
         return true
     }
@@ -468,6 +484,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     }
 
     private func retryFailedHandoffPersistence(_ blocked: FailedHandoffPersistence) async {
+        let settings = loadSettingsForRouting()
         do {
             try await queue.markPresenting(blocked.context.request.id)
         } catch {
@@ -476,7 +493,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             return
         }
         failedHandoffPersistence[blocked.context.request.id] = nil
-        if let failedHistory = blocked.failedHistory {
+        if settings.values.historyEnabled, let failedHistory = blocked.failedHistory {
             historyByRequestID[blocked.context.request.id] = failedHistory
             upsertHistoryBestEffort(failedHistory)
         }
@@ -537,15 +554,12 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
         return browsers.first { $0.id == id && $0.availability == .available }
     }
 
-    private func loadSettingsForRouting() -> AppSettings {
+    private func loadSettingsForRouting() -> RoutingSettings {
         do {
-            return try settingsRepository.load()
+            return RoutingSettings(values: try settingsRepository.load(), canWriteBack: true)
         } catch {
             warningPresenter.present(.settingsNotSaved)
-            var safe = AppSettings.defaults
-            safe.automaticRulesEnabled = false
-            safe.unmatchedBehavior = .alwaysAsk
-            return safe
+            return RoutingSettings(values: .conservativePersistenceFallback, canWriteBack: false)
         }
     }
 

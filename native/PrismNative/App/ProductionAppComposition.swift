@@ -1,8 +1,49 @@
 import Foundation
 import PrismCore
 
+typealias RecoveryPendingRequestStore = any PendingRequestStore & PersistenceWarningSource
+
+@MainActor
+private final class ReconnectablePendingRequestStore: PendingRequestStore, PersistenceWarningSource {
+    typealias Factory = @MainActor @Sendable () throws -> RecoveryPendingRequestStore
+
+    private let factory: Factory
+    private var backing: RecoveryPendingRequestStore?
+
+    init(factory: @escaping Factory) {
+        self.factory = factory
+    }
+
+    func load() async throws -> PendingRequestSnapshot {
+        try await resolveBacking().load()
+    }
+
+    func save(_ snapshot: PendingRequestSnapshot) async throws {
+        try await resolveBacking().save(snapshot)
+    }
+
+    func drainPersistenceWarnings() async -> [PersistenceWarning] {
+        guard let backing else { return [] }
+        return await backing.drainPersistenceWarnings()
+    }
+
+    private func resolveBacking() throws -> RecoveryPendingRequestStore {
+        if let backing { return backing }
+        let created = try factory()
+        backing = created
+        return created
+    }
+}
+
 @MainActor
 final class ProductionAppComposition {
+    private enum RestorationState {
+        case notStarted
+        case restoring(id: UUID, task: Task<Bool, Never>)
+        case failed
+        case succeeded
+    }
+
     let environment: AppEnvironment
     let recoveryQueue: LinkRequestQueue
     let bootstrapBuffer: BootstrapLinkBuffer
@@ -14,8 +55,8 @@ final class ProductionAppComposition {
     let activationTracker: ApplicationActivationTracker
 
     private let warningSource: (any PersistenceWarningSource)?
-    private var didRestore = false
-    private var restoreSucceeded = false
+    private var restorationState = RestorationState.notStarted
+    private var didFinishRestoration = false
     private var didFinishLaunching = false
     private(set) var finishLaunchCount = 0
 
@@ -115,7 +156,7 @@ final class ProductionAppComposition {
     static func makeForTesting(
         bootstrapBuffer: BootstrapLinkBuffer = BootstrapLinkBuffer(),
         modelContainerFactory: @escaping @MainActor () throws -> ModelContainerResult,
-        recoveryStoreFactory: @escaping @MainActor () throws -> AtomicPendingRequestStore
+        recoveryStoreFactory: @escaping @MainActor @Sendable () throws -> RecoveryPendingRequestStore
     ) -> ProductionAppComposition {
         make(
             bootstrapBuffer: bootstrapBuffer,
@@ -127,13 +168,7 @@ final class ProductionAppComposition {
 
     @discardableResult
     func restoreOnce() async -> Bool {
-        guard !didRestore else { return restoreSucceeded }
-        didRestore = true
-        restoreSucceeded = await environment.restoreAndReconcile(
-            queue: recoveryQueue,
-            warningSource: warningSource
-        )
-        return restoreSucceeded
+        await restore(retryFailed: false)
     }
 
     func finishLaunchingOnce() async {
@@ -141,14 +176,73 @@ final class ProductionAppComposition {
         didFinishLaunching = true
         finishLaunchCount += 1
         guard await restoreOnce() else { return }
-        linkIntakeService.finishRestorationAndStartDraining()
+        await finishRestoration(allowAutomaticRouting: true)
+    }
+
+    @discardableResult
+    func retryRestorationAfterUserAction() async -> Bool {
+        guard await restore(retryFailed: true) else { return false }
+        await finishRestoration(allowAutomaticRouting: false)
+        return true
+    }
+
+    func resumeRoutingAfterRecoveryUserAction() async {
+        guard didFinishRestoration else { return }
+        await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
+    }
+
+    private func restore(retryFailed: Bool) async -> Bool {
+        switch restorationState {
+        case .succeeded:
+            return true
+        case let .restoring(id, task):
+            return await settleRestoration(id: id, task: task)
+        case .failed where !retryFailed:
+            return false
+        case .notStarted, .failed:
+            break
+        }
+
+        let environment = environment
+        let queue = recoveryQueue
+        let warningSource = warningSource
+        let id = UUID()
+        let task = Task { @MainActor in
+            await environment.restoreAndReconcile(
+                queue: queue,
+                warningSource: warningSource
+            )
+        }
+        restorationState = .restoring(id: id, task: task)
+        return await settleRestoration(id: id, task: task)
+    }
+
+    private func settleRestoration(id: UUID, task: Task<Bool, Never>) async -> Bool {
+        let succeeded = await task.value
+        if case let .restoring(currentID, _) = restorationState, currentID == id {
+            restorationState = succeeded ? .succeeded : .failed
+        }
+        return succeeded
+    }
+
+    private func finishRestoration(allowAutomaticRouting: Bool) async {
+        guard !didFinishRestoration else {
+            if allowAutomaticRouting {
+                await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
+            }
+            return
+        }
+        didFinishRestoration = true
+        linkIntakeService.finishRestorationAndStartDraining(
+            routeAfterDraining: allowAutomaticRouting
+        )
     }
 
     private static func make(
         bootstrapBuffer: BootstrapLinkBuffer,
         diagnosticRecorder: (@MainActor (LinkCaptureDiagnostic) -> Void)?,
         modelContainerFactory: @escaping @MainActor () throws -> ModelContainerResult,
-        recoveryStoreFactory: @escaping @MainActor () throws -> AtomicPendingRequestStore
+        recoveryStoreFactory: @escaping @MainActor @Sendable () throws -> RecoveryPendingRequestStore
     ) -> ProductionAppComposition {
         let repositories: RepositorySet
         var warnings: [PersistenceWarning] = []
@@ -168,17 +262,9 @@ final class ProductionAppComposition {
             repositories = .unavailable
         }
 
-        let queue: LinkRequestQueue
-        let warningSource: (any PersistenceWarningSource)?
-        do {
-            let store = try recoveryStoreFactory()
-            queue = LinkRequestQueue(store: store)
-            warningSource = store
-        } catch {
-            warnings.append(.recoveryStoreUnavailable)
-            queue = LinkRequestQueue(store: UnavailablePendingRequestStore())
-            warningSource = nil
-        }
+        let reconnectableStore = ReconnectablePendingRequestStore(factory: recoveryStoreFactory)
+        let queue = LinkRequestQueue(store: reconnectableStore)
+        let warningSource: (any PersistenceWarningSource)? = reconnectableStore
 
         let environment = AppEnvironment(
             route: .history,
@@ -302,19 +388,5 @@ private actor SessionPendingRequestStore: PendingRequestStore {
 
     func save(_ snapshot: PendingRequestSnapshot) async throws {
         self.snapshot = snapshot
-    }
-}
-
-private actor UnavailablePendingRequestStore: PendingRequestStore {
-    private enum StoreError: Error {
-        case unavailable
-    }
-
-    func load() async throws -> PendingRequestSnapshot {
-        throw StoreError.unavailable
-    }
-
-    func save(_: PendingRequestSnapshot) async throws {
-        throw StoreError.unavailable
     }
 }

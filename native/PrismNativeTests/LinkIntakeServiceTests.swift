@@ -138,11 +138,13 @@ import Testing
     let store = ScriptedPendingRequestStore()
     let queue = LinkRequestQueue(store: store)
     let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SpyRoutingCoordinator()
     let intake = LinkIntakeService(
         queue: queue,
         bootstrap: bootstrap,
         sourceAttributor: StubSourceAttributor(result: .unknown),
-        lastActivatedSource: { nil }
+        lastActivatedSource: { nil },
+        coordinator: coordinator
     )
     intake.capture(url: URL(string: "https://once.example")!, senderPID: nil)
     await store.failNextSave()
@@ -157,6 +159,68 @@ import Testing
 
     #expect(bootstrap.snapshot().isEmpty)
     #expect(await queue.snapshot().map(\.url.host) == ["once.example"])
+    #expect(intake.workerStartCount == 2)
+    #expect(coordinator.processNextCount == 0)
+
+    await intake.resumeRoutingAfterRecoveryUserAction()
+
+    #expect(coordinator.processNextCount == 1)
+    #expect(intake.workerStartCount == 2)
+}
+
+@Test @MainActor func routingResumeRefusesToPersistABufferedCapture() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer()
+    let coordinator = SpyRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.capture(url: URL(string: "https://still-buffered.example")!, senderPID: nil)
+    await store.failNextSave()
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+
+    intake.capture(url: URL(string: "https://also-buffered.example")!, senderPID: nil)
+    await intake.waitForDrainForTesting()
+
+    #expect(bootstrap.snapshot().map(\.url.host) == [
+        "still-buffered.example",
+        "also-buffered.example"
+    ])
+    #expect(await queue.snapshot().isEmpty)
+    #expect(coordinator.processNextCount == 0)
+    #expect(intake.workerStartCount == 1)
+
+    await intake.resumeRoutingAfterRecoveryUserAction()
+    await intake.waitForDrainForTesting()
+
+    #expect(bootstrap.snapshot().map(\.url.host) == [
+        "still-buffered.example",
+        "also-buffered.example"
+    ])
+    #expect(await queue.snapshot().isEmpty)
+    #expect(coordinator.processNextCount == 0)
+    #expect(intake.workerStartCount == 1)
+
+    intake.retryPendingPersistenceAfterUserAction()
+    await intake.waitForDrainForTesting()
+
+    #expect(bootstrap.snapshot().isEmpty)
+    #expect(await queue.snapshot().map(\.url.host) == [
+        "still-buffered.example",
+        "also-buffered.example"
+    ])
+    #expect(coordinator.processNextCount == 0)
+    #expect(intake.workerStartCount == 2)
+
+    await intake.resumeRoutingAfterRecoveryUserAction()
+
+    #expect(coordinator.processNextCount == 1)
     #expect(intake.workerStartCount == 2)
 }
 
@@ -628,6 +692,186 @@ import Testing
     #expect(harness.warning.last == .settingsNotSaved)
 }
 
+@Test @MainActor func settingsLoadFailureManualSelectionWritesNoHistoryOrPreference() async throws {
+    let settings = StubSettingsRepository(settings: .defaults, failLoad: true)
+    let harness = RoutingHarness(launchResults: [.success], settingsRepository: settings)
+    let request = LinkRequest.fixture(
+        id: fixedUUID(560),
+        url: "https://example.com/private?token=secret"
+    )
+    try await harness.queue.enqueue(request)
+    await harness.coordinator.processNext()
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 2)
+
+    await harness.coordinator.select(browserID: "com.apple.Safari", for: request.id)
+
+    #expect(harness.launcher.handoffCount == 1)
+    #expect(harness.history.upsertCallCount == 0)
+    #expect(settings.saveCount == 0)
+    let terminal = try #require(await harness.queue.terminalSnapshot().first)
+    #expect(terminal.outcome == .succeeded)
+    #expect(terminal.historyEntry == nil)
+    #expect(await harness.queue.next() == nil)
+}
+
+@Test @MainActor func settingsLoadFailureExplicitRetryWritesNoHistoryOrPreference() async throws {
+    let request = LinkRequest(
+        id: fixedUUID(561),
+        url: URL(string: "https://example.com/private?token=secret")!,
+        receivedAt: .now,
+        source: .unknown,
+        state: .outcomeUnknown,
+        attemptCount: 1,
+        lastAttemptedBrowserID: "com.apple.Safari"
+    )
+    let settings = StubSettingsRepository(settings: .defaults, failLoad: true)
+    let harness = RoutingHarness(
+        launchResults: [.success],
+        settingsRepository: settings,
+        restoredSnapshot: .init(pendingRequests: [request], terminalRecords: [])
+    )
+    try await harness.queue.restore()
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 2)
+
+    await harness.coordinator.retry(browserID: "com.apple.Safari", for: request.id)
+
+    #expect(harness.launcher.handoffCount == 1)
+    #expect(harness.history.upsertCallCount == 0)
+    #expect(settings.saveCount == 0)
+    let terminal = try #require(await harness.queue.terminalSnapshot().first)
+    #expect(terminal.outcome == .succeeded)
+    #expect(terminal.historyEntry == nil)
+    #expect(await harness.queue.next() == nil)
+}
+
+@Test @MainActor func settingsLoadFailureDuringFailedHandoffRetryAddsNoHistoryWrite() async throws {
+    var initialSettings = AppSettings.defaults
+    initialSettings.unmatchedBehavior = .preferredBrowser
+    initialSettings.preferredBrowserID = "com.apple.Safari"
+    let settings = StubSettingsRepository(settings: initialSettings)
+    let harness = RoutingHarness(
+        launchResults: [.failure],
+        settingsRepository: settings
+    )
+    let request = LinkRequest.fixture(id: fixedUUID(5610))
+    try await harness.queue.enqueue(request)
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 1)
+    await harness.coordinator.processNext()
+    let historyCallsBeforeRetry = harness.history.upsertCallCount
+    settings.failLoad = true
+
+    await harness.coordinator.retry(browserID: "com.apple.Safari", for: request.id)
+
+    #expect(settings.loadCount == 2)
+    #expect(harness.history.upsertCallCount == historyCallsBeforeRetry)
+    #expect((await harness.queue.snapshot()).first?.state == .presenting)
+    #expect(harness.launcher.handoffCount == 1)
+    #expect(harness.warning.warnings.contains(.settingsNotSaved))
+}
+
+@Test @MainActor func settingsLoadFailureCancellationWritesNoHistory() async throws {
+    let settings = StubSettingsRepository(settings: .defaults, failLoad: true)
+    let harness = RoutingHarness(settingsRepository: settings)
+    let request = LinkRequest.fixture(
+        id: fixedUUID(562),
+        url: "https://example.com/private?token=secret"
+    )
+    try await harness.queue.enqueue(request)
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 1)
+
+    await harness.coordinator.cancel(requestID: request.id)
+
+    #expect(harness.launcher.handoffCount == 0)
+    #expect(harness.history.upsertCallCount == 0)
+    #expect(settings.saveCount == 0)
+    let terminal = try #require(await harness.queue.terminalSnapshot().first)
+    #expect(terminal.outcome == .cancelled)
+    #expect(terminal.historyEntry == nil)
+    #expect(await harness.queue.next() == nil)
+}
+
+@Test @MainActor func settingsLoadFailureMarkCompletedWritesNoHistory() async throws {
+    let request = LinkRequest(
+        id: fixedUUID(563),
+        url: URL(string: "https://example.com/private?token=secret")!,
+        receivedAt: .now,
+        source: .unknown,
+        state: .outcomeUnknown,
+        attemptCount: 1,
+        lastAttemptedBrowserID: "com.apple.Safari"
+    )
+    let settings = StubSettingsRepository(settings: .defaults, failLoad: true)
+    let harness = RoutingHarness(
+        settingsRepository: settings,
+        restoredSnapshot: .init(pendingRequests: [request], terminalRecords: [])
+    )
+    try await harness.queue.restore()
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 1)
+
+    await harness.coordinator.markUncertainAttemptCompleted(requestID: request.id)
+
+    #expect(harness.launcher.handoffCount == 0)
+    #expect(harness.history.upsertCallCount == 0)
+    #expect(settings.saveCount == 0)
+    let terminal = try #require(await harness.queue.terminalSnapshot().first)
+    #expect(terminal.outcome == .succeeded)
+    #expect(terminal.historyEntry == nil)
+    #expect(await harness.queue.next() == nil)
+}
+
+@Test @MainActor func settingsLoadFailureReconcilesTerminalWithoutWritingHistory() async throws {
+    let requestID = fixedUUID(564)
+    let historyEntry = HistoryEntry(
+        id: requestID,
+        requestID: requestID,
+        sanitizedURL: URL(string: "https://example.com/private")!,
+        sourceBundleIdentifier: "com.example.source",
+        sourceDisplayName: "Example",
+        targetBrowserID: "com.apple.Safari",
+        targetDisplayName: "Safari",
+        method: .manual,
+        result: .success,
+        matchingRuleID: nil,
+        failureReason: nil,
+        attemptCount: 1,
+        createdAt: Date(timeIntervalSince1970: 100),
+        completedAt: Date(timeIntervalSince1970: 101)
+    )
+    let store = ScriptedPendingRequestStore(snapshot: .init(
+        pendingRequests: [],
+        terminalRecords: [TerminalRequestRecord(
+            requestID: requestID,
+            outcome: .succeeded,
+            historyEntry: historyEntry,
+            completedAt: Date(timeIntervalSince1970: 101)
+        )]
+    ))
+    let queue = LinkRequestQueue(store: store)
+    let history = StubHistoryRepository()
+    let settings = StubSettingsRepository(settings: .defaults, failLoad: true)
+    let environment = AppEnvironment(
+        route: .history,
+        unmatchedBehavior: .alwaysAsk,
+        updateChecker: DisabledUpdateChecker(),
+        ruleRepository: StubRuleRepository(),
+        historyRepository: history,
+        browserPreferenceRepository: InMemoryBrowserPreferenceRepository(),
+        settingsRepository: settings
+    )
+
+    let restored = await environment.restoreAndReconcile(queue: queue, warningSource: nil)
+
+    #expect(restored)
+    #expect(history.upsertCallCount == 0)
+    #expect(settings.saveCount == 0)
+    let terminal = try #require(await queue.terminalSnapshot().first)
+    #expect(terminal.requestID == requestID)
+    #expect(terminal.outcome == .succeeded)
+    #expect(terminal.historyEntry == nil)
+    #expect(await queue.next() == nil)
+    #expect(environment.persistenceWarnings == [.settingsNotSaved])
+}
+
 @MainActor
 private struct RoutingHarness {
     let pendingStore: ScriptedPendingRequestStore
@@ -739,6 +983,20 @@ private final class SpyWarningPresenter: PersistenceWarningPresenting {
 }
 
 @MainActor
+private final class SpyRoutingCoordinator: LinkRoutingCoordinating {
+    private(set) var processNextCount = 0
+
+    func processNext() async {
+        processNextCount += 1
+    }
+
+    func select(browserID _: BrowserID, for _: UUID) async {}
+    func retry(browserID _: BrowserID, for _: UUID) async {}
+    func markUncertainAttemptCompleted(requestID _: UUID) async {}
+    func cancel(requestID _: UUID) async {}
+}
+
+@MainActor
 private final class StubBrowserCatalog: BrowserCataloging {
     var browsers: [BrowserDescriptor]
     var error: Error?
@@ -839,8 +1097,9 @@ private final class StubHistoryRepository: HistoryRepository {
 @MainActor
 private final class StubSettingsRepository: SettingsRepository {
     private(set) var settings: AppSettings
-    private let failLoad: Bool
+    var failLoad: Bool
     private let failSave: Bool
+    private(set) var loadCount = 0
     private(set) var saveCount = 0
 
     init(settings: AppSettings, failLoad: Bool = false, failSave: Bool = false) {
@@ -850,6 +1109,7 @@ private final class StubSettingsRepository: SettingsRepository {
     }
 
     func load() throws -> AppSettings {
+        loadCount += 1
         if failLoad { throw StubRoutingError.storageFailed }
         return settings
     }

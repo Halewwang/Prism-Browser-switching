@@ -84,6 +84,8 @@ final class LinkIntakeService {
     private weak var coordinator: (any LinkRoutingCoordinating)?
     private weak var warningPresenter: (any PersistenceWarningPresenting)?
     private var restorationFinished = false
+    private var routingEnabled = false
+    private var persistencePaused = false
     private var drainTask: Task<Void, Never>?
     private(set) var workerStartCount = 0
 
@@ -108,21 +110,37 @@ final class LinkIntakeService {
     @discardableResult
     func capture(url: URL, senderPID: Int32?) -> Bool {
         let accepted = bootstrap.capture(url, senderPID: senderPID)
-        if accepted, restorationFinished {
-            startDrainWorkerIfNeeded()
+        if accepted, restorationFinished, !persistencePaused {
+            startDrainWorkerIfNeeded(routeAfterDraining: routingEnabled)
         }
         return accepted
     }
 
-    func finishRestorationAndStartDraining() {
+    func finishRestorationAndStartDraining(routeAfterDraining: Bool = true) {
         guard !restorationFinished else { return }
         restorationFinished = true
-        startDrainWorkerIfNeeded()
+        routingEnabled = routeAfterDraining
+        startDrainWorkerIfNeeded(routeAfterDraining: routeAfterDraining)
+    }
+
+    func resumeRoutingAfterRecoveryUserAction() async {
+        guard restorationFinished,
+              !routingEnabled,
+              !persistencePaused,
+              drainTask == nil,
+              bootstrap.first() == nil
+        else {
+            return
+        }
+        routingEnabled = true
+        await coordinator?.processNext()
     }
 
     func retryPendingPersistenceAfterUserAction() {
         guard restorationFinished, bootstrap.first() != nil else { return }
-        startDrainWorkerIfNeeded()
+        persistencePaused = false
+        routingEnabled = false
+        startDrainWorkerIfNeeded(routeAfterDraining: false)
     }
 
     func drainForTesting() async throws {
@@ -139,7 +157,7 @@ final class LinkIntakeService {
         }
     }
 
-    private func startDrainWorkerIfNeeded() {
+    private func startDrainWorkerIfNeeded(routeAfterDraining: Bool) {
         guard drainTask == nil else { return }
         workerStartCount += 1
         drainTask = Task { @MainActor [weak self] in
@@ -147,14 +165,20 @@ final class LinkIntakeService {
             var failed = false
             do {
                 try await drainBufferedLinks()
-                await coordinator?.processNext()
+                if routeAfterDraining, routingEnabled {
+                    await coordinator?.processNext()
+                }
             } catch {
                 failed = true
+                routingEnabled = false
+                persistencePaused = true
                 warningPresenter?.present(.recoveryStoreUnavailable)
             }
             drainTask = nil
             if !failed, restorationFinished, bootstrap.first() != nil {
-                startDrainWorkerIfNeeded()
+                startDrainWorkerIfNeeded(
+                    routeAfterDraining: routeAfterDraining && routingEnabled
+                )
             }
         }
     }

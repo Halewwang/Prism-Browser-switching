@@ -147,6 +147,27 @@ public actor LinkRequestQueue {
         terminalRecords = candidateTerminal
     }
 
+    public func discardTerminalHistory(_ id: UUID) async throws {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
+        guard let index = terminalRecords.firstIndex(where: { $0.requestID == id }) else {
+            throw LinkRequestQueueError.terminalRecordNotFound(id)
+        }
+        let existing = terminalRecords[index]
+        guard existing.historyEntry != nil else { return }
+
+        var candidateTerminal = terminalRecords
+        candidateTerminal[index] = TerminalRequestRecord(
+            requestID: existing.requestID,
+            outcome: existing.outcome,
+            historyEntry: nil,
+            completedAt: existing.completedAt
+        )
+        try await save(pending: pendingRequests, terminal: candidateTerminal)
+        terminalRecords = candidateTerminal
+    }
+
     private func mutateRequest(
         _ id: UUID,
         mutation: (inout LinkRequest) throws -> Void

@@ -287,7 +287,7 @@ import Testing
     #expect(await warnings.drainCount == 1)
 }
 
-@Test @MainActor func reconciliationUsesAlwaysAskAndHistoryEnabledWhenSettingsCannotLoad() async throws {
+@Test @MainActor func reconciliationUsesAlwaysAskAndNoHistoryWhenSettingsCannotLoad() async throws {
     let store = InMemoryPendingRequestStore()
     let queue = LinkRequestQueue(store: store)
     let request = LinkRequest.fixture()
@@ -305,8 +305,10 @@ import Testing
 
     #expect(environment.unmatchedBehavior == .alwaysAsk)
     #expect(environment.persistenceWarnings.contains(.settingsNotSaved))
-    #expect(await queue.terminalSnapshot().isEmpty)
-    #expect(try history.recent(limit: 10, newerThan: .distantPast) == [entry])
+    let terminal = try #require(await queue.terminalSnapshot().first)
+    #expect(terminal.requestID == request.id)
+    #expect(terminal.historyEntry == nil)
+    #expect(try history.recent(limit: 10, newerThan: .distantPast).isEmpty)
 }
 
 @Test @MainActor func reconciliationCompactsHistoryDisabledAndEntrylessTerminalRecords() async throws {

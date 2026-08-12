@@ -79,6 +79,30 @@ import Testing
     #expect(!(try await queue.enqueue(first)))
 }
 
+@Test func discardingTerminalHistoryRetainsURLFreeOutcomeWithoutHistoryPayload() async throws {
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let request = request(id: .test(13), url: "https://example.com/private?token=secret")
+    let history = HistoryEntry.processing(
+        request: request,
+        sanitizedURL: URL(string: "https://example.com/private")
+    )
+    try await queue.enqueue(request)
+    try await queue.markCompleted(request.id, historyEntry: history)
+
+    try await queue.discardTerminalHistory(request.id)
+
+    let terminal = try #require(await queue.terminalSnapshot().first)
+    #expect(terminal.requestID == request.id)
+    #expect(terminal.outcome == .succeeded)
+    #expect(terminal.historyEntry == nil)
+    #expect(await queue.next() == nil)
+    #expect(await store.latestSnapshot == PendingRequestSnapshot(
+        pendingRequests: [],
+        terminalRecords: [terminal]
+    ))
+}
+
 @Test func repeatedRestoreRetainsSeenIDsAfterTerminalCompaction() async throws {
     let first = request(id: .test(32), url: "https://example.com/first")
     let store = InMemoryPendingRequestStore(seed: [first])

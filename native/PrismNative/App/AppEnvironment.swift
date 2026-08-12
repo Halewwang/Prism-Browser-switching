@@ -1,6 +1,22 @@
 import Observation
 import PrismCore
 
+extension AppSettings {
+    static let conservativePersistenceFallback = AppSettings(
+        language: .system,
+        unmatchedBehavior: .alwaysAsk,
+        preferredBrowserID: nil,
+        lastUsedBrowserID: nil,
+        historyEnabled: false,
+        historyLimit: 0,
+        historyRetentionDays: 0,
+        automaticRulesEnabled: false,
+        showMenuBarItem: false,
+        onboardingCompleted: false,
+        schemaVersion: AppSettings.defaults.schemaVersion
+    )
+}
+
 @MainActor
 @Observable
 final class AppEnvironment: PersistenceWarningPresenting {
@@ -70,19 +86,28 @@ final class AppEnvironment: PersistenceWarningPresenting {
         }
 
         let settings: AppSettings
+        let settingsAvailable: Bool
         do {
             settings = try settingsRepository.load()
+            settingsAvailable = true
             unmatchedBehavior = settings.unmatchedBehavior
         } catch {
             addWarning(.settingsNotSaved)
-            var safeSettings = AppSettings.defaults
-            safeSettings.automaticRulesEnabled = false
-            safeSettings.unmatchedBehavior = .alwaysAsk
-            settings = safeSettings
-            unmatchedBehavior = safeSettings.unmatchedBehavior
+            settings = .conservativePersistenceFallback
+            settingsAvailable = false
+            unmatchedBehavior = settings.unmatchedBehavior
         }
 
         for terminalRecord in await queue.terminalSnapshot() {
+            if !settingsAvailable {
+                do {
+                    try await queue.discardTerminalHistory(terminalRecord.requestID)
+                } catch {
+                    addWarning(.recoveryStoreUnavailable)
+                }
+                continue
+            }
+
             if settings.historyEnabled, let historyEntry = terminalRecord.historyEntry {
                 do {
                     try historyRepository.upsert(historyEntry)
