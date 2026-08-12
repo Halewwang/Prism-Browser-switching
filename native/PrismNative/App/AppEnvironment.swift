@@ -3,7 +3,7 @@ import PrismCore
 
 @MainActor
 @Observable
-final class AppEnvironment {
+final class AppEnvironment: PersistenceWarningPresenting {
     let route: AppRoute
     private(set) var unmatchedBehavior: UnmatchedBehavior
     let updateChecker: any UpdateChecking
@@ -12,6 +12,10 @@ final class AppEnvironment {
     let browserPreferenceRepository: any BrowserPreferenceRepository
     let settingsRepository: any SettingsRepository
     private(set) var persistenceWarnings: [PersistenceWarning]
+    private(set) var linkRoutingCoordinator: LinkRoutingCoordinator?
+    private(set) var linkIntakeService: LinkIntakeService?
+    private(set) var defaultBrowserService: DefaultBrowserService?
+    private(set) var loginItemService: LoginItemService?
 
     init(
         route: AppRoute,
@@ -31,6 +35,10 @@ final class AppEnvironment {
         self.browserPreferenceRepository = browserPreferenceRepository
         self.settingsRepository = settingsRepository
         self.persistenceWarnings = persistenceWarnings
+        linkRoutingCoordinator = nil
+        linkIntakeService = nil
+        defaultBrowserService = nil
+        loginItemService = nil
     }
 
     static let preview = AppEnvironment(
@@ -43,15 +51,16 @@ final class AppEnvironment {
         settingsRepository: InMemorySettingsRepository()
     )
 
+    @discardableResult
     func restoreAndReconcile(
         queue: LinkRequestQueue,
         warningSource: (any PersistenceWarningSource)?
-    ) async {
+    ) async -> Bool {
         do {
             try await queue.restore()
         } catch {
             addWarning(.recoveryStoreUnavailable)
-            return
+            return false
         }
 
         if let warningSource {
@@ -89,6 +98,24 @@ final class AppEnvironment {
                 addWarning(.recoveryStoreUnavailable)
             }
         }
+        return true
+    }
+
+    func connectLinkRouting(
+        coordinator: LinkRoutingCoordinator,
+        intake: LinkIntakeService,
+        defaultBrowserService: DefaultBrowserService?,
+        loginItemService: LoginItemService?
+    ) {
+        precondition(linkRoutingCoordinator == nil && linkIntakeService == nil)
+        linkRoutingCoordinator = coordinator
+        linkIntakeService = intake
+        self.defaultBrowserService = defaultBrowserService
+        self.loginItemService = loginItemService
+    }
+
+    func present(_ warning: PersistenceWarning) {
+        addWarning(warning)
     }
 
     private func addWarning(_ warning: PersistenceWarning) {
