@@ -10,21 +10,31 @@ public struct URLSanitizer: Sendable {
             return nil
         }
 
-        if components.percentEncodedQuery != nil {
-            guard let queryItems = components.queryItems else {
-                return nil
+        if let query = components.percentEncodedQuery {
+            var safeSegments: [Substring] = []
+
+            for segment in query.split(separator: "&", omittingEmptySubsequences: false) where !segment.isEmpty {
+                let rawName = segment.prefix { $0 != "=" }
+                guard let decodedName = String(rawName).removingPercentEncoding else {
+                    return nil
+                }
+
+                if !isSensitiveQueryName(decodedName) {
+                    safeSegments.append(segment)
+                }
             }
 
-            let safeQueryItems = queryItems.filter { !isSensitiveQueryItem($0) }
-            components.queryItems = safeQueryItems.isEmpty ? nil : safeQueryItems
+            components.percentEncodedQuery = safeSegments.isEmpty
+                ? nil
+                : safeSegments.map(String.init).joined(separator: "&")
         }
 
         components.fragment = nil
         return components.url
     }
 
-    private func isSensitiveQueryItem(_ item: URLQueryItem) -> Bool {
-        let name = item.name.lowercased()
+    private func isSensitiveQueryName(_ name: String) -> Bool {
+        let name = name.lowercased()
         return Self.sensitiveNames.contains(name) || name.hasPrefix("utm_")
     }
 

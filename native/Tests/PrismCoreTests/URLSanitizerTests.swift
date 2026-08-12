@@ -33,3 +33,83 @@ import Testing
 
     #expect(sanitized?.absoluteString == "https://example.com/doc")
 }
+
+@Test func sanitizerPreservesTheOriginalEncodingOfSafeQuerySegments() {
+    let input = URL(string: "https://example.com/doc?safe=%2B%20%25&token=redacted")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=%2B%20%25")
+}
+
+@Test(arguments: [
+    "https://example.com/doc?token=redacted&",
+    "https://example.com/doc?&token=redacted",
+    "https://example.com/doc?token=redacted&&state=redacted"
+])
+func sanitizerRemovesDelimiterOnlySegmentsWhenNoSafeSegmentsRemain(_ input: String) {
+    let sanitized = URLSanitizer.default.sanitize(URL(string: input)!)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc")
+}
+
+@Test func sanitizerRetainsARealEmptyNameItem() {
+    let input = URL(string: "https://example.com/doc?=value&token=redacted")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?=value")
+}
+
+@Test(arguments: [
+    "token",
+    "access_token",
+    "auth",
+    "authorization",
+    "code",
+    "state",
+    "session",
+    "session_id",
+    "signature",
+    "gclid",
+    "fbclid"
+])
+func sanitizerRemovesEveryCaseInsensitiveExactSensitiveName(_ name: String) {
+    let input = URL(string: "https://example.com/doc?safe=keep&\(name.uppercased())=redacted&safe=again")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=keep&safe=again")
+}
+
+@Test func sanitizerRemovesPercentEncodedSensitiveNamesAndUTMNames() {
+    let input = URL(string: "https://example.com/doc?%74oken=redacted&%75tm_campaign=mail&safe=keep")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=keep")
+}
+
+@Test func sanitizerRetainsSensitiveTextInsideSafeNamesAndValuesWithoutReencoding() {
+    let input = URL(string: "custom://example/doc?mytoken=kept%2B&note=token%20value&safe=authorization%25&token=redacted#fragment")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "custom://example/doc?mytoken=kept%2B&note=token%20value&safe=authorization%25")
+}
+
+@Test func sanitizerFailsClosedWhenAParameterNameCannotBeDecoded() {
+    let input = URL(string: "https://example.com/doc?%FF=unknown&safe=keep")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized == nil)
+}
+
+@Test func sanitizerPreservesSafeDuplicatesOrderAndEncodedDelimiters() {
+    let input = URL(string: "https://example.com/doc?safe=keep&safe=keep&token=redacted&safe=one%26token%3Dvalue&&")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=keep&safe=keep&safe=one%26token%3Dvalue")
+}
