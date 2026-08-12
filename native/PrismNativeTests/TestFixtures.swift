@@ -4,6 +4,22 @@ import PrismCore
 extension LinkRequest {
     static func fixture(
         id: UUID = UUID(),
+        url: String,
+        receivedAt: Date = .now,
+        source: SourceApplication = .unknown,
+        state: LinkRequestState = .queued
+    ) -> LinkRequest {
+        fixture(
+            id: id,
+            url: URL(string: url)!,
+            receivedAt: receivedAt,
+            source: source,
+            state: state
+        )
+    }
+
+    static func fixture(
+        id: UUID = UUID(),
         url: URL = URL(string: "https://example.com")!,
         receivedAt: Date = .now,
         source: SourceApplication = .unknown,
