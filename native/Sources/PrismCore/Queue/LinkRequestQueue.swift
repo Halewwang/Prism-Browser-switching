@@ -15,9 +15,16 @@ public actor LinkRequestQueue {
     private var requestIDs: Set<UUID> = []
     private var mutationPermitHeld = false
     private var mutationWaiters: [CheckedContinuation<Void, Never>] = []
+    private let mutationWaiterObserver: (@Sendable () -> Void)?
 
     public init(store: any PendingRequestStore) {
         self.store = store
+        mutationWaiterObserver = nil
+    }
+
+    init(store: any PendingRequestStore, mutationWaiterObserver: @escaping @Sendable () -> Void) {
+        self.store = store
+        self.mutationWaiterObserver = mutationWaiterObserver
     }
 
     public func restore() async throws {
@@ -25,7 +32,7 @@ public actor LinkRequestQueue {
         defer { releaseMutationPermit() }
 
         let loaded = try await store.load()
-        try Self.validateUniqueIDs(in: loaded)
+        try Self.validateSnapshot(in: loaded)
 
         var recovered = loaded
         let hasInterruptedLaunch = recovered.pendingRequests.contains { $0.state == .launching }
@@ -196,6 +203,7 @@ public actor LinkRequestQueue {
         }
         await withCheckedContinuation { continuation in
             mutationWaiters.append(continuation)
+            mutationWaiterObserver?()
         }
     }
 
@@ -207,11 +215,19 @@ public actor LinkRequestQueue {
         mutationWaiters.removeFirst().resume()
     }
 
-    private static func validateUniqueIDs(in snapshot: PendingRequestSnapshot) throws {
+    private static func validateSnapshot(in snapshot: PendingRequestSnapshot) throws {
         let ids = snapshot.pendingRequests.map(\.id) + snapshot.terminalRecords.map(\.requestID)
         guard Set(ids).count == ids.count else {
             let duplicate = ids.first { id in ids.filter { $0 == id }.count > 1 }!
             throw LinkRequestQueueError.duplicateRequestID(duplicate)
+        }
+        for terminalRecord in snapshot.terminalRecords {
+            if let historyEntry = terminalRecord.historyEntry, historyEntry.requestID != terminalRecord.requestID {
+                throw LinkRequestQueueError.mismatchedHistoryRequestID(
+                    expected: terminalRecord.requestID,
+                    actual: historyEntry.requestID
+                )
+            }
         }
     }
 

@@ -245,6 +245,34 @@ import Testing
     #expect(await store.saveCount == saveCountBefore)
 }
 
+@Test func restoreRejectsTerminalHistoryMismatchesWithoutChangingCommittedQueue() async throws {
+    let known = request(id: .test(92), url: "https://example.com/known")
+    let terminalID = UUID.test(93)
+    let mismatchedHistoryID = UUID.test(94)
+    let store = InMemoryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    _ = try await queue.enqueue(known)
+    let saveCountBefore = await store.saveCount
+    await store.replaceLoadedSnapshot(PendingRequestSnapshot(
+        pendingRequests: [],
+        terminalRecords: [TerminalRequestRecord(
+            requestID: terminalID,
+            outcome: .succeeded,
+            historyEntry: history(requestID: mismatchedHistoryID, sanitizedURL: "https://example.com/safe"),
+            completedAt: Date(timeIntervalSince1970: 2)
+        )]
+    ))
+
+    await expectQueueError(.mismatchedHistoryRequestID(expected: terminalID, actual: mismatchedHistoryID)) {
+        try await queue.restore()
+    }
+
+    #expect(await queue.snapshot() == [known])
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(!(try await queue.enqueue(known)))
+    #expect(await store.saveCount == saveCountBefore)
+}
+
 @Test func unknownIDsAndIllegalTransitionsLeaveStateUntouchedWithoutSaving() async throws {
     let original = request(id: .test(100), url: "https://example.com/unknown")
     let store = InMemoryPendingRequestStore()
@@ -330,13 +358,17 @@ import Testing
     let first = request(id: .test(130), url: "https://example.com/first")
     let second = request(id: .test(131), url: "https://example.com/second")
     let store = InMemoryPendingRequestStore()
-    let queue = LinkRequestQueue(store: store)
+    let (waiterEvents, waiterSignal) = AsyncStream<Void>.makeStream()
+    let queue = LinkRequestQueue(store: store, mutationWaiterObserver: {
+        _ = waiterSignal.yield()
+    })
+    var waiterIterator = waiterEvents.makeAsyncIterator()
     await store.suspendNextSave()
 
     let firstEnqueue = Task { try await queue.enqueue(first) }
     await store.waitUntilSaveSuspended()
     let secondEnqueue = Task { try await queue.enqueue(second) }
-    for _ in 0..<10 { await Task.yield() }
+    #expect(await waiterIterator.next() != nil)
 
     #expect(await store.saveCount == 1)
 
@@ -352,14 +384,18 @@ import Testing
     let failed = request(id: .test(140), url: "https://example.com/failed")
     let succeeding = request(id: .test(141), url: "https://example.com/succeeding")
     let store = InMemoryPendingRequestStore()
-    let queue = LinkRequestQueue(store: store)
+    let (waiterEvents, waiterSignal) = AsyncStream<Void>.makeStream()
+    let queue = LinkRequestQueue(store: store, mutationWaiterObserver: {
+        _ = waiterSignal.yield()
+    })
+    var waiterIterator = waiterEvents.makeAsyncIterator()
     await store.suspendNextSave()
     await store.failNextSave()
 
     let failedEnqueue = Task { try await queue.enqueue(failed) }
     await store.waitUntilSaveSuspended()
     let succeedingEnqueue = Task { try await queue.enqueue(succeeding) }
-    for _ in 0..<10 { await Task.yield() }
+    #expect(await waiterIterator.next() != nil)
     #expect(await store.saveCount == 1)
 
     await store.releaseSuspendedSave()
