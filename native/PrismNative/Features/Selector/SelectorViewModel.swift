@@ -4,7 +4,7 @@ import Observation
 import PrismCore
 
 enum SelectorRulePrefill: Equatable, Sendable {
-    case domain(host: String, browserID: BrowserID)
+    case domain(host: String, browserID: BrowserID?)
     case source(bundleIdentifier: String, displayName: String, browserID: BrowserID)
 }
 

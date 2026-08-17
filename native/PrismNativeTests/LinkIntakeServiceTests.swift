@@ -63,6 +63,171 @@ import Testing
     #expect(await queue.snapshot().isEmpty)
 }
 
+@Test @MainActor func reopenedHistoryURLAppendsExactlyToFIFOWithUnknownSourceAndNewIdentity() async throws {
+    let existing = LinkRequest.fixture(id: fixedUUID(610), url: "https://existing.example")
+    let store = ScriptedPendingRequestStore(snapshot: .init(pendingRequests: [existing], terminalRecords: []))
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    let coordinator = SpyRoutingCoordinator()
+    let newID = fixedUUID(611)
+    let receivedAt = Date(timeIntervalSince1970: 611)
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: SourceApplication(
+            bundleIdentifier: "com.example.must-not-be-used",
+            displayName: "Must Not Be Used",
+            confidence: .confirmed
+        )),
+        lastActivatedSource: { nil },
+        coordinator: coordinator,
+        makeRequestID: { newID },
+        now: { receivedAt }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: true)
+    await intake.waitForDrainForTesting()
+    let routingCountBeforeReopen = coordinator.processNextCount
+    let safeURL = URL(string: "https://example.com/path?safe=value")!
+
+    let reopened = await intake.enqueueReopened(
+        url: safeURL,
+        fromHistoryEntryID: fixedUUID(609)
+    )
+
+    #expect(reopened?.id == newID)
+    #expect(reopened?.url.absoluteString == safeURL.absoluteString)
+    #expect(reopened?.receivedAt == receivedAt)
+    #expect(reopened?.source == .unknown)
+    #expect(reopened?.attemptCount == 0)
+    #expect(reopened?.reopenedFromHistoryEntryID == fixedUUID(609))
+    #expect(await queue.snapshot().map(\.id) == [existing.id, newID])
+    #expect(coordinator.explicitSelectionRequestIDs.isEmpty)
+    await intake.waitForDrainForTesting()
+    #expect(coordinator.processNextCount == routingCountBeforeReopen + 1)
+}
+
+@Test @MainActor func reopenedHistoryRejectsAnyURLThatIsNotAlreadySanitizedHTTPOrHTTPS() async throws {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let coordinator = SpyRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+
+    for unsafe in [
+        "https://user:password@example.com/private",
+        "https://example.com/private?token=secret",
+        "https://example.com/private#fragment",
+        "file:///private/secret.txt",
+    ] {
+        #expect(await intake.enqueueReopened(
+            url: URL(string: unsafe)!,
+            fromHistoryEntryID: fixedUUID(612)
+        ) == nil)
+    }
+
+    #expect(await queue.snapshot().isEmpty)
+    #expect(coordinator.explicitSelectionRequestIDs.isEmpty)
+}
+
+@Test @MainActor func reopenedHistoryPersistenceFailureCreatesNoRequestAndNeverRoutes() async {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let coordinator = SpyRoutingCoordinator()
+    let warning = SpyWarningPresenter()
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        coordinator: coordinator,
+        warningPresenter: warning
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await store.failNextSave()
+
+    let reopened = await intake.enqueueReopened(
+        url: URL(string: "https://example.com/safe")!,
+        fromHistoryEntryID: fixedUUID(613)
+    )
+
+    #expect(reopened == nil)
+    #expect(await queue.snapshot().isEmpty)
+    #expect(coordinator.explicitSelectionRequestIDs.isEmpty)
+    #expect(warning.last == .recoveryStoreUnavailable)
+}
+
+@Test @MainActor func reopenedHistoryReservesItsFIFOPositionBeforeAnySuspension() async throws {
+    let store = SuspendedRetryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    var externalIDs = [fixedUUID(620), fixedUUID(622)]
+    let bootstrap = BootstrapLinkBuffer(makeID: { externalIDs.removeFirst() })
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        makeRequestID: { fixedUUID(621) },
+        now: { Date(timeIntervalSince1970: 621) }
+    )
+    #expect(intake.capture(url: URL(string: "https://a.example")!, senderPID: nil))
+    await store.suspendNextSave()
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await store.waitUntilSaveSuspended()
+
+    let reopened = Task { @MainActor in
+        await intake.enqueueReopened(
+            url: URL(string: "https://b.example")!,
+            fromHistoryEntryID: fixedUUID(619)
+        )
+    }
+    await Task.yield()
+    #expect(intake.capture(url: URL(string: "https://c.example")!, senderPID: nil))
+
+    #expect(bootstrap.snapshot().map(\.url.host) == ["a.example", "b.example", "c.example"])
+    await store.releaseSuspendedSave()
+    #expect(await reopened.value?.id == fixedUUID(621))
+    await intake.waitForPersistenceForTesting()
+    #expect(await queue.snapshot().map(\.url.host) == ["a.example", "b.example", "c.example"])
+    #expect(await queue.snapshot().map(\.id) == [fixedUUID(620), fixedUUID(621), fixedUUID(622)])
+    let b = try #require((await queue.snapshot()).first { $0.url.host == "b.example" })
+    #expect(b.source == .unknown)
+    #expect(b.reopenedFromHistoryEntryID == fixedUUID(619))
+}
+
+@Test @MainActor func failedReopenPersistenceRemovesItsReservationAndNeverRoutesItLater() async throws {
+    let store = SuspendedRetryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let bootstrap = BootstrapLinkBuffer(makeID: { fixedUUID(630) })
+    let intake = LinkIntakeService(
+        queue: queue,
+        bootstrap: bootstrap,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil },
+        makeRequestID: { fixedUUID(631) }
+    )
+    #expect(intake.capture(url: URL(string: "https://a-fails.example")!, senderPID: nil))
+    await store.failNextSave()
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForPersistenceForTesting()
+    #expect(intake.recoveryState == .persistenceRetryRequired)
+
+    let result = await intake.enqueueReopened(
+        url: URL(string: "https://b-must-not-return.example")!,
+        fromHistoryEntryID: fixedUUID(629)
+    )
+
+    #expect(result == nil)
+    #expect(bootstrap.snapshot().map(\.url.host) == ["a-fails.example"])
+    #expect(await intake.retryPendingPersistenceAfterUserAction())
+    await intake.waitForPersistenceForTesting()
+    #expect(await queue.snapshot().map(\.url.host) == ["a-fails.example"])
+}
+
 @Test @MainActor func captureAssignsMonotonicSequenceAndCopiesPIDIntoAttribution() async throws {
     let store = InMemoryPendingRequestStore()
     let queue = LinkRequestQueue(store: store)
@@ -1016,6 +1181,25 @@ import Testing
     ))
 }
 
+@Test @MainActor func historyRetryFirstRepairsFailedHandoffPersistenceAndSecondRetryIsTheOnlyNewHandoff() async throws {
+    let harness = RoutingHarness(automaticBrowserID: "com.apple.Safari", launchResults: [.failure, .success])
+    let request = LinkRequest.fixture(id: fixedUUID(441))
+    try await harness.queue.enqueue(request)
+    await harness.pendingStore.failSave(afterAdditionalSuccessfulSaves: 1)
+    await harness.coordinator.processNext()
+
+    #expect(await harness.coordinator.canRetryFromHistory(requestID: request.id))
+    #expect(await harness.coordinator.retryFromHistory(browserID: "com.apple.Safari", requestID: request.id))
+    #expect(harness.launcher.handoffCount == 1)
+    #expect((await harness.queue.snapshot()).first?.state == .presenting)
+
+    #expect(await harness.coordinator.retryFromHistory(browserID: "com.apple.Safari", requestID: request.id))
+    #expect(harness.launcher.handoffCount == 2)
+    #expect(await harness.queue.next() == nil)
+    #expect(harness.history.entries.filter { $0.requestID == request.id }.count == 1)
+    #expect(harness.history.entries.first?.attemptCount == 2)
+}
+
 @Test @MainActor func terminalCompactionFailureLeavesURLFreeRecordAndDoesNotReplay() async throws {
     let harness = RoutingHarness(automaticBrowserID: "com.apple.Safari", launchResults: [.success])
     let request = LinkRequest.fixture(id: fixedUUID(45), url: "https://example.com/private?token=secret")
@@ -1600,12 +1784,18 @@ private final class SpyWarningPresenter: PersistenceWarningPresenting {
 @MainActor
 private final class SpyRoutingCoordinator: LinkRoutingCoordinating {
     private(set) var processNextCount = 0
+    private(set) var explicitSelectionRequestIDs: [UUID] = []
 
     func processNext(
         while _: @escaping @MainActor () -> Bool
     ) async -> LinkRoutingPassDisposition {
         processNextCount += 1
         return .drained
+    }
+
+    func presentForExplicitSelection(requestID: UUID) async -> Bool {
+        explicitSelectionRequestIDs.append(requestID)
+        return true
     }
 
     func select(browserID _: BrowserID, for _: UUID) async {}
@@ -1820,7 +2010,22 @@ private final class StubHistoryRepository: HistoryRepository {
     func upsert(_ entry: HistoryEntry) throws {
         upsertCallCount += 1
         if failureMode == .always { throw StubRoutingError.storageFailed }
-        values[entry.id] = entry
+        if let existing = values.values.first(where: { $0.requestID == entry.requestID }) {
+            values[existing.id] = historyEntryPreservingID(entry, id: existing.id)
+        } else {
+            values[entry.id] = entry
+        }
+    }
+
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws {
+        let previous = values
+        do {
+            try upsert(entry)
+            try enforceRetention(limit: limit, cutoff: cutoff)
+        } catch {
+            values = previous
+            throw error
+        }
     }
 
     func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
@@ -1830,6 +2035,25 @@ private final class StubHistoryRepository: HistoryRepository {
     func delete(id: UUID) throws { values[id] = nil }
     func clear() throws { values.removeAll() }
     func enforceRetention(limit _: Int, cutoff _: Date) throws {}
+}
+
+private func historyEntryPreservingID(_ entry: HistoryEntry, id: UUID) -> HistoryEntry {
+    HistoryEntry(
+        id: id,
+        requestID: entry.requestID,
+        sanitizedURL: entry.sanitizedURL,
+        sourceBundleIdentifier: entry.sourceBundleIdentifier,
+        sourceDisplayName: entry.sourceDisplayName,
+        targetBrowserID: entry.targetBrowserID,
+        targetDisplayName: entry.targetDisplayName,
+        method: entry.method,
+        result: entry.result,
+        matchingRuleID: entry.matchingRuleID,
+        failureReason: entry.failureReason,
+        attemptCount: entry.attemptCount,
+        createdAt: entry.createdAt,
+        completedAt: entry.completedAt
+    )
 }
 
 @MainActor

@@ -46,6 +46,7 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
     let updateChecker: any UpdateChecking
     let ruleRepository: any RuleRepository
     let historyRepository: any HistoryRepository
+    let historyService: HistoryService
     let browserPreferenceRepository: any BrowserPreferenceRepository
     let settingsRepository: any SettingsRepository
     private(set) var persistenceWarnings: [PersistenceWarning]
@@ -66,6 +67,7 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
         updateChecker: any UpdateChecking,
         ruleRepository: any RuleRepository,
         historyRepository: any HistoryRepository,
+        historyService: HistoryService? = nil,
         browserPreferenceRepository: any BrowserPreferenceRepository,
         settingsRepository: any SettingsRepository,
         persistenceWarnings: [PersistenceWarning] = []
@@ -80,6 +82,7 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
         self.updateChecker = updateChecker
         self.ruleRepository = ruleRepository
         self.historyRepository = historyRepository
+        self.historyService = historyService ?? HistoryService(repository: historyRepository)
         self.browserPreferenceRepository = browserPreferenceRepository
         self.settingsRepository = settingsRepository
         self.persistenceWarnings = persistenceWarnings
@@ -263,30 +266,11 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
             return false
         }
 
-        for terminalRecord in await queue.terminalSnapshot() {
-            if settings.historyEnabled, let historyEntry = terminalRecord.historyEntry {
-                do {
-                    try historyRepository.upsert(historyEntry)
-                } catch {
-                    addWarning(.historyNotSaved)
-                    continue
-                }
-            } else if !settings.historyEnabled, terminalRecord.historyEntry != nil {
-                do {
-                    try await queue.discardTerminalHistory(terminalRecord.requestID)
-                } catch {
-                    addWarning(.recoveryStoreUnavailable)
-                    continue
-                }
-            }
-
-            do {
-                try await queue.compactTerminal(terminalRecord.requestID)
-            } catch {
-                addWarning(.recoveryStoreUnavailable)
-            }
-        }
-
+        _ = await historyService.reconcile(
+            queue: queue,
+            settings: settings,
+            warning: { [weak self] warning in self?.addWarning(warning) }
+        )
         hasPendingTerminalHistoryReconciliation = !(await queue.terminalSnapshot()).isEmpty
         return !hasPendingTerminalHistoryReconciliation
     }

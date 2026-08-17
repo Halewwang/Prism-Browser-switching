@@ -64,6 +64,30 @@ func malformedSelectorArgumentsFailClosed(arguments: [String]) {
     #expect(!DebugUITestMode.malformedSelector.mayUseSystemServices)
 }
 
+@Test @MainActor func debugApplicationFixtureRequestsARegularForegroundApplicationWithAllWindows() {
+    let activator = DebugAppFixtureApplicationActivatorSpy()
+
+    DebugAppFixtureActivationAnchor.requestForeground(using: activator)
+
+    #expect(activator.receivedOptions == [[.activateAllWindows, .activateIgnoringOtherApps]])
+}
+
+@Test func debugApplicationFixtureHonorsTheExplicitLightAndDarkAppearanceArguments() {
+    #expect(DebugApplicationFixtureAppearance(arguments: [
+        "Prism", "-AppleInterfaceStyle", "Light",
+    ]) == .light)
+    #expect(DebugApplicationFixtureAppearance(arguments: [
+        "Prism", "-AppleInterfaceStyle", "Dark",
+    ]) == .dark)
+    #expect(DebugApplicationFixtureAppearance(arguments: [
+        "Prism", "-AppleInterfaceStyle", "Unknown",
+    ]) == nil)
+    #expect(DebugApplicationFixtureAppearance.current(
+        arguments: ["Prism"],
+        interfaceStylePreference: "Light"
+    ) == .light)
+}
+
 @Test @MainActor func debugApplicationFixtureUsesOnlyRecordingServices() async throws {
     let fixture = DebugAppFixture.make(bootstrapBuffer: BootstrapLinkBuffer())
 
@@ -119,6 +143,49 @@ func malformedSelectorArgumentsFailClosed(arguments: [String]) {
     #expect(fixture.recorder.browserHandoffCount == 0)
 }
 
+@Test @MainActor func historyFixturesUseOnlyMemoryAndExposeSafeContentOrTheRequestedFailureState() async throws {
+    let content = DebugAppFixture.make(
+        bootstrapBuffer: BootstrapLinkBuffer(),
+        variant: .history
+    )
+    await content.composition.finishLaunchingOnce()
+    #expect(content.composition.environment.startupPhase == .shell)
+    #expect(try await content.composition.environment.historyService.loadRecent(settings: .defaults).count == 2)
+    #expect(content.recorder.browserHandoffCount == 0)
+
+    let noURL = DebugAppFixture.make(
+        bootstrapBuffer: BootstrapLinkBuffer(),
+        variant: .historyNoURL
+    )
+    await noURL.composition.finishLaunchingOnce()
+    let noURLEntries = try await noURL.composition.environment.historyService.loadRecent(settings: .defaults)
+    #expect(noURLEntries.count == 1)
+    #expect(noURLEntries.first?.sanitizedURL == nil)
+    #expect(noURL.recorder.browserHandoffCount == 0)
+
+    let actions = DebugAppFixture.make(
+        bootstrapBuffer: BootstrapLinkBuffer(),
+        variant: .historyActions
+    )
+    await actions.composition.finishLaunchingOnce()
+    let activeRequestIDs = Set((await actions.composition.recoveryQueue.snapshot()).map(\.id))
+    #expect(activeRequestIDs == [UUID(uuidString: "00000000-0000-0000-0000-000000000204")!])
+    #expect(!(await actions.composition.linkRoutingCoordinator.canDeleteHistoryEntry(
+        requestID: UUID(uuidString: "00000000-0000-0000-0000-000000000204")!
+    )))
+    #expect(actions.recorder.browserHandoffCount == 0)
+
+    let failed = DebugAppFixture.make(
+        bootstrapBuffer: BootstrapLinkBuffer(),
+        variant: .historyLoadFailure
+    )
+    await failed.composition.finishLaunchingOnce()
+    await #expect(throws: Error.self) {
+        try await failed.composition.environment.historyService.loadRecent(settings: .defaults)
+    }
+    #expect(failed.recorder.browserHandoffCount == 0)
+}
+
 @Test @MainActor func debugStatusHostRecordsInstallationWithoutTouchingSystemStatusBar() {
     let recorder = DebugUITestEffectRecorder()
     let host = DebugNoopStatusItemHost(recorder: recorder)
@@ -158,5 +225,14 @@ func malformedSelectorArgumentsFailClosed(arguments: [String]) {
 
     #expect(delegate.retainedStatusItemController != nil)
     #expect(recorder.statusItemInstallCount == 1)
+}
+
+@MainActor
+private final class DebugAppFixtureApplicationActivatorSpy: DebugAppFixtureApplicationActivating {
+    private(set) var receivedOptions: [NSApplication.ActivationOptions] = []
+
+    func activate(options: NSApplication.ActivationOptions) {
+        receivedOptions.append(options)
+    }
 }
 #endif

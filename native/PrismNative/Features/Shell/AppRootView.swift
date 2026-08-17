@@ -253,6 +253,7 @@ struct AppRootShellCommands {
 @Observable
 final class AppRootCoordinator {
     let onboardingModel: OnboardingViewModel
+    let historyModel: HistoryViewModel
 
     private let composition: ProductionAppComposition
     private let systemActions: AppRootSystemActions
@@ -280,6 +281,18 @@ final class AppRootCoordinator {
             resumeRouting: { [weak composition] in
                 await composition?.resumeRoutingAfterOnboardingCompletion()
             }
+        )
+        let clipboard: any HistoryClipboardWriting = systemActions == nil
+            ? SystemHistoryClipboard()
+            : DiscardingHistoryClipboard()
+        historyModel = HistoryViewModel(
+            historyService: composition.environment.historyService,
+            queue: composition.recoveryQueue,
+            settings: { [weak composition] in composition?.environment.settings ?? .conservativePersistenceFallback },
+            coordinator: composition.linkRoutingCoordinator,
+            intake: composition.linkIntakeService,
+            clipboard: clipboard,
+            navigation: composition.environment
         )
         recoveryController = AppRootRecoveryController(dispatcher: AppRootRecoveryDispatcher(
             retryPendingTerminalHistory: { [weak composition] in
@@ -461,6 +474,7 @@ struct AppRootView: View {
             AppShellView(
                 route: coordinator.routeBinding,
                 actions: coordinator.shellActions,
+                historyModel: coordinator.historyModel,
                 recoveryBanner: coordinator.recoveryRendering?.banner,
                 onRecoveryAction: coordinator.performRecoveryAction
             )

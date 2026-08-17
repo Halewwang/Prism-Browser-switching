@@ -165,6 +165,7 @@ struct AppShellView: View {
     @Binding private var route: AppRoute
 
     private let actions: AppShellActions
+    private let historyModel: HistoryViewModel?
     private let presentation: AppShellPresentation
     private let recoveryBanner: RecoveryBannerModel?
     private let onRecoveryAction: () -> Void
@@ -172,12 +173,14 @@ struct AppShellView: View {
     init(
         route: Binding<AppRoute>,
         actions: AppShellActions = AppShellActions(),
+        historyModel: HistoryViewModel? = nil,
         rulesState: RulesShellState = .empty,
         recoveryBanner: RecoveryBannerModel? = nil,
         onRecoveryAction: @escaping () -> Void = {}
     ) {
         _route = route
         self.actions = actions
+        self.historyModel = historyModel
         presentation = AppShellPresentation(rulesState: rulesState)
         self.recoveryBanner = recoveryBanner
         self.onRecoveryAction = onRecoveryAction
@@ -205,9 +208,15 @@ struct AppShellView: View {
                     .padding(.top, 16)
             }
 
-            PageStateView(model: page.state) { rawAction in
-                guard let action = AppShellActionID(rawValue: rawAction) else { return }
-                actions.perform(action)
+            if route == .history, let historyModel {
+                HistoryView(model: historyModel) {
+                    actions.perform(.testLink)
+                }
+            } else {
+                PageStateView(model: page.state) { rawAction in
+                    guard let action = AppShellActionID(rawValue: rawAction) else { return }
+                    actions.perform(action)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

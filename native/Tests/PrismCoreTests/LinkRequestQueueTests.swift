@@ -622,6 +622,55 @@ import Testing
     #expect((await store.latestSnapshot).pendingRequests == [succeeding])
 }
 
+@Test func discardTerminalHistoryIfPresentIsTolerantAndPersistsBeforePublishing() async throws {
+    let request = request(id: .test(142), url: "https://example.com/cancelled")
+    let entry = history(requestID: request.id, sanitizedURL: request.url.absoluteString)
+    let terminal = TerminalRequestRecord(
+        requestID: request.id,
+        outcome: .cancelled,
+        historyEntry: entry,
+        completedAt: Date(timeIntervalSince1970: 100)
+    )
+    let store = InMemoryPendingRequestStore(terminal: [terminal])
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+
+    #expect(try await queue.discardTerminalHistoryIfPresent(request.id))
+    #expect(!(try await queue.discardTerminalHistoryIfPresent(UUID.test(143))))
+
+    let scrubbed = try #require((await queue.terminalSnapshot()).first)
+    #expect(scrubbed.requestID == request.id)
+    #expect(scrubbed.historyEntry == nil)
+    #expect((await store.latestSnapshot).terminalRecords == [scrubbed])
+}
+
+@Test func discardAllTerminalHistoryIsOneAtomicSaveAndFailureLeavesEveryPayloadIntact() async throws {
+    let first = request(id: .test(144), url: "https://example.com/first")
+    let second = request(id: .test(145), url: "https://example.com/second")
+    let terminal = [first, second].map { request in
+        TerminalRequestRecord(
+            requestID: request.id,
+            outcome: .cancelled,
+            historyEntry: history(requestID: request.id, sanitizedURL: request.url.absoluteString),
+            completedAt: Date(timeIntervalSince1970: 100)
+        )
+    }
+    let store = InMemoryPendingRequestStore(terminal: terminal)
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    await store.failNextSave()
+
+    await expectStoreFailure { _ = try await queue.discardAllTerminalHistory() }
+
+    #expect(await queue.terminalSnapshot() == terminal)
+    #expect((await store.latestSnapshot).terminalRecords == terminal)
+
+    let saveCount = await store.saveCount
+    #expect(try await queue.discardAllTerminalHistory() == 2)
+    #expect(await store.saveCount == saveCount + 1)
+    #expect((await queue.terminalSnapshot()).allSatisfy { $0.historyEntry == nil })
+}
+
 private actor InMemoryPendingRequestStore: PendingRequestStore {
     enum StoreError: Error, Equatable {
         case saveFailed

@@ -29,6 +29,10 @@ public struct URLSanitizer: Sendable {
                 : safeSegments.map(String.init).joined(separator: "&")
         }
 
+        if components.scheme?.lowercased() == "http" || components.scheme?.lowercased() == "https" {
+            components.user = nil
+            components.password = nil
+        }
         components.fragment = nil
         return components.url
     }
@@ -41,13 +45,40 @@ public struct URLSanitizer: Sendable {
     private static let sensitiveNames: Set<String> = [
         "token",
         "access_token",
+        "refresh_token",
+        "id_token",
+        "oauth_token",
+        "oauth_verifier",
         "auth",
         "authorization",
+        "bearer",
+        "jwt",
         "code",
         "state",
         "session",
         "session_id",
         "signature",
+        "password",
+        "pass",
+        "passwd",
+        "pwd",
+        "secret",
+        "client_secret",
+        "client-secret",
+        "api_key",
+        "api-key",
+        "apikey",
+        "key",
+        "private_key",
+        "secret_key",
+        "access_key",
+        "credential",
+        "credentials",
+        "assertion",
+        "saml_response",
+        "samlresponse",
+        "saml_request",
+        "samlrequest",
         "gclid",
         "fbclid"
     ]

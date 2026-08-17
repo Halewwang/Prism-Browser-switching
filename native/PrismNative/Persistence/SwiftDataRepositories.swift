@@ -12,6 +12,7 @@ protocol RuleRepository {
 @MainActor
 protocol HistoryRepository {
     func upsert(_ entry: HistoryEntry) throws
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws
     func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry]
     func delete(id: UUID) throws
     func clear() throws
@@ -74,12 +75,24 @@ final class SwiftDataHistoryRepository: HistoryRepository {
     }
 
     func upsert(_ entry: HistoryEntry) throws {
-        if let record = try context.fetch(FetchDescriptor<HistoryRecord>()).first(where: { $0.id == entry.id }) {
-            record.replace(with: entry)
-        } else {
-            context.insert(HistoryRecord(entry: entry))
+        do {
+            try upsertInContext(entry)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
-        try context.save()
+    }
+
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws {
+        do {
+            try upsertInContext(entry)
+            try enforceRetentionInContext(limit: limit, cutoff: cutoff)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
@@ -98,39 +111,117 @@ final class SwiftDataHistoryRepository: HistoryRepository {
     }
 
     func delete(id: UUID) throws {
-        if let record = try context.fetch(FetchDescriptor<HistoryRecord>()).first(where: { $0.id == id }) {
-            context.delete(record)
-            try context.save()
+        do {
+            if let record = try context.fetch(FetchDescriptor<HistoryRecord>()).first(where: { $0.id == id }) {
+                context.delete(record)
+                try context.save()
+            }
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
     func clear() throws {
-        for record in try context.fetch(FetchDescriptor<HistoryRecord>()) {
-            context.delete(record)
+        do {
+            for record in try context.fetch(FetchDescriptor<HistoryRecord>()) {
+                context.delete(record)
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
-        try context.save()
     }
 
     func enforceRetention(limit: Int, cutoff: Date) throws {
+        do {
+            try enforceRetentionInContext(limit: limit, cutoff: cutoff)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    private static func newestRecordFirst(_ lhs: HistoryRecord, _ rhs: HistoryRecord) -> Bool {
+        if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+        return lhs.id.uuidString > rhs.id.uuidString
+    }
+
+    private static func stableCanonicalRecordFirst(_ lhs: HistoryRecord, _ rhs: HistoryRecord) -> Bool {
+        if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private func upsertInContext(_ entry: HistoryEntry) throws {
         let records = try context.fetch(FetchDescriptor<HistoryRecord>())
-        var remaining = records.filter { record in
+        let requestRecords = records
+            .filter { $0.requestID == entry.requestID }
+            .sorted(by: Self.stableCanonicalRecordFirst)
+        if let record = requestRecords.first
+            ?? records.first(where: { $0.id == entry.id }) {
+            record.replace(with: entry)
+            for duplicate in requestRecords where duplicate !== record {
+                context.delete(duplicate)
+            }
+        } else {
+            context.insert(HistoryRecord(entry: entry))
+        }
+    }
+
+    private func enforceRetentionInContext(limit: Int, cutoff: Date) throws {
+        let records = try context.fetch(FetchDescriptor<HistoryRecord>())
+        let retainedByAge = records.filter { record in
             if record.createdAt < cutoff {
                 context.delete(record)
                 return false
             }
             return true
         }
-        remaining.sort { lhs, rhs in
-            if lhs.createdAt != rhs.createdAt {
-                return lhs.createdAt > rhs.createdAt
+
+        var canonicalByRequestID: [UUID: HistoryRecord] = [:]
+        for record in retainedByAge.sorted(by: Self.stableCanonicalRecordFirst) {
+            if canonicalByRequestID[record.requestID] == nil {
+                canonicalByRequestID[record.requestID] = record
             }
-            return lhs.id.uuidString > rhs.id.uuidString
         }
-        let retainedCount = max(limit, 0)
-        for record in remaining.dropFirst(retainedCount) {
+
+        for (requestID, canonical) in canonicalByRequestID {
+            let duplicates = retainedByAge.filter {
+                $0.requestID == requestID && $0 !== canonical
+            }
+            if let latest = ([canonical] + duplicates).sorted(by: Self.latestPayloadRecordFirst).first,
+               latest !== canonical {
+                canonical.replace(with: try latest.historyEntry())
+            }
+            for duplicate in duplicates {
+                context.delete(duplicate)
+            }
+        }
+
+        let remaining = Array(canonicalByRequestID.values).sorted(by: Self.newestRecordFirst)
+        for record in remaining.dropFirst(max(limit, 0)) {
             context.delete(record)
         }
-        try context.save()
+    }
+
+    private static func latestPayloadRecordFirst(_ lhs: HistoryRecord, _ rhs: HistoryRecord) -> Bool {
+        if lhs.attemptCount != rhs.attemptCount { return lhs.attemptCount > rhs.attemptCount }
+        let lhsCompletedAt = lhs.completedAt ?? .distantPast
+        let rhsCompletedAt = rhs.completedAt ?? .distantPast
+        if lhsCompletedAt != rhsCompletedAt { return lhsCompletedAt > rhsCompletedAt }
+        let resultRank: [String: Int] = [
+            HistoryResult.success.rawValue: 3,
+            HistoryResult.failure.rawValue: 2,
+            HistoryResult.cancelled.rawValue: 1,
+            HistoryResult.processing.rawValue: 0,
+        ]
+        if resultRank[lhs.result, default: -1] != resultRank[rhs.result, default: -1] {
+            return resultRank[lhs.result, default: -1] > resultRank[rhs.result, default: -1]
+        }
+        if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+        return lhs.id.uuidString > rhs.id.uuidString
     }
 }
 
@@ -230,15 +321,30 @@ final class InMemoryRuleRepository: RuleRepository {
 
 @MainActor
 final class InMemoryHistoryRepository: HistoryRepository {
-    private var entries: [UUID: HistoryEntry] = [:]
+    private var entriesByRequestID: [UUID: HistoryEntry] = [:]
 
     func upsert(_ entry: HistoryEntry) throws {
-        entries[entry.id] = entry
+        if let existing = entriesByRequestID[entry.requestID] {
+            entriesByRequestID[entry.requestID] = entry.preservingHistoryID(existing.id)
+        } else {
+            entriesByRequestID[entry.requestID] = entry
+        }
+    }
+
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws {
+        let previous = entriesByRequestID
+        do {
+            try upsert(entry)
+            try enforceRetention(limit: limit, cutoff: cutoff)
+        } catch {
+            entriesByRequestID = previous
+            throw error
+        }
     }
 
     func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
         guard limit > 0 else { return [] }
-        return entries.values
+        return entriesByRequestID.values
             .filter { $0.createdAt >= newerThan }
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(limit)
@@ -246,17 +352,39 @@ final class InMemoryHistoryRepository: HistoryRepository {
     }
 
     func delete(id: UUID) throws {
-        entries.removeValue(forKey: id)
+        guard let requestID = entriesByRequestID.first(where: { $0.value.id == id })?.key else { return }
+        entriesByRequestID.removeValue(forKey: requestID)
     }
 
     func clear() throws {
-        entries.removeAll()
+        entriesByRequestID.removeAll()
     }
 
     func enforceRetention(limit: Int, cutoff: Date) throws {
-        entries = entries.filter { $0.value.createdAt >= cutoff }
+        entriesByRequestID = entriesByRequestID.filter { $0.value.createdAt >= cutoff }
         let retained = try recent(limit: max(limit, 0), newerThan: .distantPast)
-        entries = Dictionary(uniqueKeysWithValues: retained.map { ($0.id, $0) })
+        entriesByRequestID = Dictionary(uniqueKeysWithValues: retained.map { ($0.requestID, $0) })
+    }
+}
+
+private extension HistoryEntry {
+    func preservingHistoryID(_ id: UUID) -> HistoryEntry {
+        HistoryEntry(
+            id: id,
+            requestID: requestID,
+            sanitizedURL: sanitizedURL,
+            sourceBundleIdentifier: sourceBundleIdentifier,
+            sourceDisplayName: sourceDisplayName,
+            targetBrowserID: targetBrowserID,
+            targetDisplayName: targetDisplayName,
+            method: method,
+            result: result,
+            matchingRuleID: matchingRuleID,
+            failureReason: failureReason,
+            attemptCount: attemptCount,
+            createdAt: createdAt,
+            completedAt: completedAt
+        )
     }
 }
 

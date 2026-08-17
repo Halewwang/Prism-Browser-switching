@@ -1,5 +1,6 @@
 import Foundation
 import PrismCore
+import SwiftData
 import Testing
 @testable import PrismNative
 
@@ -48,6 +49,36 @@ import Testing
     #expect(restored[0].sanitizedURL?.absoluteString == "https://example.com/private?safe=kept")
 }
 
+@Test @MainActor func historyRepositoryKeepsOneStableRowPerRequestID() throws {
+    let result = try ModelContainerFactory.make(inMemory: true)
+    let repository = SwiftDataHistoryRepository(container: result.container)
+    let requestID = fixedUUID(700)
+    let first = historyEntry(
+        id: fixedUUID(701),
+        requestID: requestID,
+        createdAt: Date(timeIntervalSince1970: 100),
+        url: "https://example.com/first"
+    )
+    var retry = historyEntry(
+        id: fixedUUID(702),
+        requestID: requestID,
+        createdAt: Date(timeIntervalSince1970: 100),
+        url: "https://example.com/retry"
+    )
+    retry.result = .success
+    retry.attemptCount = 2
+
+    try repository.upsert(first)
+    try repository.upsert(retry)
+
+    let restored = try repository.recent(limit: 10, newerThan: .distantPast)
+    #expect(restored.count == 1)
+    #expect(restored[0].id == first.id)
+    #expect(restored[0].requestID == requestID)
+    #expect(restored[0].attemptCount == 2)
+    #expect(restored[0].sanitizedURL?.absoluteString == "https://example.com/retry")
+}
+
 @Test @MainActor func historyFailureReasonsNeverPersistOriginalURLsOrTokens() throws {
     var entry = historyEntry(url: "https://example.com/safe")
     let privateReason = "Launch failed for https://example.com/private?token=do-not-store"
@@ -76,6 +107,232 @@ import Testing
 
     let restored = try repository.recent(limit: 10, newerThan: .distantPast)
     #expect(restored.map(\.id) == [beyondLimit.id, newestRetained.id])
+}
+
+@Test @MainActor func historyRetentionKeepsStableLegacyIdentityButRepairsItWithLatestPayload() throws {
+    let result = try ModelContainerFactory.make(inMemory: true)
+    let context = ModelContext(result.container)
+    let requestID = fixedUUID(710)
+    var oldFailure = historyEntry(
+        id: fixedUUID(711),
+        requestID: requestID,
+        createdAt: Date(timeIntervalSince1970: 100),
+        url: "https://example.com/old-failure"
+    )
+    oldFailure.result = .failure
+    oldFailure.failureReason = "launch_failed"
+    oldFailure.attemptCount = 1
+    oldFailure.completedAt = Date(timeIntervalSince1970: 101)
+    var latestSuccess = historyEntry(
+        id: fixedUUID(712),
+        requestID: requestID,
+        createdAt: Date(timeIntervalSince1970: 100),
+        url: "https://example.com/latest-success"
+    )
+    latestSuccess.attemptCount = 2
+    latestSuccess.completedAt = Date(timeIntervalSince1970: 102)
+    context.insert(HistoryRecord(entry: oldFailure))
+    context.insert(HistoryRecord(entry: latestSuccess))
+    try context.save()
+    let repository = SwiftDataHistoryRepository(container: result.container)
+
+    try repository.enforceRetention(limit: 100, cutoff: .distantPast)
+
+    let restored = try repository.recent(limit: 10, newerThan: .distantPast)
+    #expect(restored.count == 1)
+    #expect(restored.first?.id == oldFailure.id)
+    #expect(restored.first?.result == .success)
+    #expect(restored.first?.attemptCount == 2)
+    #expect(restored.first?.completedAt == latestSuccess.completedAt)
+    #expect(restored.first?.sanitizedURL?.absoluteString == "https://example.com/latest-success")
+}
+
+@Test @MainActor func historyServiceEnforcesThirtyDaysAndOneHundredRowsBeforeEveryRead() async throws {
+    let now = Date(timeIntervalSince1970: 10_000_000)
+    let cutoff = now.addingTimeInterval(-30 * 24 * 60 * 60)
+    let cutoffRepository = InMemoryHistoryRepository()
+    try cutoffRepository.upsert(historyEntry(createdAt: cutoff.addingTimeInterval(-1), url: "https://expired.example"))
+    let atCutoff = historyEntry(createdAt: cutoff, url: "https://cutoff.example")
+    try cutoffRepository.upsert(atCutoff)
+    let cutoffService = HistoryService(repository: cutoffRepository, now: { now })
+
+    let cutoffRows = try await cutoffService.loadRecent(settings: .defaults)
+
+    #expect(cutoffRows.map(\.id) == [atCutoff.id])
+
+    let limitedRepository = InMemoryHistoryRepository()
+    for offset in 0 ... 100 {
+        try limitedRepository.upsert(historyEntry(
+            requestID: fixedUUID(1_000 + offset),
+            createdAt: now.addingTimeInterval(TimeInterval(-offset)),
+            url: "https://limit.example/\(offset)"
+        ))
+    }
+    let limitedService = HistoryService(repository: limitedRepository, now: { now })
+
+    let limitedRows = try await limitedService.loadRecent(settings: .defaults)
+
+    #expect(limitedRows.count == 100)
+    #expect(limitedRows.first?.sanitizedURL?.absoluteString == "https://limit.example/0")
+    #expect(limitedRows.last?.sanitizedURL?.absoluteString == "https://limit.example/99")
+}
+
+@Test @MainActor func historyServiceEnforcesRetentionAfterEveryUpsert() async throws {
+    let now = Date(timeIntervalSince1970: 20_000_000)
+    let repository = CountingHistoryRepository()
+    let service = HistoryService(repository: repository, now: { now })
+
+    try await service.upsert(
+        historyEntry(createdAt: now, url: "https://example.com/new"),
+        settings: .defaults
+    )
+
+    #expect(repository.upsertCount == 1)
+    #expect(repository.retentionCalls == [
+        .init(limit: 100, cutoff: now.addingTimeInterval(-30 * 24 * 60 * 60)),
+    ])
+}
+
+@Test @MainActor func historyDeleteScrubsRecoveryJournalBeforeRemovingTheVisibleRow() async throws {
+    let entry = historyEntry(requestID: fixedUUID(1_200), url: "https://example.com/private")
+    let repository = CountingHistoryRepository(entries: [entry])
+    let terminal = TerminalRequestRecord(
+        requestID: entry.requestID,
+        outcome: .cancelled,
+        historyEntry: entry,
+        completedAt: Date(timeIntervalSince1970: 10)
+    )
+    let store = HistoryFailurePendingStore(snapshot: .init(pendingRequests: [], terminalRecords: [terminal]))
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    await store.failNextSave()
+    let service = HistoryService(repository: repository)
+
+    await #expect(throws: HistoryFailurePendingStore.Failure.self) {
+        try await service.delete(entry: entry, queue: queue)
+    }
+
+    #expect(repository.deleteCount == 0)
+    #expect(try repository.recent(limit: 10, newerThan: .distantPast) == [entry])
+    #expect((await queue.terminalSnapshot()).first?.historyEntry == entry)
+}
+
+@Test @MainActor func historyClearUsesOneAtomicJournalScrubBeforeClearingTheRepository() async throws {
+    let first = historyEntry(requestID: fixedUUID(1_201), url: "https://example.com/first")
+    let second = historyEntry(requestID: fixedUUID(1_202), url: "https://example.com/second")
+    let repository = CountingHistoryRepository(entries: [first, second])
+    let terminals = [first, second].map { entry in
+        TerminalRequestRecord(
+            requestID: entry.requestID,
+            outcome: .cancelled,
+            historyEntry: entry,
+            completedAt: Date(timeIntervalSince1970: 10)
+        )
+    }
+    let store = HistoryFailurePendingStore(snapshot: .init(pendingRequests: [], terminalRecords: terminals))
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    await store.failNextSave()
+    let service = HistoryService(repository: repository)
+
+    await #expect(throws: HistoryFailurePendingStore.Failure.self) {
+        try await service.clear(queue: queue)
+    }
+
+    #expect(repository.clearCount == 0)
+    #expect(try repository.recent(limit: 10, newerThan: .distantPast).count == 2)
+    #expect((await queue.terminalSnapshot()).compactMap(\.historyEntry).count == 2)
+}
+
+@Test @MainActor func historyDeleteReportsRecoveryScrubWhenVisibleRowRemovalFails() async throws {
+    let entry = historyEntry(requestID: fixedUUID(1_204), url: "https://example.com/private")
+    let repository = CountingHistoryRepository(entries: [entry])
+    repository.failDelete = true
+    let terminal = TerminalRequestRecord(
+        requestID: entry.requestID,
+        outcome: .cancelled,
+        historyEntry: entry,
+        completedAt: Date(timeIntervalSince1970: 10)
+    )
+    let queue = LinkRequestQueue(store: HistoryFailurePendingStore(snapshot: .init(
+        pendingRequests: [],
+        terminalRecords: [terminal]
+    )))
+    try await queue.restore()
+    let service = HistoryService(repository: repository)
+
+    do {
+        try await service.delete(entry: entry, queue: queue)
+        Issue.record("Expected the History delete to report its partial scrub")
+    } catch let error as HistoryServiceError {
+        #expect(error == .recoveryPayloadScrubbedButHistoryDeleteFailed)
+    }
+
+    #expect(try repository.recent(limit: 10, newerThan: .distantPast) == [entry])
+    #expect((await queue.terminalSnapshot()).first?.historyEntry == nil)
+}
+
+@Test @MainActor func historyClearReportsRecoveryScrubWhenVisibleRowsCannotBeCleared() async throws {
+    let first = historyEntry(requestID: fixedUUID(1_205), url: "https://example.com/first")
+    let second = historyEntry(requestID: fixedUUID(1_206), url: "https://example.com/second")
+    let repository = CountingHistoryRepository(entries: [first, second])
+    repository.failClear = true
+    let terminalRecords = [first, second].map { entry in
+        TerminalRequestRecord(
+            requestID: entry.requestID,
+            outcome: .cancelled,
+            historyEntry: entry,
+            completedAt: Date(timeIntervalSince1970: 10)
+        )
+    }
+    let queue = LinkRequestQueue(store: HistoryFailurePendingStore(snapshot: .init(
+        pendingRequests: [],
+        terminalRecords: terminalRecords
+    )))
+    try await queue.restore()
+    let service = HistoryService(repository: repository)
+
+    do {
+        try await service.clear(queue: queue)
+        Issue.record("Expected the History clear to report its partial scrub")
+    } catch let error as HistoryServiceError {
+        #expect(error == .recoveryPayloadScrubbedButHistoryClearFailed)
+    }
+
+    #expect(try repository.recent(limit: 10, newerThan: .distantPast).count == 2)
+    #expect((await queue.terminalSnapshot()).compactMap(\.historyEntry).isEmpty)
+}
+
+@Test @MainActor func queuedReconciliationReadsTerminalSnapshotOnlyAfterClearFinishes() async throws {
+    let entry = historyEntry(requestID: fixedUUID(1_203), url: "https://example.com/do-not-revive")
+    let terminal = TerminalRequestRecord(
+        requestID: entry.requestID,
+        outcome: .cancelled,
+        historyEntry: entry,
+        completedAt: Date(timeIntervalSince1970: 10)
+    )
+    let repository = CountingHistoryRepository(entries: [entry])
+    let store = ScriptedPendingRequestStore(
+        snapshot: .init(pendingRequests: [], terminalRecords: [terminal]),
+        suspendedSaveCalls: [1]
+    )
+    let queue = LinkRequestQueue(store: store)
+    try await queue.restore()
+    let service = HistoryService(repository: repository)
+
+    let clear = Task { @MainActor in try await service.clear(queue: queue) }
+    await store.waitUntilSaveSuspended(call: 1)
+    let reconcile = Task { @MainActor in
+        await service.reconcile(queue: queue, settings: .defaults, warning: { _ in })
+    }
+    await Task.yield()
+    await store.releaseSuspendedSave(call: 1)
+
+    try await clear.value
+    #expect(await reconcile.value)
+    #expect(try repository.recent(limit: 10, newerThan: .distantPast).isEmpty)
+    #expect(await queue.terminalSnapshot().isEmpty)
+    #expect(repository.upsertCount == 0)
 }
 
 @Test @MainActor func ruleRepositoryUsesSharedURLThenSourcePriorityAndIDOrdering() throws {
@@ -778,10 +1035,103 @@ private final class FailingHistoryRepository: HistoryRepository {
     private enum Failure: Error { case unavailable }
 
     func upsert(_: HistoryEntry) throws { throw Failure.unavailable }
+    func upsertAndEnforceRetention(_: HistoryEntry, limit _: Int, cutoff _: Date) throws {
+        throw Failure.unavailable
+    }
     func recent(limit _: Int, newerThan _: Date) throws -> [HistoryEntry] { [] }
     func delete(id _: UUID) throws {}
     func clear() throws {}
     func enforceRetention(limit _: Int, cutoff _: Date) throws {}
+}
+
+@MainActor
+private final class CountingHistoryRepository: HistoryRepository {
+    private enum Failure: Error { case expected }
+
+    struct RetentionCall: Equatable {
+        let limit: Int
+        let cutoff: Date
+    }
+
+    private var entriesByRequestID: [UUID: HistoryEntry]
+    private(set) var upsertCount = 0
+    private(set) var deleteCount = 0
+    private(set) var clearCount = 0
+    private(set) var retentionCalls: [RetentionCall] = []
+    var failDelete = false
+    var failClear = false
+
+    init(entries: [HistoryEntry] = []) {
+        entriesByRequestID = Dictionary(uniqueKeysWithValues: entries.map { ($0.requestID, $0) })
+    }
+
+    func upsert(_ entry: HistoryEntry) throws {
+        upsertCount += 1
+        entriesByRequestID[entry.requestID] = entry
+    }
+
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws {
+        let previous = entriesByRequestID
+        do {
+            try upsert(entry)
+            try enforceRetention(limit: limit, cutoff: cutoff)
+        } catch {
+            entriesByRequestID = previous
+            throw error
+        }
+    }
+
+    func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
+        Array(entriesByRequestID.values
+            .filter { $0.createdAt >= newerThan }
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(max(limit, 0)))
+    }
+
+    func delete(id: UUID) throws {
+        deleteCount += 1
+        if failDelete { throw Failure.expected }
+        guard let requestID = entriesByRequestID.first(where: { $0.value.id == id })?.key else { return }
+        entriesByRequestID[requestID] = nil
+    }
+
+    func clear() throws {
+        clearCount += 1
+        if failClear { throw Failure.expected }
+        entriesByRequestID.removeAll()
+    }
+
+    func enforceRetention(limit: Int, cutoff: Date) throws {
+        retentionCalls.append(.init(limit: limit, cutoff: cutoff))
+        entriesByRequestID = entriesByRequestID.filter { $0.value.createdAt >= cutoff }
+        let retained = try recent(limit: limit, newerThan: .distantPast)
+        entriesByRequestID = Dictionary(uniqueKeysWithValues: retained.map { ($0.requestID, $0) })
+    }
+}
+
+private actor HistoryFailurePendingStore: PendingRequestStore {
+    enum Failure: Error { case saveFailed }
+
+    private var snapshot: PendingRequestSnapshot
+    private var failedSavesRemaining = 0
+
+    init(snapshot: PendingRequestSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func load() async throws -> PendingRequestSnapshot { snapshot }
+
+    func save(_ snapshot: PendingRequestSnapshot) async throws {
+        if failedSavesRemaining > 0 {
+            failedSavesRemaining -= 1
+            throw Failure.saveFailed
+        }
+        self.snapshot = snapshot
+    }
+
+    func failNextSave() {
+        failedSavesRemaining += 1
+    }
 }
 
 @MainActor
@@ -805,6 +1155,17 @@ private final class ScriptedHistoryRepository: HistoryRepository {
             persistedEntries[index] = entry
         } else {
             persistedEntries.append(entry)
+        }
+    }
+
+    func upsertAndEnforceRetention(_ entry: HistoryEntry, limit: Int, cutoff: Date) throws {
+        let previous = persistedEntries
+        do {
+            try upsert(entry)
+            try enforceRetention(limit: limit, cutoff: cutoff)
+        } catch {
+            persistedEntries = previous
+            throw error
         }
     }
 

@@ -13,7 +13,7 @@ class PrismUITestCase: XCTestCase {
 
     override func tearDown() {
         for application in launchedApplications.reversed() where application.state != .notRunning {
-            application.terminate()
+            terminateFixture(application)
         }
         launchedApplications.removeAll()
         super.tearDown()
@@ -34,9 +34,30 @@ class PrismUITestCase: XCTestCase {
         launchedApplications.append(application)
         application.launch()
 
-        XCTAssertEqual(application.state, .runningForeground, file: file, line: line)
+        // Wait until the fixture owns its normal AppKit window before asking
+        // XCTest to bring it forward. Activating during the app-launch phase
+        // can itself race the window server and leave a macOS UI test waiting
+        // for a background-only process.
         _ = requireMainWindow(in: application, file: file, line: line)
+        application.activate()
+        application.activate()
+        _ = waitUntil(timeout: 2, file: file, line: line) {
+            application.state == .runningForeground
+        }
         return application
+    }
+
+    func terminateFixture(
+        _ application: XCUIApplication,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard application.state != .notRunning else { return }
+        application.terminate()
+        _ = waitUntil(timeout: timeout, file: file, line: line) {
+            application.state == .notRunning
+        }
     }
 
     @discardableResult
@@ -122,8 +143,15 @@ class PrismUITestCase: XCTestCase {
             file: file,
             line: line
         )
-        XCTAssertEqual(title.label, expectedTitle, file: file, line: line)
+        XCTAssertEqual(accessibilityText(of: title), expectedTitle, file: file, line: line)
         return title
+    }
+
+    func accessibilityText(of element: XCUIElement) -> String {
+        if let value = element.value as? String, !value.isEmpty {
+            return value
+        }
+        return element.label
     }
 
     func waitUntil(

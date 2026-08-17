@@ -149,10 +149,14 @@ enum DebugUITestConfiguration {
 }
 
 actor DebugUITestPendingRequestStore: PendingRequestStore, PersistenceWarningSource {
-    private var snapshot = PendingRequestSnapshot(pendingRequests: [], terminalRecords: [])
+    private var snapshot: PendingRequestSnapshot
     private let failsLoad: Bool
 
-    init(failsLoad: Bool = false) {
+    init(
+        initialSnapshot: PendingRequestSnapshot = .init(pendingRequests: [], terminalRecords: []),
+        failsLoad: Bool = false
+    ) {
+        snapshot = initialSnapshot
         self.failsLoad = failsLoad
     }
 

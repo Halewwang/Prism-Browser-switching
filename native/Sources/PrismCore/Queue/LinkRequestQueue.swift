@@ -232,6 +232,55 @@ public actor LinkRequestQueue {
         terminalRecords = candidateTerminal
     }
 
+    /// Removes a terminal History payload when it is still present. Missing or
+    /// already-scrubbed records are a successful no-op for user deletion flows.
+    @discardableResult
+    public func discardTerminalHistoryIfPresent(_ id: UUID) async throws -> Bool {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
+        guard let index = terminalRecords.firstIndex(where: { $0.requestID == id }),
+              terminalRecords[index].historyEntry != nil
+        else {
+            return false
+        }
+        let existing = terminalRecords[index]
+        var candidateTerminal = terminalRecords
+        candidateTerminal[index] = TerminalRequestRecord(
+            requestID: existing.requestID,
+            outcome: existing.outcome,
+            historyEntry: nil,
+            completedAt: existing.completedAt
+        )
+        try await save(pending: pendingRequests, terminal: candidateTerminal)
+        terminalRecords = candidateTerminal
+        return true
+    }
+
+    /// Scrubs every terminal History payload with one durable snapshot write,
+    /// so a failed clear cannot leave a partially scrubbed journal.
+    @discardableResult
+    public func discardAllTerminalHistory() async throws -> Int {
+        await acquireMutationPermit()
+        defer { releaseMutationPermit() }
+
+        let scrubbedCount = terminalRecords.reduce(into: 0) { count, record in
+            if record.historyEntry != nil { count += 1 }
+        }
+        guard scrubbedCount > 0 else { return 0 }
+        let candidateTerminal = terminalRecords.map { record in
+            TerminalRequestRecord(
+                requestID: record.requestID,
+                outcome: record.outcome,
+                historyEntry: nil,
+                completedAt: record.completedAt
+            )
+        }
+        try await save(pending: pendingRequests, terminal: candidateTerminal)
+        terminalRecords = candidateTerminal
+        return scrubbedCount
+    }
+
     private func mutateRequest(
         _ id: UUID,
         mutation: (inout LinkRequest) throws -> Void

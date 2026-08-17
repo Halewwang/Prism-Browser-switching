@@ -127,7 +127,7 @@ final class OnboardingUITests: PrismUITestCase {
             application: application,
             appearance: appearance
         )
-        application.terminate()
+        terminateFixture(application)
 
         let recoveryApplication = launchFixture("recovery", appearance: appearance)
         _ = requirePageStateTitle(

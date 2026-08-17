@@ -16,13 +16,7 @@ struct PrismNativeApp: App {
                         .frame(minWidth: 760, minHeight: 520)
                         .accessibilityIdentifier("uiTest.configurationError")
                 case .application:
-                    AppRootView(
-                        composition: appDelegate.composition,
-                        systemActions: .inert
-                    )
-                    .onAppear {
-                        appDelegate.finishDebugApplicationFixtureActivation()
-                    }
+                    DebugApplicationFixtureBootstrapView(appDelegate: appDelegate)
                 case .disabled:
                     if ProcessInfo.processInfo.arguments.contains("--source-probe") {
                         SourceProbeView(recorder: appDelegate.sourceProbeRecorder)
@@ -47,6 +41,23 @@ struct PrismNativeApp: App {
         AppRootView(composition: appDelegate.composition)
     }
 }
+
+#if DEBUG
+private struct DebugApplicationFixtureBootstrapView: View {
+    let appDelegate: AppDelegate
+
+    var body: some View {
+        AppRootView(
+            composition: appDelegate.composition,
+            systemActions: .inert
+        )
+        .preferredColorScheme(DebugApplicationFixtureAppearance.current()?.colorScheme)
+        .onAppear {
+            appDelegate.finishDebugApplicationFixtureActivation()
+        }
+    }
+}
+#endif
 
 private struct MainWindowRoot<Content: View>: View {
     @Environment(\.openWindow) private var openWindow

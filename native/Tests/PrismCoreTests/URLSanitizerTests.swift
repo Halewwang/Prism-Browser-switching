@@ -18,12 +18,30 @@ import Testing
     #expect(sanitized?.absoluteString == "https://example.com/doc?safe=one&mytoken=allowed&note=token&safe=two")
 }
 
+@Test func sanitizerRemovesExpandedCredentialAndAPISecretParameterNames() {
+    let input = URL(string: "https://example.com/doc?safe=one&PASSWORD=redacted&%73ecret=redacted&api_key=redacted&client_secret=redacted&refresh_token=redacted&safe=two#fragment")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=one&safe=two")
+}
+
 @Test func sanitizerRemovesQueryDelimiterWhenEveryItemIsSensitive() {
     let input = URL(string: "custom://user:pass@example.com:8080/doc?code=one&STATE=two&fbclid=three#section")!
 
     let sanitized = URLSanitizer.default.sanitize(input)
 
     #expect(sanitized?.absoluteString == "custom://user:pass@example.com:8080/doc")
+}
+
+@Test func sanitizerRemovesHTTPUserInfoBeforeHistoryCanPersistOrReplayIt() {
+    let input = URL(string: "https://private-user:private-password@example.com/doc?safe=kept#section")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=kept")
+    #expect(sanitized?.user == nil)
+    #expect(sanitized?.password == nil)
 }
 
 @Test func sanitizerRemovesFragmentWhenThereIsNoQuery() {
@@ -72,7 +90,12 @@ func sanitizerRemovesDelimiterOnlySegmentsWhenNoSafeSegmentsRemain(_ input: Stri
     "session_id",
     "signature",
     "gclid",
-    "fbclid"
+    "fbclid",
+    "password",
+    "secret",
+    "api_key",
+    "client_secret",
+    "refresh_token"
 ])
 func sanitizerRemovesEveryCaseInsensitiveExactSensitiveName(_ name: String) {
     let input = URL(string: "https://example.com/doc?safe=keep&\(name.uppercased())=redacted&safe=again")!

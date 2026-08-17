@@ -165,6 +165,7 @@ final class ProductionAppComposition {
             queue: queue,
             ruleRepository: environment.ruleRepository,
             historyRepository: environment.historyRepository,
+            historyService: environment.historyService,
             settingsRepository: environment.settingsRepository,
             browserCatalog: catalog,
             browserLauncher: BrowserLauncherService(),
@@ -388,6 +389,7 @@ final class ProductionAppComposition {
             queue: queue,
             ruleRepository: repositories.rules,
             historyRepository: repositories.history,
+            historyService: environment.historyService,
             settingsRepository: repositories.settings,
             browserCatalog: catalog,
             browserLauncher: launcher,
@@ -468,6 +470,9 @@ private final class UnavailableRepositories:
     func delete(id _: UUID) throws { throw RepositoryError.unavailable }
 
     func upsert(_: HistoryEntry) throws { throw RepositoryError.unavailable }
+    func upsertAndEnforceRetention(_: HistoryEntry, limit _: Int, cutoff _: Date) throws {
+        throw RepositoryError.unavailable
+    }
     func recent(limit _: Int, newerThan _: Date) throws -> [HistoryEntry] {
         throw RepositoryError.unavailable
     }

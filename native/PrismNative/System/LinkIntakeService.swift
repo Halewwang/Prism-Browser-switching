@@ -7,6 +7,7 @@ struct BufferedLinkCapture: Equatable, Sendable {
     let url: URL
     let senderPID: Int32?
     let receivedAt: Date
+    let reopenedFromHistoryEntryID: UUID?
 }
 
 struct LinkCaptureDiagnostic: Equatable, Sendable {
@@ -53,10 +54,33 @@ final class BootstrapLinkBuffer {
             sequence: nextSequence,
             url: url,
             senderPID: senderPID,
-            receivedAt: now()
+            receivedAt: now(),
+            reopenedFromHistoryEntryID: nil
         ))
         nextSequence = increment.partialValue
         return id
+    }
+
+    @discardableResult
+    func captureReopened(
+        _ url: URL,
+        id: UUID,
+        receivedAt: Date,
+        fromHistoryEntryID: UUID
+    ) -> Bool {
+        guard Self.accepts(url) else { return false }
+        let increment = nextSequence.addingReportingOverflow(1)
+        guard !increment.overflow else { return false }
+        captures.append(BufferedLinkCapture(
+            id: id,
+            sequence: nextSequence,
+            url: url,
+            senderPID: nil,
+            receivedAt: receivedAt,
+            reopenedFromHistoryEntryID: fromHistoryEntryID
+        ))
+        nextSequence = increment.partialValue
+        return true
     }
 
     func snapshot() -> [BufferedLinkCapture] {
@@ -65,6 +89,19 @@ final class BootstrapLinkBuffer {
 
     func first() -> BufferedLinkCapture? {
         captures.first
+    }
+
+    func contains(requestID: UUID) -> Bool {
+        captures.contains { $0.id == requestID }
+    }
+
+    @discardableResult
+    func remove(requestID: UUID) -> Bool {
+        guard let index = captures.firstIndex(where: { $0.id == requestID }) else {
+            return false
+        }
+        captures.remove(at: index)
+        return true
     }
 
     @discardableResult
@@ -98,6 +135,8 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     private let sourceAttributor: any SourceAttributing
     private let lastActivatedSource: @MainActor () -> SourceApplication?
     private let diagnosticRecorder: (@MainActor (LinkCaptureDiagnostic) -> Void)?
+    private let makeRequestID: @MainActor () -> UUID
+    private let now: @MainActor () -> Date
     private weak var coordinator: (any LinkRoutingCoordinating)?
     private weak var warningPresenter: (any PersistenceWarningPresenting)?
     private var restorationFinished = false
@@ -129,7 +168,9 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
         lastActivatedSource: @escaping @MainActor () -> SourceApplication?,
         coordinator: (any LinkRoutingCoordinating)? = nil,
         warningPresenter: (any PersistenceWarningPresenting)? = nil,
-        diagnosticRecorder: (@MainActor (LinkCaptureDiagnostic) -> Void)? = nil
+        diagnosticRecorder: (@MainActor (LinkCaptureDiagnostic) -> Void)? = nil,
+        makeRequestID: @escaping @MainActor () -> UUID = UUID.init,
+        now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.queue = queue
         self.bootstrap = bootstrap
@@ -138,6 +179,8 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
         self.coordinator = coordinator
         self.warningPresenter = warningPresenter
         self.diagnosticRecorder = diagnosticRecorder
+        self.makeRequestID = makeRequestID
+        self.now = now
     }
 
     @discardableResult
@@ -182,6 +225,43 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
             warningPresenter?.present(.recoveryStoreUnavailable)
             return nil
         }
+    }
+
+    /// Reopens only the exact safe URL retained by History. It never performs source
+    /// attribution and always appends behind existing durable requests.
+    func enqueueReopened(url: URL, fromHistoryEntryID: UUID) async -> LinkRequest? {
+        guard restorationFinished, !persistencePaused,
+              BootstrapLinkBuffer.accepts(url),
+              URLSanitizer.default.sanitize(url)?.absoluteString == url.absoluteString
+        else {
+            return nil
+        }
+
+        let request = LinkRequest(
+            id: makeRequestID(),
+            url: url,
+            receivedAt: now(),
+            source: .unknown,
+            reopenedFromHistoryEntryID: fromHistoryEntryID
+        )
+        guard bootstrap.captureReopened(
+            url,
+            id: request.id,
+            receivedAt: request.receivedAt,
+            fromHistoryEntryID: fromHistoryEntryID
+        ) else {
+            return nil
+        }
+
+        startDrainWorkerIfNeeded(routeAfterDraining: routingEnabled)
+        while let drainTask {
+            await drainTask.value
+        }
+        guard !bootstrap.contains(requestID: request.id) else {
+            bootstrap.remove(requestID: request.id)
+            return nil
+        }
+        return request
     }
 
     func finishRestorationAndStartDraining(routeAfterDraining: Bool = true) {
@@ -356,15 +436,18 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
 
     private func drainBufferedLinks() async throws {
         while let capture = bootstrap.first() {
-            let source = sourceAttributor.resolve(
-                senderPID: capture.senderPID,
-                lastActivated: lastActivatedSource()
-            )
+            let source = capture.reopenedFromHistoryEntryID == nil
+                ? sourceAttributor.resolve(
+                    senderPID: capture.senderPID,
+                    lastActivated: lastActivatedSource()
+                )
+                : .unknown
             let request = LinkRequest(
                 id: capture.id,
                 url: capture.url,
                 receivedAt: capture.receivedAt,
-                source: source
+                source: source,
+                reopenedFromHistoryEntryID: capture.reopenedFromHistoryEntryID
             )
             guard try await queue.enqueue(request) else {
                 throw LinkIntakeError.duplicateRequestID(request.id)
@@ -372,13 +455,15 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
             guard bootstrap.removeFirst(ifSequenceMatches: capture.sequence) else {
                 continue
             }
-            diagnosticRecorder?(LinkCaptureDiagnostic(
-                timestamp: capture.receivedAt,
-                sourceDisplayName: source.displayName,
-                sourceBundleIdentifier: source.bundleIdentifier,
-                senderPIDPresent: capture.senderPID != nil,
-                confidence: source.confidence
-            ))
+            if capture.reopenedFromHistoryEntryID == nil {
+                diagnosticRecorder?(LinkCaptureDiagnostic(
+                    timestamp: capture.receivedAt,
+                    sourceDisplayName: source.displayName,
+                    sourceBundleIdentifier: source.bundleIdentifier,
+                    senderPIDPresent: capture.senderPID != nil,
+                    confidence: source.confidence
+                ))
+            }
         }
     }
 
