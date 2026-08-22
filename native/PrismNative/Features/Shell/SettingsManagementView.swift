@@ -5,8 +5,14 @@ struct SettingsManagementView: View {
     @Environment(AppEnvironment.self) private var environment
 
     let browserCatalog: any BrowserCataloging
+    let openDefaultAppsSettings: () -> Void
 
     @State private var browsers: [BrowserDescriptor] = []
+    @State private var defaultHandlerState: DefaultHandlerState?
+    @State private var loginItemState: LoginItemState?
+    @State private var isUpdatingDefaultHandler = false
+    @State private var isUpdatingLoginItem = false
+    @State private var actionMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,6 +34,8 @@ struct SettingsManagementView: View {
 
             Form {
                 Section("Link handling") {
+                    defaultHandlerControl
+
                     Toggle("Show Prism in the menu bar", isOn: showMenuBarItem)
                         .accessibilityIdentifier("settings.showMenuBarItem")
 
@@ -47,6 +55,26 @@ struct SettingsManagementView: View {
                                 Text(browser.displayName).tag(BrowserID?.some(browser.id))
                             }
                         }
+                    }
+                }
+
+                Section("Startup") {
+                    Toggle("Open Prism at login", isOn: launchAtLogin)
+                        .disabled(isUpdatingLoginItem || environment.loginItemService == nil)
+                        .accessibilityIdentifier("settings.launchAtLogin")
+
+                    if loginItemState == .requiresApproval {
+                        Text("macOS needs approval before Prism can open at login.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("Open Login Items Settings") {
+                            environment.loginItemService?.openApprovalSettingsAfterUserAction()
+                        }
+                        .accessibilityIdentifier("settings.openLoginItems")
+                    } else if loginItemState == .notFound {
+                        Text("Launch at login is unavailable in this build.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -70,7 +98,7 @@ struct SettingsManagementView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("Version", value: "1.0.0")
+                    LabeledContent("Version", value: version)
                     Text("Link history stays on this Mac. Prism removes sensitive URL data before showing or copying it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -79,7 +107,51 @@ struct SettingsManagementView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
-        .task { await loadBrowsers() }
+        .task { await loadContext() }
+        .alert(
+            "Settings could not be updated",
+            isPresented: Binding(
+                get: { actionMessage != nil },
+                set: { if !$0 { actionMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { actionMessage = nil }
+        } message: {
+            Text(actionMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var defaultHandlerControl: some View {
+        LabeledContent("Default web link handler") {
+            Label(defaultHandlerLabel, systemImage: defaultHandlerSymbol)
+                .foregroundStyle(defaultHandlerColor)
+        }
+
+        if defaultHandlerState != .active {
+            Text(defaultHandlerExplanation)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button("Set Prism as Default") {
+                    Task { await setDefaultHandler() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isUpdatingDefaultHandler || environment.defaultBrowserService == nil)
+                .accessibilityIdentifier("settings.setDefaultHandler")
+
+                Button("Refresh") {
+                    Task { await refreshDefaultHandler() }
+                }
+                .disabled(isUpdatingDefaultHandler || environment.defaultBrowserService == nil)
+                .accessibilityIdentifier("settings.refreshDefaultHandler")
+
+                Button("Open System Settings", action: openDefaultAppsSettings)
+                    .disabled(isUpdatingDefaultHandler)
+                    .accessibilityIdentifier("settings.openDefaultApps")
+            }
+        }
     }
 
     private var automaticRulesEnabled: Binding<Bool> {
@@ -110,16 +182,107 @@ struct SettingsManagementView: View {
         setting(\.preferredBrowserID)
     }
 
-    private func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+    private var launchAtLogin: Binding<Bool> {
         Binding(
-            get: { environment.settings[keyPath: keyPath] },
-            set: { value in
-                _ = environment.mutateSettings { $0[keyPath: keyPath] = value }
+            get: { loginItemState == .enabled },
+            set: { wantsLaunchAtLogin in
+                Task { await updateLaunchAtLogin(wantsLaunchAtLogin) }
             }
         )
     }
 
-    private func loadBrowsers() async {
+    private var defaultHandlerLabel: String {
+        switch defaultHandlerState {
+        case .active:
+            "HTTP + HTTPS active"
+        case .inactive:
+            "Needs attention"
+        case nil:
+            "Checking…"
+        }
+    }
+
+    private var defaultHandlerSymbol: String {
+        defaultHandlerState == .active ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+    }
+
+    private var defaultHandlerColor: Color {
+        defaultHandlerState == .active ? .green : .orange
+    }
+
+    private var defaultHandlerExplanation: String {
+        guard case let .some(.inactive(http, https)) = defaultHandlerState else {
+            return "Prism could not check the current default web-link handler."
+        }
+        let inactiveSchemes = [http ? nil : "HTTP", https ? nil : "HTTPS"].compactMap { $0 }
+        return "Set Prism as the default application for \(inactiveSchemes.joined(separator: " and ")) links."
+    }
+
+    private var version: String {
+        let info = Bundle.main.infoDictionary
+        let marketing = info?["CFBundleShortVersionString"] as? String ?? "1.0"
+        guard let build = info?["CFBundleVersion"] as? String, build != marketing else {
+            return marketing
+        }
+        return "\(marketing) (\(build))"
+    }
+
+    private func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { environment.settings[keyPath: keyPath] },
+            set: { value in
+                guard environment.mutateSettings({ $0[keyPath: keyPath] = value }) else {
+                    actionMessage = "Prism could not save this setting. Your previous value is still in use."
+                    return
+                }
+            }
+        )
+    }
+
+    private func loadContext() async {
         browsers = (try? await browserCatalog.scan()) ?? []
+        await refreshDefaultHandler()
+        loginItemState = environment.loginItemService?.status()
+    }
+
+    private func refreshDefaultHandler() async {
+        guard !isUpdatingDefaultHandler else { return }
+        defaultHandlerState = try? await environment.defaultBrowserService?.status()
+    }
+
+    private func setDefaultHandler() async {
+        guard let defaultBrowserService = environment.defaultBrowserService,
+              !isUpdatingDefaultHandler
+        else { return }
+        isUpdatingDefaultHandler = true
+        defer { isUpdatingDefaultHandler = false }
+        do {
+            defaultHandlerState = try await defaultBrowserService.setAsDefaultAfterUserConfirmation()
+        } catch {
+            defaultHandlerState = try? await defaultBrowserService.status()
+            actionMessage = "Prism could not become the default handler for every web link. Review System Settings and try again."
+        }
+    }
+
+    private func updateLaunchAtLogin(_ wantsLaunchAtLogin: Bool) async {
+        guard let loginItemService = environment.loginItemService,
+              !isUpdatingLoginItem
+        else { return }
+        isUpdatingLoginItem = true
+        defer { isUpdatingLoginItem = false }
+        do {
+            if wantsLaunchAtLogin {
+                try loginItemService.registerAfterUserAction()
+            } else {
+                try loginItemService.unregisterAfterUserAction()
+            }
+            loginItemState = loginItemService.status()
+            if wantsLaunchAtLogin, loginItemState != .enabled {
+                actionMessage = "macOS needs approval before Prism can open at login."
+            }
+        } catch {
+            loginItemState = loginItemService.status()
+            actionMessage = "Prism could not update the launch-at-login setting."
+        }
     }
 }

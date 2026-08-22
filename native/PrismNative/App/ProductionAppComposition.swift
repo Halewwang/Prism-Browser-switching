@@ -365,7 +365,7 @@ final class ProductionAppComposition {
         let warningSource: (any PersistenceWarningSource)? = reconnectableStore
 
         let environment = AppEnvironment(
-            route: .history,
+            route: .overview,
             unmatchedBehavior: .alwaysAsk,
             updateChecker: DisabledUpdateChecker(),
             ruleRepository: repositories.rules,

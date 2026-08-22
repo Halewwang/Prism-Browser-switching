@@ -16,7 +16,7 @@ struct AppRootCoordinatorTests {
 
         #expect(coordinator.onboardingModel === originalModel)
         #expect(coordinator.presentation.kind == .loading)
-        #expect(coordinator.routeBinding.wrappedValue == .history)
+        #expect(coordinator.routeBinding.wrappedValue == .overview)
 
         coordinator.routeBinding.wrappedValue = .settings
 

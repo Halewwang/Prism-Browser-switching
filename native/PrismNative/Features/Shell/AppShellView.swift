@@ -3,19 +3,23 @@ import SwiftUI
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
     case testLink
     case openApplicationsFolder
+    case openDefaultAppsSettings
 }
 
 @MainActor
 struct AppShellActions {
     private let testLink: () -> Void
     private let openApplicationsFolder: () -> Void
+    private let openDefaultAppsSettings: () -> Void
 
     init(
         testLink: @escaping () -> Void = {},
-        openApplicationsFolder: @escaping () -> Void = {}
+        openApplicationsFolder: @escaping () -> Void = {},
+        openDefaultAppsSettings: @escaping () -> Void = {}
     ) {
         self.testLink = testLink
         self.openApplicationsFolder = openApplicationsFolder
+        self.openDefaultAppsSettings = openDefaultAppsSettings
     }
 
     func perform(_ action: AppShellActionID) {
@@ -24,6 +28,8 @@ struct AppShellActions {
             testLink()
         case .openApplicationsFolder:
             openApplicationsFolder()
+        case .openDefaultAppsSettings:
+            openDefaultAppsSettings()
         }
     }
 }
@@ -91,7 +97,13 @@ struct AppShellView: View {
                     .padding(.top, 16)
             }
 
-            if route == .history, let historyModel {
+            if route == .overview {
+                OverviewView(
+                    browserCatalog: browserCatalog,
+                    testLink: { actions.perform(.testLink) },
+                    openRoute: { route = $0 }
+                )
+            } else if route == .history, let historyModel {
                 HistoryView(model: historyModel) {
                     actions.perform(.testLink)
                 }
@@ -104,7 +116,10 @@ struct AppShellView: View {
                     openApplicationsFolder: { actions.perform(.openApplicationsFolder) }
                 )
             } else if route == .settings {
-                SettingsManagementView(browserCatalog: browserCatalog)
+                SettingsManagementView(
+                    browserCatalog: browserCatalog,
+                    openDefaultAppsSettings: { actions.perform(.openDefaultAppsSettings) }
+                )
             } else {
                 PageStateView(model: AppShellPresentation.historyFallback) { rawAction in
                     guard let action = AppShellActionID(rawValue: rawAction) else { return }

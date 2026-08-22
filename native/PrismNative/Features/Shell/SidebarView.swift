@@ -10,6 +10,12 @@ struct AppShellDestination: Identifiable, Equatable {
 
     static let all: [AppShellDestination] = [
         AppShellDestination(
+            route: .overview,
+            title: "Overview",
+            systemImage: "rectangle.3.group.fill",
+            accessibilityIdentifier: "appShell.sidebar.overview"
+        ),
+        AppShellDestination(
             route: .history,
             title: "History",
             systemImage: "clock.arrow.circlepath",

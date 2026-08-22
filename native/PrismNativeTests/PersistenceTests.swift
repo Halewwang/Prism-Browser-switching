@@ -380,6 +380,33 @@ import Testing
     #expect(try repository.all() == [contains, subdomain, exact, source])
 }
 
+@Test @MainActor func rulePriorityReorderIsCommittedTogetherOrNotAtAll() throws {
+    let result = try ModelContainerFactory.make(inMemory: true)
+    let repository = SwiftDataRuleRepository(container: result.container)
+    let first = routingRule(id: fixedUUID(21), matcher: .exactHost("first.example"), priority: 0)
+    let second = routingRule(id: fixedUUID(22), matcher: .exactHost("second.example"), priority: 1)
+    try repository.upsert(first)
+    try repository.upsert(second)
+
+    var secondFirst = second
+    secondFirst.priority = 0
+    var firstSecond = first
+    firstSecond.priority = 1
+    try repository.updatePriorities([secondFirst, firstSecond])
+    #expect(try repository.all() == [secondFirst, firstSecond])
+
+    var rollbackCandidate = secondFirst
+    rollbackCandidate.priority = 1
+    let missing = routingRule(id: fixedUUID(23), matcher: .exactHost("missing.example"), priority: 0)
+    do {
+        try repository.updatePriorities([rollbackCandidate, missing])
+        Issue.record("Expected a missing rule to fail the complete priority update")
+    } catch let error as RuleRepositoryError {
+        #expect(error == .missingRule(missing.id))
+    }
+    #expect(try repository.all() == [secondFirst, firstSecond])
+}
+
 @Test @MainActor func browserPreferencesKeepOrderAndCustomBookmarksWithoutAvailabilityScanResults() throws {
     let result = try ModelContainerFactory.make(inMemory: true)
     let repository = SwiftDataBrowserPreferenceRepository(container: result.container)

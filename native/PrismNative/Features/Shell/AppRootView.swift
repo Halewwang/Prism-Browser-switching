@@ -343,6 +343,9 @@ final class AppRootCoordinator {
             testLink: { [weak self] in self?.startShellTestLink() },
             openApplicationsFolder: { [systemActions] in
                 systemActions.openApplicationsFolder()
+            },
+            openDefaultAppsSettings: { [systemActions] in
+                systemActions.openDefaultAppsSettings()
             }
         )
     }
@@ -489,13 +492,14 @@ struct AppRootView: View {
                     }
                     .accessibilityIdentifier("appShell.openSettings")
 
-                    Button {
-                        coordinator.checkForUpdates()
-                    } label: {
-                        Label("Check for Updates", systemImage: "arrow.clockwise")
+                    if coordinator.canCheckForUpdates {
+                        Button {
+                            coordinator.checkForUpdates()
+                        } label: {
+                            Label("Check for Updates", systemImage: "arrow.clockwise")
+                        }
+                        .accessibilityIdentifier("appShell.checkForUpdates")
                     }
-                    .disabled(!coordinator.canCheckForUpdates)
-                    .accessibilityIdentifier("appShell.checkForUpdates")
                 }
             }
         case .recovery:

@@ -32,11 +32,40 @@ final class AppShellUITests: PrismUITestCase {
         _ = requireElement("settings.showMenuBarItem", in: application)
         _ = requireElement("settings.automaticRules", in: application)
         _ = requireElement("settings.historyEnabled", in: application)
+        _ = requireElement("settings.setDefaultHandler", in: application)
+        _ = requireElement("settings.launchAtLogin", in: application)
         try attachWindowScreenshot(
             "settings-management",
             application: application,
             appearance: .light
         )
+        XCTAssertEqual(application.windows.count, 1)
+    }
+
+    func testWorkspaceOverviewMakesOperationalStatusAndRulePriorityActionable() {
+        let application = launchFixture("workspace", appearance: .dark)
+
+        _ = requireElement("appShell.page.overview.heading", in: application)
+        _ = requireElement("overview.linkHandling", in: application)
+        _ = requireElement("overview.automaticRules", in: application)
+        _ = requireElement("overview.browsers", in: application)
+        _ = requireButton("overview.manageRules", in: application)
+
+        requireButton("overview.manageRules", in: application).click()
+        _ = requireElement("appShell.page.rules.heading", in: application)
+        let documentationUp = requireElement(
+            "rules.rule.00000000-0000-0000-0000-000000000301.moveUp",
+            in: application
+        )
+        let documentationDown = requireElement(
+            "rules.rule.00000000-0000-0000-0000-000000000301.moveDown",
+            in: application
+        )
+        XCTAssertFalse(documentationUp.isEnabled)
+        XCTAssertTrue(documentationDown.isEnabled)
+
+        documentationDown.click()
+        XCTAssertTrue(waitUntil(timeout: 3) { documentationUp.isEnabled })
         XCTAssertEqual(application.windows.count, 1)
     }
 

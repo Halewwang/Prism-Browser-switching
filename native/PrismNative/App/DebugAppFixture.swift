@@ -11,6 +11,7 @@ enum DebugAppFixtureVariant: String, CaseIterable, Equatable, Sendable {
     case launchFailure = "launch-failure"
     case onboardingRecovery = "onboarding-recovery"
     case shell
+    case workspace
     case recovery
     case history
     case historyLoadFailure = "history-load-failure"
@@ -200,17 +201,7 @@ struct DebugAppFixture {
         variant: DebugAppFixtureVariant = .parse(arguments: ProcessInfo.processInfo.arguments)
     ) -> DebugAppFixture {
         let recorder = DebugUITestEffectRecorder()
-        let browser = BrowserDescriptor(
-            id: BrowserID("invalid.prism.fixture.browser"),
-            bundleIdentifier: "invalid.prism.fixture.browser",
-            displayName: "Fixture Browser",
-            applicationURL: URL(fileURLWithPath: "/Applications/PrismFixtureBrowser.app"),
-            securityScopedBookmark: nil,
-            origin: .system,
-            availability: .available,
-            selectorOrder: 0
-        )
-        let browsers = variant == .emptyBrowsers ? [] : [browser]
+        let browsers = Self.browsers(for: variant)
         let catalog = DebugAppBrowserCatalog(browsers: browsers, recorder: recorder)
         let settingsRepository = InMemorySettingsRepository()
         if Self.opensHistoryInShell(variant) {
@@ -224,11 +215,15 @@ struct DebugAppFixture {
         for entry in Self.historyEntries(for: variant) {
             try? historyRepository.upsert(entry)
         }
+        let ruleRepository = InMemoryRuleRepository()
+        for rule in Self.rules(for: variant, browsers: browsers) {
+            try? ruleRepository.upsert(rule)
+        }
         let environment = AppEnvironment(
-            route: .history,
+            route: variant == .workspace ? .overview : .history,
             unmatchedBehavior: .alwaysAsk,
             updateChecker: DisabledUpdateChecker(),
-            ruleRepository: InMemoryRuleRepository(),
+            ruleRepository: ruleRepository,
             historyRepository: historyRepository,
             browserPreferenceRepository: InMemoryBrowserPreferenceRepository(),
             settingsRepository: settingsRepository
@@ -308,6 +303,8 @@ struct DebugAppFixture {
         case .onboarding, .onboardingRecovery, .launchFailure, .shell, .recovery,
              .history, .historyLoadFailure, .historyNoURL, .historyUnsafeURL, .historyActions:
             [:]
+        case .workspace:
+            ["http": "com.prism.app", "https": "com.prism.app"]
         case .partialHandler:
             ["http": "com.prism.app"]
         case .emptyBrowsers:
@@ -317,7 +314,7 @@ struct DebugAppFixture {
 
     private static func opensHistoryInShell(_ variant: DebugAppFixtureVariant) -> Bool {
         switch variant {
-        case .shell, .history, .historyLoadFailure, .historyNoURL, .historyUnsafeURL, .historyActions:
+        case .shell, .workspace, .history, .historyLoadFailure, .historyNoURL, .historyUnsafeURL, .historyActions:
             true
         case .onboarding, .partialHandler, .emptyBrowsers, .launchFailure,
              .onboardingRecovery, .recovery:
@@ -383,9 +380,76 @@ struct DebugAppFixture {
                 ),
             ]
         case .onboarding, .partialHandler, .emptyBrowsers, .launchFailure,
-             .onboardingRecovery, .shell, .recovery, .historyLoadFailure:
+             .onboardingRecovery, .shell, .workspace, .recovery, .historyLoadFailure:
             []
         }
+    }
+
+    private static func browsers(for variant: DebugAppFixtureVariant) -> [BrowserDescriptor] {
+        if variant == .emptyBrowsers { return [] }
+        if variant == .workspace {
+            return [
+                browser(id: "com.apple.Safari", name: "Safari", order: 0),
+                browser(id: "com.google.Chrome", name: "Chrome", order: 1),
+                browser(id: "company.thebrowser.Browser", name: "Arc", order: 2),
+            ]
+        }
+        return [browser(id: "invalid.prism.fixture.browser", name: "Fixture Browser", order: 0)]
+    }
+
+    private static func browser(id: String, name: String, order: Int) -> BrowserDescriptor {
+        BrowserDescriptor(
+            id: BrowserID(id),
+            bundleIdentifier: id,
+            displayName: name,
+            applicationURL: URL(fileURLWithPath: "/Applications/\(name).app"),
+            securityScopedBookmark: nil,
+            origin: .system,
+            availability: .available,
+            selectorOrder: order
+        )
+    }
+
+    private static func rules(
+        for variant: DebugAppFixtureVariant,
+        browsers: [BrowserDescriptor]
+    ) -> [RoutingRule] {
+        guard variant == .workspace,
+              browsers.count == 3
+        else { return [] }
+        let now = Date(timeIntervalSince1970: 1_724_328_000)
+        return [
+            RoutingRule(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000301")!,
+                isEnabled: true,
+                matcher: .hostAndSubdomains("docs.example.com"),
+                targetBrowserID: browsers[1].id,
+                priority: 0,
+                label: "Documentation",
+                createdAt: now,
+                updatedAt: now
+            ),
+            RoutingRule(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000302")!,
+                isEnabled: true,
+                matcher: .exactHost("calendar.example.com"),
+                targetBrowserID: browsers[0].id,
+                priority: 1,
+                label: "Calendar",
+                createdAt: now,
+                updatedAt: now
+            ),
+            RoutingRule(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000303")!,
+                isEnabled: true,
+                matcher: .sourceBundleIdentifier("com.example.messages"),
+                targetBrowserID: browsers[2].id,
+                priority: 0,
+                label: "Messages",
+                createdAt: now,
+                updatedAt: now
+            ),
+        ]
     }
 
     private static func pendingSnapshot(for variant: DebugAppFixtureVariant) -> PendingRequestSnapshot {
@@ -515,9 +579,11 @@ private final class DebugAppSourceAttributor: SourceAttributing {
 
 @MainActor
 private final class DebugAppLoginItemClient: LoginItemClient {
-    func status() -> LoginItemClientStatus { .notRegistered }
-    func register() throws {}
-    func unregister() throws {}
+    private var currentStatus: LoginItemClientStatus = .notRegistered
+
+    func status() -> LoginItemClientStatus { currentStatus }
+    func register() throws { currentStatus = .enabled }
+    func unregister() throws { currentStatus = .notRegistered }
     func openSystemSettingsLoginItems() {}
 }
 

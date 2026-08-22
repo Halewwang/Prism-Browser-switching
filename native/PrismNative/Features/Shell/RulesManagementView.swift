@@ -40,9 +40,18 @@ struct RulesManagementView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(filteredRules, id: \.id) { rule in
-                        ruleRow(rule)
-                    }
+                    ruleSection(
+                        title: "Link rules",
+                        detail: "Prism evaluates these before source-application rules.",
+                        rules: filteredURLRules,
+                        orderedRules: urlRules
+                    )
+                    ruleSection(
+                        title: "Source-application rules",
+                        detail: "These apply only when macOS can confirm the source application.",
+                        rules: filteredSourceRules,
+                        orderedRules: sourceRules
+                    )
                 }
                 .listStyle(.inset)
             }
@@ -120,8 +129,73 @@ struct RulesManagementView: View {
         }
     }
 
+    private var urlRules: [RoutingRule] {
+        rules.filter { !$0.isSourceRule }
+    }
+
+    private var sourceRules: [RoutingRule] {
+        rules.filter(\.isSourceRule)
+    }
+
+    private var filteredURLRules: [RoutingRule] {
+        filteredRules.filter { !$0.isSourceRule }
+    }
+
+    private var filteredSourceRules: [RoutingRule] {
+        filteredRules.filter(\.isSourceRule)
+    }
+
     @ViewBuilder
-    private func ruleRow(_ rule: RoutingRule) -> some View {
+    private func ruleSection(
+        title: String,
+        detail: String,
+        rules: [RoutingRule],
+        orderedRules: [RoutingRule]
+    ) -> some View {
+        if !rules.isEmpty {
+            Section {
+                if searchText.isEmpty {
+                    ForEach(Array(orderedRules.enumerated()), id: \.element.id) { index, rule in
+                        ruleRow(
+                            rule,
+                            priority: index + 1,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < orderedRules.count - 1,
+                            moveUp: { move(orderedRules, from: index, to: index - 1) },
+                            moveDown: { move(orderedRules, from: index, to: index + 1) }
+                        )
+                    }
+                } else {
+                    ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
+                        ruleRow(
+                            rule,
+                            priority: displayedPriority(for: rule, in: orderedRules, fallback: index + 1),
+                            canMoveUp: false,
+                            canMoveDown: false,
+                            moveUp: {},
+                            moveDown: {}
+                        )
+                    }
+                }
+            } header: {
+                Text(title)
+            } footer: {
+                Text(searchText.isEmpty
+                    ? "\(detail) Use the arrows to set their top-to-bottom priority."
+                    : "\(detail) Clear search to change priority.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ruleRow(
+        _ rule: RoutingRule,
+        priority: Int,
+        canMoveUp: Bool,
+        canMoveDown: Bool,
+        moveUp: @escaping () -> Void,
+        moveDown: @escaping () -> Void
+    ) -> some View {
         HStack(spacing: 14) {
             Image(systemName: rule.matcherIcon)
                 .frame(width: 22)
@@ -134,6 +208,26 @@ struct RulesManagementView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Text("Priority \(priority)")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary, in: Capsule())
+            Button("Increase priority", systemImage: "arrow.up") {
+                moveUp()
+            }
+            .labelStyle(.iconOnly)
+            .disabled(!canMoveUp)
+            .accessibilityLabel("Increase priority for \(rule.displayName)")
+            .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveUp")
+            Button("Decrease priority", systemImage: "arrow.down") {
+                moveDown()
+            }
+            .labelStyle(.iconOnly)
+            .disabled(!canMoveDown)
+            .accessibilityLabel("Decrease priority for \(rule.displayName)")
+            .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveDown")
             Toggle("Enable rule", isOn: Binding(
                 get: { rule.isEnabled },
                 set: { _ in toggle(rule) }
@@ -165,7 +259,7 @@ struct RulesManagementView: View {
         defer { isLoading = false }
         do {
             browsers = try await browserCatalog.scan()
-            rules = try environment.ruleRepository.all()
+            rules = try normalizePriorities(in: environment.ruleRepository.all())
             if draft == nil, environment.pendingSelectorRulePrefill != nil {
                 beginCreatingRule()
             }
@@ -176,7 +270,11 @@ struct RulesManagementView: View {
 
     private func save(_ rule: RoutingRule) {
         do {
-            try environment.ruleRepository.upsert(rule)
+            var updatedRule = rule
+            if !rules.contains(where: { $0.id == rule.id }) {
+                updatedRule.priority = nextPriority(for: rule)
+            }
+            try environment.ruleRepository.upsert(updatedRule)
             rules = try environment.ruleRepository.all()
         } catch {
             errorMessage = "Prism could not save this rule."
@@ -202,6 +300,57 @@ struct RulesManagementView: View {
 
     private func browserName(for id: BrowserID) -> String {
         browsers.first(where: { $0.id == id })?.displayName ?? "Unavailable browser"
+    }
+
+    private func move(_ orderedRules: [RoutingRule], from source: Int, to destination: Int) {
+        guard orderedRules.indices.contains(source), orderedRules.indices.contains(destination) else { return }
+        var reordered = orderedRules
+        reordered.swapAt(source, destination)
+        let updates = reordered.enumerated().compactMap { index, rule -> RoutingRule? in
+            guard rule.priority != index else { return nil }
+            var updated = rule
+            updated.priority = index
+            updated.updatedAt = .now
+            return updated
+        }
+        guard !updates.isEmpty else { return }
+        do {
+            try environment.ruleRepository.updatePriorities(updates)
+            rules = try environment.ruleRepository.all()
+        } catch {
+            errorMessage = "Prism could not save the rule order. Your previous priority is still in use."
+        }
+    }
+
+    private func normalizePriorities(in loadedRules: [RoutingRule]) throws -> [RoutingRule] {
+        let ordered = RoutingRuleOrdering.sorted(loadedRules)
+        let updates = [
+            ordered.filter { !$0.isSourceRule },
+            ordered.filter(\.isSourceRule),
+        ].flatMap { group in
+            group.enumerated().compactMap { index, rule -> RoutingRule? in
+                guard rule.priority != index else { return nil }
+                var updated = rule
+                updated.priority = index
+                updated.updatedAt = .now
+                return updated
+            }
+        }
+        guard !updates.isEmpty else { return ordered }
+        try environment.ruleRepository.updatePriorities(updates)
+        return try environment.ruleRepository.all()
+    }
+
+    private func nextPriority(for rule: RoutingRule) -> Int {
+        (rule.isSourceRule ? sourceRules : urlRules).count
+    }
+
+    private func displayedPriority(
+        for rule: RoutingRule,
+        in orderedRules: [RoutingRule],
+        fallback: Int
+    ) -> Int {
+        (orderedRules.firstIndex(where: { $0.id == rule.id }) ?? fallback - 1) + 1
     }
 }
 
@@ -268,6 +417,11 @@ private struct RuleEditorSheet: View {
 }
 
 private extension RoutingRule {
+    var isSourceRule: Bool {
+        if case .sourceBundleIdentifier = matcher { return true }
+        return false
+    }
+
     var matcherDisplayName: String {
         switch matcher {
         case .exactHost: "Exact domain"

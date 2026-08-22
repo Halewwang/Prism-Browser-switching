@@ -14,7 +14,7 @@ final class SelectorUITests: XCTestCase {
 
     func testThreeBrowserPanelMatchesFixedFigmaGeometryAndPreservesContextMenu() throws {
         let application = launchSelector(variant: "three", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         assertAppearance(on: panel, expected: "NSAppearanceNameAqua")
@@ -57,7 +57,7 @@ final class SelectorUITests: XCTestCase {
 
     func testFiveBrowserPanelShowsThreeAndAHalfThenArrowNavigationRevealsFifth() throws {
         let application = launchSelector(variant: "five", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         assertAppearance(on: panel, expected: "NSAppearanceNameAqua")
@@ -90,7 +90,7 @@ final class SelectorUITests: XCTestCase {
 
     func testNumberKeyLaunchesItsMatchingBrowserWithoutASeparateSelectionStep() {
         let application = launchSelector(variant: "three", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         panel.typeKey("2", modifierFlags: [])
@@ -100,7 +100,7 @@ final class SelectorUITests: XCTestCase {
 
     func testDraggingFromBrowserCardScrollsWithoutActivatingABrowser() {
         let application = launchSelector(variant: "five", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         let viewport = element("selector.browserViewport", in: panel)
@@ -122,7 +122,7 @@ final class SelectorUITests: XCTestCase {
 
     func testSwipeLeftAutomationEquivalentRevealsLaterBrowsers() {
         let application = launchSelector(variant: "five", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         let viewport = element("selector.browserViewport", in: panel)
@@ -137,7 +137,7 @@ final class SelectorUITests: XCTestCase {
 
     func testEscapeCancelsTheExactHarnessRequestAndHidesThePanel() {
         let application = launchSelector(variant: "three", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         panel.typeKey(.escape, modifierFlags: [])
@@ -147,7 +147,7 @@ final class SelectorUITests: XCTestCase {
 
     func testCancelControlCancelsTheExactHarnessRequestAndHidesThePanel() {
         let application = launchSelector(variant: "three", appearance: "light")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         element("selector.cancel", in: panel).click()
@@ -157,7 +157,7 @@ final class SelectorUITests: XCTestCase {
 
     func testDarkAppearanceUsesDarkSurfacesAndKeepsTextVisible() throws {
         let application = launchSelector(variant: "three", appearance: "dark")
-        defer { application.terminate() }
+        defer { terminateSelector(application) }
 
         let panel = selectorPanel(in: application)
         assertDarkAppearance(on: panel)
@@ -216,7 +216,7 @@ final class SelectorUITests: XCTestCase {
                 0.002,
                 "The \(variant) selector capture contains too little visible UI structure and may be obscured by macOS screen privacy."
             )
-            application.terminate()
+            terminateSelector(application)
         }
     }
 
@@ -266,6 +266,15 @@ final class SelectorUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         } while Date() < deadline
         return condition()
+    }
+
+    private func terminateSelector(_ application: XCUIApplication) {
+        guard application.state != .notRunning else { return }
+        application.terminate()
+        XCTAssertTrue(
+            waitUntil(timeout: 5) { application.state == .notRunning },
+            "Selector harness must exit before another Prism UI fixture starts."
+        )
     }
 
     private func assertSize(

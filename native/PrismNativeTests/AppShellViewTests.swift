@@ -3,14 +3,16 @@ import Testing
 
 @Suite("App shell presentation")
 struct AppShellPresentationTests {
-    @Test func sidebarKeepsTheFourProductDestinationsInConfirmedOrder() {
+    @Test func sidebarKeepsTheOperationalDestinationsInOrder() {
         #expect(AppShellDestination.all.map(\.route) == [
+            .overview,
             .history,
             .rules,
             .browsers,
             .settings,
         ])
         #expect(AppShellDestination.all.map(\.accessibilityIdentifier) == [
+            "appShell.sidebar.overview",
             "appShell.sidebar.history",
             "appShell.sidebar.rules",
             "appShell.sidebar.browsers",
@@ -110,7 +112,8 @@ struct AppShellActionDispatchTests {
         var received: [AppShellActionID] = []
         let actions = AppShellActions(
             testLink: { received.append(.testLink) },
-            openApplicationsFolder: { received.append(.openApplicationsFolder) }
+            openApplicationsFolder: { received.append(.openApplicationsFolder) },
+            openDefaultAppsSettings: { received.append(.openDefaultAppsSettings) }
         )
 
         for action in AppShellActionID.allCases {

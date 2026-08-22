@@ -68,7 +68,7 @@ final class StatusItemController: NSObject {
     private let terminate: @MainActor () -> Void
     private let menu = NSMenu(title: "Prism")
     private var automaticRulesItem: NSMenuItem!
-    private var checkForUpdatesItem: NSMenuItem!
+    private var checkForUpdatesItem: NSMenuItem?
 
     init(
         host: any StatusItemHosting = AppKitStatusItemHost(),
@@ -106,12 +106,15 @@ final class StatusItemController: NSObject {
         automaticRulesItem = makeItem(title: "", action: #selector(toggleAutomaticRules), symbol: "pause.circle")
         menu.addItem(automaticRulesItem)
 
-        checkForUpdatesItem = makeItem(
-            title: "Check for Updates",
-            action: #selector(checkForUpdates),
-            symbol: "arrow.clockwise"
-        )
-        menu.addItem(checkForUpdatesItem)
+        if updateChecker.canCheckForUpdates {
+            let item = makeItem(
+                title: "Check for Updates",
+                action: #selector(checkForUpdates),
+                symbol: "arrow.clockwise"
+            )
+            checkForUpdatesItem = item
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
         menu.addItem(makeItem(title: "Quit Prism", action: #selector(quitPrism), symbol: "power"))
     }
@@ -131,7 +134,7 @@ final class StatusItemController: NSObject {
         automaticRulesItem.image = StatusItemVisuals.menuSymbol(
             environment.settings.automaticRulesEnabled ? "pause.circle" : "play.circle"
         )
-        checkForUpdatesItem.isEnabled = updateChecker.canCheckForUpdates
+        checkForUpdatesItem?.isEnabled = updateChecker.canCheckForUpdates
         host.setVisible(environment.settings.showMenuBarItem)
     }
 

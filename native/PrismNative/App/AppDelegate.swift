@@ -192,8 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         let hostingView = MainWindowHostingView(rootView: mainWindowRoot())
         window.contentView = hostingView
-        window.initialFirstResponder = hostingView
-        window.makeFirstResponder(hostingView)
         window.center()
         mainWindow = window
         window.makeKeyAndOrderFront(nil)
@@ -261,6 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func finishDebugApplicationFixtureActivation() {
         debugApplicationActivationAnchor?.deactivate()
         debugApplicationActivationAnchor = nil
+        _ = NSRunningApplication.current.activate(
+            options: DebugAppFixtureActivationAnchor.foregroundActivationOptions
+        )
     }
 #endif
 }

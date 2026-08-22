@@ -6,7 +6,22 @@ import SwiftData
 protocol RuleRepository {
     func all() throws -> [RoutingRule]
     func upsert(_ rule: RoutingRule) throws
+    func updatePriorities(_ rules: [RoutingRule]) throws
     func delete(id: UUID) throws
+}
+
+extension RuleRepository {
+    /// Test-only and simple in-memory conformers can use the existing upsert path.
+    /// The production repository overrides this with one transactional save.
+    func updatePriorities(_ rules: [RoutingRule]) throws {
+        for rule in rules {
+            try upsert(rule)
+        }
+    }
+}
+
+enum RuleRepositoryError: Error, Equatable {
+    case missingRule(UUID)
 }
 
 @MainActor
@@ -55,6 +70,22 @@ final class SwiftDataRuleRepository: RuleRepository {
             context.insert(try RuleRecord(rule: rule))
         }
         try context.save()
+    }
+
+    func updatePriorities(_ rules: [RoutingRule]) throws {
+        do {
+            let records = try context.fetch(FetchDescriptor<RuleRecord>())
+            for rule in rules {
+                guard let record = records.first(where: { $0.id == rule.id }) else {
+                    throw RuleRepositoryError.missingRule(rule.id)
+                }
+                try record.replace(with: rule)
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     func delete(id: UUID) throws {
@@ -330,6 +361,17 @@ final class InMemoryRuleRepository: RuleRepository {
 
     func upsert(_ rule: RoutingRule) throws {
         rules[rule.id] = rule
+    }
+
+    func updatePriorities(_ updatedRules: [RoutingRule]) throws {
+        var nextRules = rules
+        for rule in updatedRules {
+            guard nextRules[rule.id] != nil else {
+                throw RuleRepositoryError.missingRule(rule.id)
+            }
+            nextRules[rule.id] = rule
+        }
+        rules = nextRules
     }
 
     func delete(id: UUID) throws {
