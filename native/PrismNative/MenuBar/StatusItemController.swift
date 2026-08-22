@@ -1,6 +1,37 @@
 import AppKit
 import Observation
 
+enum StatusItemVisuals {
+    static func prismMark() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.black.setStroke()
+        let mark = NSBezierPath()
+        mark.lineWidth = 2.8
+        mark.lineCapStyle = .square
+        mark.move(to: NSPoint(x: 9, y: 2))
+        mark.line(to: NSPoint(x: 9, y: 16))
+        mark.move(to: NSPoint(x: 2, y: 9))
+        mark.line(to: NSPoint(x: 16, y: 9))
+        mark.move(to: NSPoint(x: 3.5, y: 3.5))
+        mark.line(to: NSPoint(x: 14.5, y: 14.5))
+        mark.move(to: NSPoint(x: 3.5, y: 14.5))
+        mark.line(to: NSPoint(x: 14.5, y: 3.5))
+        mark.stroke()
+        image.unlockFocus()
+        image.isTemplate = true
+        image.accessibilityDescription = "Prism"
+        return image
+    }
+
+    static func menuSymbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.isTemplate = true
+        return image
+    }
+}
+
 @MainActor
 protocol StatusItemHosting: AnyObject {
     func install(menu: NSMenu)
@@ -14,9 +45,7 @@ final class AppKitStatusItemHost: StatusItemHosting {
     init(statusBar: NSStatusBar = .system) {
         statusItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "link", accessibilityDescription: "Prism")
-            image?.isTemplate = true
-            button.image = image
+            button.image = StatusItemVisuals.prismMark()
             button.toolTip = "Prism"
         }
     }
@@ -63,27 +92,34 @@ final class StatusItemController: NSObject {
 
     private func configureMenu() {
         menu.autoenablesItems = false
-        menu.addItem(makeItem(title: "Open Prism", action: #selector(openPrism)))
-        menu.addItem(makeItem(title: "History", action: #selector(openHistory)))
-        menu.addItem(makeItem(title: "Rules", action: #selector(openRules)))
-        menu.addItem(makeItem(title: "Browsers", action: #selector(openBrowsers)))
-        menu.addItem(makeItem(title: "Settings", action: #selector(openSettings)))
+        let header = NSMenuItem(title: "Prism", action: nil, keyEquivalent: "")
+        header.image = StatusItemVisuals.prismMark()
+        header.isEnabled = false
+        menu.addItem(header)
+        menu.addItem(.separator())
+        menu.addItem(makeItem(title: "Open Prism", action: #selector(openPrism), symbol: "rectangle.on.rectangle"))
+        menu.addItem(makeItem(title: "History", action: #selector(openHistory), symbol: "clock.arrow.circlepath"))
+        menu.addItem(makeItem(title: "Rules", action: #selector(openRules), symbol: "list.bullet.rectangle"))
+        menu.addItem(makeItem(title: "Browsers", action: #selector(openBrowsers), symbol: "safari"))
+        menu.addItem(makeItem(title: "Settings", action: #selector(openSettings), symbol: "gearshape"))
 
-        automaticRulesItem = makeItem(title: "", action: #selector(toggleAutomaticRules))
+        automaticRulesItem = makeItem(title: "", action: #selector(toggleAutomaticRules), symbol: "pause.circle")
         menu.addItem(automaticRulesItem)
 
         checkForUpdatesItem = makeItem(
             title: "Check for Updates",
-            action: #selector(checkForUpdates)
+            action: #selector(checkForUpdates),
+            symbol: "arrow.clockwise"
         )
         menu.addItem(checkForUpdatesItem)
         menu.addItem(.separator())
-        menu.addItem(makeItem(title: "Quit Prism", action: #selector(quitPrism)))
+        menu.addItem(makeItem(title: "Quit Prism", action: #selector(quitPrism), symbol: "power"))
     }
 
-    private func makeItem(title: String, action: Selector) -> NSMenuItem {
+    private func makeItem(title: String, action: Selector, symbol: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
+        item.image = StatusItemVisuals.menuSymbol(symbol)
         item.isEnabled = true
         return item
     }
@@ -92,6 +128,9 @@ final class StatusItemController: NSObject {
         automaticRulesItem.title = environment.settings.automaticRulesEnabled
             ? "Pause Automatic Rules"
             : "Resume Automatic Rules"
+        automaticRulesItem.image = StatusItemVisuals.menuSymbol(
+            environment.settings.automaticRulesEnabled ? "pause.circle" : "play.circle"
+        )
         checkForUpdatesItem.isEnabled = updateChecker.canCheckForUpdates
         host.setVisible(environment.settings.showMenuBarItem)
     }

@@ -39,7 +39,10 @@ public struct URLSanitizer: Sendable {
 
     private func isSensitiveQueryName(_ name: String) -> Bool {
         let name = name.lowercased()
-        return Self.sensitiveNames.contains(name) || name.hasPrefix("utm_")
+        return Self.sensitiveNames.contains(name)
+            || name.hasPrefix("utm_")
+            || name.split(whereSeparator: { $0 == "_" || $0 == "-" })
+                .contains { Self.sensitiveNameSegments.contains(String($0)) }
     }
 
     private static let sensitiveNames: Set<String> = [
@@ -81,5 +84,27 @@ public struct URLSanitizer: Sendable {
         "samlrequest",
         "gclid",
         "fbclid"
+    ]
+
+    private static let sensitiveNameSegments: Set<String> = [
+        "token",
+        "auth",
+        "authorization",
+        "bearer",
+        "jwt",
+        "code",
+        "state",
+        "session",
+        "signature",
+        "password",
+        "pass",
+        "passwd",
+        "pwd",
+        "secret",
+        "key",
+        "credential",
+        "credentials",
+        "assertion",
+        "saml"
     ]
 }

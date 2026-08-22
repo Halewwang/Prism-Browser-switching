@@ -28,6 +28,9 @@ struct SettingsManagementView: View {
 
             Form {
                 Section("Link handling") {
+                    Toggle("Show Prism in the menu bar", isOn: showMenuBarItem)
+                        .accessibilityIdentifier("settings.showMenuBarItem")
+
                     Toggle("Use routing rules automatically", isOn: automaticRulesEnabled)
                         .accessibilityIdentifier("settings.automaticRules")
 
@@ -81,6 +84,10 @@ struct SettingsManagementView: View {
 
     private var automaticRulesEnabled: Binding<Bool> {
         setting(\.automaticRulesEnabled)
+    }
+
+    private var showMenuBarItem: Binding<Bool> {
+        setting(\.showMenuBarItem)
     }
 
     private var historyEnabled: Binding<Bool> {

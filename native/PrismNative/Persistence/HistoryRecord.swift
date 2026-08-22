@@ -22,7 +22,7 @@ final class HistoryRecord {
     init(entry: HistoryEntry, sanitizer: URLSanitizer = .default) {
         id = entry.id
         requestID = entry.requestID
-        sanitizedURLString = entry.sanitizedURL.flatMap { sanitizer.sanitize($0)?.absoluteString }
+        sanitizedURLString = Self.safeHistoryURL(from: entry.sanitizedURL, sanitizer: sanitizer)?.absoluteString
         sourceBundleIdentifier = entry.sourceBundleIdentifier
         sourceDisplayName = entry.sourceDisplayName
         targetBrowserID = entry.targetBrowserID?.rawValue
@@ -47,7 +47,7 @@ final class HistoryRecord {
         return HistoryEntry(
             id: id,
             requestID: requestID,
-            sanitizedURL: sanitizedURLString.flatMap(URL.init(string:)),
+            sanitizedURL: Self.safeHistoryURL(from: sanitizedURLString.flatMap(URL.init(string:))),
             sourceBundleIdentifier: sourceBundleIdentifier,
             sourceDisplayName: sourceDisplayName,
             targetBrowserID: targetBrowserID.map(BrowserID.init(rawValue:)),
@@ -64,7 +64,7 @@ final class HistoryRecord {
 
     func replace(with entry: HistoryEntry, sanitizer: URLSanitizer = .default) {
         requestID = entry.requestID
-        sanitizedURLString = entry.sanitizedURL.flatMap { sanitizer.sanitize($0)?.absoluteString }
+        sanitizedURLString = Self.safeHistoryURL(from: entry.sanitizedURL, sanitizer: sanitizer)?.absoluteString
         sourceBundleIdentifier = entry.sourceBundleIdentifier
         sourceDisplayName = entry.sourceDisplayName
         targetBrowserID = entry.targetBrowserID?.rawValue
@@ -81,5 +81,16 @@ final class HistoryRecord {
     private static func persistedFailureReason(from failureReason: String?) -> String? {
         guard let failureReason, !failureReason.isEmpty else { return nil }
         return "launch_failed"
+    }
+
+    private static func safeHistoryURL(
+        from url: URL?,
+        sanitizer: URLSanitizer = .default
+    ) -> URL? {
+        guard let url,
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return nil }
+        return sanitizer.sanitize(url)
     }
 }

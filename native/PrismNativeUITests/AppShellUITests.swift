@@ -29,6 +29,7 @@ final class AppShellUITests: PrismUITestCase {
 
         requireElement("appShell.sidebar.settings", in: application).click()
         _ = requireElement("appShell.page.settings.heading", in: application)
+        _ = requireElement("settings.showMenuBarItem", in: application)
         _ = requireElement("settings.automaticRules", in: application)
         _ = requireElement("settings.historyEnabled", in: application)
         try attachWindowScreenshot(

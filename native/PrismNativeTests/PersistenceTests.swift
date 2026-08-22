@@ -49,6 +49,38 @@ import Testing
     #expect(restored[0].sanitizedURL?.absoluteString == "https://example.com/private?safe=kept")
 }
 
+@Test @MainActor func historyRepositoryMigratesLegacyURLsWithNewlyRecognizedSensitiveFields() throws {
+    let result = try ModelContainerFactory.make(inMemory: true)
+    let context = ModelContext(result.container)
+    let record = HistoryRecord(entry: historyEntry(url: "https://example.com/private?safe=kept"))
+    record.sanitizedURLString = "https://example.com/private?disposable_login_token=redacted&user_code=redacted&safe=kept"
+    context.insert(record)
+    try context.save()
+    let repository = SwiftDataHistoryRepository(container: result.container)
+
+    let restored = try repository.recent(limit: 10, newerThan: .distantPast)
+    let persisted = try context.fetch(FetchDescriptor<HistoryRecord>())
+
+    #expect(restored.first?.sanitizedURL?.absoluteString == "https://example.com/private?safe=kept")
+    #expect(persisted.first?.sanitizedURLString == "https://example.com/private?safe=kept")
+}
+
+@Test @MainActor func historyRepositoryRemovesLegacyNonWebURLsInsteadOfRetainingThem() throws {
+    let result = try ModelContainerFactory.make(inMemory: true)
+    let context = ModelContext(result.container)
+    let record = HistoryRecord(entry: historyEntry(url: "https://example.com/private?safe=kept"))
+    record.sanitizedURLString = "ftp://legacy.example/private?token=redacted"
+    context.insert(record)
+    try context.save()
+    let repository = SwiftDataHistoryRepository(container: result.container)
+
+    let restored = try repository.recent(limit: 10, newerThan: .distantPast)
+    let persisted = try context.fetch(FetchDescriptor<HistoryRecord>())
+
+    #expect(restored.first?.sanitizedURL == nil)
+    #expect(persisted.first?.sanitizedURLString == nil)
+}
+
 @Test @MainActor func historyRepositoryKeepsOneStableRowPerRequestID() throws {
     let result = try ModelContainerFactory.make(inMemory: true)
     let repository = SwiftDataHistoryRepository(container: result.container)

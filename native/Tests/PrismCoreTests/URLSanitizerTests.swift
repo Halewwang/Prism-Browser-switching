@@ -26,6 +26,14 @@ import Testing
     #expect(sanitized?.absoluteString == "https://example.com/doc?safe=one&safe=two")
 }
 
+@Test func sanitizerRemovesBoundarySeparatedCredentialNamesWithoutRemovingSafeWords() {
+    let input = URL(string: "https://example.com/doc?safe=one&disposable_login_token=redacted&user_code=redacted&x-amz-signature=redacted&mytoken=kept&safe=two")!
+
+    let sanitized = URLSanitizer.default.sanitize(input)
+
+    #expect(sanitized?.absoluteString == "https://example.com/doc?safe=one&mytoken=kept&safe=two")
+}
+
 @Test func sanitizerRemovesQueryDelimiterWhenEveryItemIsSensitive() {
     let input = URL(string: "custom://user:pass@example.com:8080/doc?code=one&STATE=two&fbclid=three#section")!
 

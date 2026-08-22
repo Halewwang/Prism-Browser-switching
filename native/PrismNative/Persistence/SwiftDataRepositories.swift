@@ -97,17 +97,35 @@ final class SwiftDataHistoryRepository: HistoryRepository {
 
     func recent(limit: Int, newerThan: Date) throws -> [HistoryEntry] {
         guard limit > 0 else { return [] }
-        return try context.fetch(FetchDescriptor<HistoryRecord>())
-            .filter { $0.createdAt >= newerThan }
-            .map { try $0.historyEntry() }
-            .sorted { lhs, rhs in
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt > rhs.createdAt
+        let records = try context.fetch(FetchDescriptor<HistoryRecord>())
+        var migratedLegacyURL = false
+        do {
+            let entries = try records.map { record -> HistoryEntry in
+                let entry = try record.historyEntry()
+                let safeURLString = entry.sanitizedURL?.absoluteString
+                if record.sanitizedURLString != safeURLString {
+                    record.sanitizedURLString = safeURLString
+                    migratedLegacyURL = true
                 }
-                return lhs.id.uuidString > rhs.id.uuidString
+                return entry
             }
-            .prefix(limit)
-            .map { $0 }
+            if migratedLegacyURL {
+                try context.save()
+            }
+            return entries
+                .filter { $0.createdAt >= newerThan }
+                .sorted { lhs, rhs in
+                    if lhs.createdAt != rhs.createdAt {
+                        return lhs.createdAt > rhs.createdAt
+                    }
+                    return lhs.id.uuidString > rhs.id.uuidString
+                }
+                .prefix(limit)
+                .map { $0 }
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     func delete(id: UUID) throws {
