@@ -45,6 +45,7 @@ struct BrowsersManagementView: View {
                     }
                 }
                 .listStyle(.inset)
+                .padding(16)
             }
         }
         .task { await reload() }
@@ -72,7 +73,7 @@ struct BrowsersManagementView: View {
         ) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
-            Text(errorMessage ?? "")
+            Text(LocalizedStringKey(errorMessage ?? ""))
         }
     }
 
@@ -99,8 +100,8 @@ struct BrowsersManagementView: View {
             .disabled(isAddingBrowser)
             .accessibilityIdentifier("browsers.addCustomBrowser")
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 32)
+        .padding(.vertical, 24)
     }
 
     private var emptyActions: some View {
@@ -129,7 +130,7 @@ struct BrowsersManagementView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Text(browser.origin == .custom ? "Custom" : "Installed")
+            Text(browser.origin == .custom ? LocalizedStringKey("Custom") : LocalizedStringKey("Installed"))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -149,7 +150,7 @@ struct BrowsersManagementView: View {
                 .accessibilityLabel("Remove \(browser.displayName)")
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
     }
 
     private func reload() async {

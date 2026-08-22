@@ -231,6 +231,8 @@ final class SelectorUITests: XCTestCase {
         let application = XCUIApplication()
         application.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US",
             "--ui-testing", "--selector-harness", variant,
             "--selector-appearance", appearance,
             "--selector-capture-path", captureURL.path,

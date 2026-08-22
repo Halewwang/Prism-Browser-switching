@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AppShellDestination: Identifiable, Equatable {
+struct AppShellDestination: Identifiable {
     let route: AppRoute
     let title: String
     let systemImage: String
@@ -12,7 +12,7 @@ struct AppShellDestination: Identifiable, Equatable {
         AppShellDestination(
             route: .overview,
             title: "Overview",
-            systemImage: "rectangle.3.group.fill",
+            systemImage: "square.grid.2x2",
             accessibilityIdentifier: "appShell.sidebar.overview"
         ),
         AppShellDestination(
@@ -41,9 +41,6 @@ struct AppShellDestination: Identifiable, Equatable {
         ),
     ]
 
-    static func destination(for route: AppRoute) -> AppShellDestination {
-        all.first { $0.route == route } ?? all[0]
-    }
 }
 
 struct SidebarView: View {
@@ -51,21 +48,19 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: optionalSelection) {
-            Section("Workspace") {
-                ForEach(AppShellDestination.all) { destination in
-                    Label(destination.title, systemImage: destination.systemImage)
-                        .font(.body.weight(.medium))
-                        .tag(destination.route)
-                        .padding(.vertical, 5)
-                        .accessibilityIdentifier(destination.accessibilityIdentifier)
-                }
+            ForEach(AppShellDestination.all) { destination in
+                Label(LocalizedStringKey(destination.title), systemImage: destination.systemImage)
+                    .font(.body.weight(.medium))
+                    .tag(destination.route)
+                    .padding(.vertical, 7)
+                    .accessibilityIdentifier(destination.accessibilityIdentifier)
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("Prism")
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+        .navigationSplitViewColumnWidth(min: 228, ideal: 248, max: 300)
         .scrollContentBackground(.hidden)
         .background(Color(nsColor: .windowBackgroundColor))
+        .padding(.top, 14)
     }
 
     private var optionalSelection: Binding<AppRoute?> {

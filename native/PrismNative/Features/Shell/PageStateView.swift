@@ -114,13 +114,13 @@ struct PageStateView: View {
         VStack(spacing: 12) {
             stateSymbol
 
-            Text(model.title)
+            Text(LocalizedStringKey(model.title))
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
 
             if let message = model.message {
-                Text(message)
+                Text(LocalizedStringKey(message))
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -177,7 +177,7 @@ struct PageStateView: View {
                         .controlSize(.small)
                         .accessibilityHidden(true)
                 }
-                Text(action.title)
+                Text(LocalizedStringKey(action.title))
             }
         }
         .disabled(!model.canPerformActions)

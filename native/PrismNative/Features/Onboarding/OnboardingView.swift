@@ -555,12 +555,12 @@ struct OnboardingView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(presentation.title)
+            Text(LocalizedStringKey(presentation.title))
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(presentation.accessibilityIdentifier)
-            Text(presentation.message)
+            Text(LocalizedStringKey(presentation.message))
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -606,10 +606,10 @@ struct OnboardingView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 24)
                         .accessibilityHidden(true)
-                    Text(row.title)
+                    Text(LocalizedStringKey(row.title))
                         .font(.body.weight(.medium))
                     Spacer()
-                    Text(row.statusText)
+                    Text(LocalizedStringKey(row.statusText))
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
@@ -748,9 +748,9 @@ struct OnboardingView: View {
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(alert.title)
+                Text(LocalizedStringKey(alert.title))
                     .font(.body.weight(.semibold))
-                Text(alert.message)
+                Text(LocalizedStringKey(alert.message))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -774,7 +774,7 @@ struct OnboardingView: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
-            Text(text)
+            Text(LocalizedStringKey(text))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -814,7 +814,7 @@ struct OnboardingView: View {
     }
 
     private func baseButton(_ action: OnboardingActionPresentation) -> some View {
-        Button(action.title) {
+        Button(LocalizedStringKey(action.title)) {
             perform(action.id)
         }
         .disabled(!action.isEnabled)
@@ -876,4 +876,5 @@ struct OnboardingView: View {
             await model.beginTestLink()
         }
     }
+
 }

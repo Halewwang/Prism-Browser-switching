@@ -237,19 +237,6 @@ final class AppRootRecoveryController {
 }
 
 @MainActor
-struct AppRootShellCommands {
-    let environment: AppEnvironment
-
-    func openSettings() {
-        environment.updateRoute(.settings)
-    }
-
-    func checkForUpdates() {
-        environment.updateChecker.checkForUpdates()
-    }
-}
-
-@MainActor
 @Observable
 final class AppRootCoordinator {
     let onboardingModel: OnboardingViewModel
@@ -346,6 +333,9 @@ final class AppRootCoordinator {
             },
             openDefaultAppsSettings: { [systemActions] in
                 systemActions.openDefaultAppsSettings()
+            },
+            restart: { [systemActions] in
+                systemActions.restart()
             }
         )
     }
@@ -371,18 +361,6 @@ final class AppRootCoordinator {
 
     var browserCatalog: any BrowserCataloging {
         composition.browserCatalog
-    }
-
-    func checkForUpdates() {
-        AppRootShellCommands(environment: environment).checkForUpdates()
-    }
-
-    var canCheckForUpdates: Bool {
-        environment.updateChecker.canCheckForUpdates
-    }
-
-    func openSettings() {
-        AppRootShellCommands(environment: environment).openSettings()
     }
 
     func performRecoveryAction() {
@@ -483,25 +461,6 @@ struct AppRootView: View {
                 recoveryBanner: coordinator.recoveryRendering?.banner,
                 onRecoveryAction: coordinator.performRecoveryAction
             )
-            .toolbar {
-                ToolbarItemGroup {
-                    Button {
-                        coordinator.openSettings()
-                    } label: {
-                        Label("Open Settings", systemImage: "gear")
-                    }
-                    .accessibilityIdentifier("appShell.openSettings")
-
-                    if coordinator.canCheckForUpdates {
-                        Button {
-                            coordinator.checkForUpdates()
-                        } label: {
-                            Label("Check for Updates", systemImage: "arrow.clockwise")
-                        }
-                        .accessibilityIdentifier("appShell.checkForUpdates")
-                    }
-                }
-            }
         case .recovery:
             if let state = coordinator.recoveryRendering?.pageState {
                 PageStateView(model: state) { _ in

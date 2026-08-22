@@ -71,11 +71,11 @@ struct RecoveryBanner: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(model.title)
+                Text(LocalizedStringKey(model.title))
                     .font(.headline)
                     .accessibilityLabel(model.title)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
-                Text(model.message)
+                Text(LocalizedStringKey(model.message))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -95,7 +95,7 @@ struct RecoveryBanner: View {
                             .controlSize(.small)
                             .accessibilityHidden(true)
                     }
-                    Text(model.primaryAction.title)
+                    Text(LocalizedStringKey(model.primaryAction.title))
                 }
             }
             .buttonStyle(.borderedProminent)

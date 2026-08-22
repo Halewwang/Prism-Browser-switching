@@ -5,6 +5,7 @@ final class AppShellUITests: PrismUITestCase {
         let application = launchFixture("history", appearance: .light)
 
         _ = requireElement("appShell.page.history.heading", in: application)
+        XCTAssertFalse(application.buttons["appShell.openSettings"].exists)
 
         requireElement("appShell.sidebar.rules", in: application).click()
         _ = requireElement("appShell.page.rules.heading", in: application)
@@ -45,16 +46,21 @@ final class AppShellUITests: PrismUITestCase {
         XCTAssertEqual(application.windows.count, 1)
     }
 
-    func testWorkspaceOverviewMakesOperationalStatusAndRulePriorityActionable() {
+    func testWorkspaceOverviewKeepsOperationalStatusAndRulePriorityActionable() throws {
         let application = launchFixture("workspace", appearance: .dark)
 
         _ = requireElement("appShell.page.overview.heading", in: application)
         _ = requireElement("overview.linkHandling", in: application)
         _ = requireElement("overview.automaticRules", in: application)
         _ = requireElement("overview.browsers", in: application)
-        _ = requireButton("overview.manageRules", in: application)
-
-        requireButton("overview.manageRules", in: application).click()
+        XCTAssertFalse(application.buttons["overview.manageRules"].exists)
+        try attachWindowScreenshot(
+            "workspace-overview",
+            application: application,
+            appearance: .dark,
+            verifiesAppearance: true
+        )
+        requireElement("appShell.sidebar.rules", in: application).click()
         _ = requireElement("appShell.page.rules.heading", in: application)
         let documentationUp = requireElement(
             "rules.rule.00000000-0000-0000-0000-000000000301.moveUp",

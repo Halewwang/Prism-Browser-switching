@@ -25,18 +25,6 @@ struct AppRootCoordinatorTests {
         #expect(coordinator.onboardingModel === originalModel)
     }
 
-    @Test func shellCommandsUseTheRealRouteAndUpdateCheckerBoundaries() {
-        let checker = RecordingRootUpdateChecker()
-        let environment = makeRootEnvironment(updateChecker: checker)
-        let commands = AppRootShellCommands(environment: environment)
-
-        commands.openSettings()
-        commands.checkForUpdates()
-
-        #expect(environment.route == .settings)
-        #expect(checker.checkCount == 1)
-        #expect(checker.canCheckForUpdates)
-    }
 }
 
 @Suite("Typed app root recovery actions")
@@ -258,18 +246,6 @@ struct AppRootSystemActionsTests {
 }
 
 @MainActor
-private final class RecordingRootUpdateChecker: UpdateChecking {
-    let events = AsyncStream<UpdateEvent> { _ in }
-    let canCheckForUpdates = true
-    var automaticallyChecksForUpdates = false
-    private(set) var checkCount = 0
-
-    func checkForUpdates() {
-        checkCount += 1
-    }
-}
-
-@MainActor
 private final class RootRecoveryRecorder {
     var historyRetryCount = 0
     var restorationRetryCount = 0
@@ -308,19 +284,6 @@ private func makeRootComposition() -> ProductionAppComposition {
     ProductionAppComposition.makeForTesting(
         modelContainerFactory: { try ModelContainerFactory.make(inMemory: true) },
         recoveryStoreFactory: { RootPendingRequestStore() }
-    )
-}
-
-@MainActor
-private func makeRootEnvironment(updateChecker: any UpdateChecking) -> AppEnvironment {
-    AppEnvironment(
-        route: .history,
-        unmatchedBehavior: .alwaysAsk,
-        updateChecker: updateChecker,
-        ruleRepository: InMemoryRuleRepository(),
-        historyRepository: InMemoryHistoryRepository(),
-        browserPreferenceRepository: InMemoryBrowserPreferenceRepository(),
-        settingsRepository: InMemorySettingsRepository()
     )
 }
 

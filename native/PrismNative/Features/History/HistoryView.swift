@@ -30,7 +30,7 @@ struct HistoryView: View {
         ) {
             Button("OK", role: .cancel) { model.dismissActionMessage() }
         } message: {
-            Text(model.actionMessage ?? "")
+            Text(LocalizedStringKey(model.actionMessage ?? ""))
         }
         .confirmationDialog(
             confirmationTitle,
@@ -50,7 +50,7 @@ struct HistoryView: View {
             }
             Button("Cancel", role: .cancel) { model.cancelConfirmation() }
         } message: {
-            Text(confirmationMessage)
+            Text(LocalizedStringKey(confirmationMessage))
         }
     }
 
@@ -81,13 +81,13 @@ struct HistoryView: View {
                     ? "Clear all saved History"
                     : "Clear is unavailable while Prism can still complete or retry a link. Complete or cancel that link first.")
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 20)
 
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: 14) {
                     ForEach(model.entries, id: \.id) { entry in
                         HistoryRow(
                             entry: entry,
@@ -107,7 +107,7 @@ struct HistoryView: View {
                         )
                     }
                 }
-                .padding(20)
+                .padding(28)
             }
         }
     }

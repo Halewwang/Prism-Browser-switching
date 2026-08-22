@@ -6,6 +6,7 @@ struct SettingsManagementView: View {
 
     let browserCatalog: any BrowserCataloging
     let openDefaultAppsSettings: () -> Void
+    let restart: () -> Void
 
     @State private var browsers: [BrowserDescriptor] = []
     @State private var defaultHandlerState: DefaultHandlerState?
@@ -13,6 +14,7 @@ struct SettingsManagementView: View {
     @State private var isUpdatingDefaultHandler = false
     @State private var isUpdatingLoginItem = false
     @State private var actionMessage: String?
+    @State private var languageRestartRequired = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,12 +29,27 @@ struct SettingsManagementView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 18)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 24)
 
             Divider()
 
             Form {
+                Section("Interface") {
+                    Picker("Language", selection: appLanguage) {
+                        Text("Use System Language")
+                            .tag(AppLanguage.system)
+                            .accessibilityIdentifier("settings.language.system")
+                        Text("English")
+                            .tag(AppLanguage.english)
+                            .accessibilityIdentifier("settings.language.english")
+                        Text("Simplified Chinese")
+                            .tag(AppLanguage.simplifiedChinese)
+                            .accessibilityIdentifier("settings.language.simplifiedChinese")
+                    }
+                    .accessibilityIdentifier("settings.language")
+                }
+
                 Section("Link handling") {
                     defaultHandlerControl
 
@@ -121,9 +138,10 @@ struct SettingsManagementView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
         .formStyle(.grouped)
-        .navigationTitle("Settings")
         .task { await loadContext() }
         .alert(
             "Settings could not be updated",
@@ -134,7 +152,14 @@ struct SettingsManagementView: View {
         ) {
             Button("OK", role: .cancel) { actionMessage = nil }
         } message: {
-            Text(actionMessage ?? "")
+            Text(LocalizedStringKey(actionMessage ?? ""))
+        }
+        .confirmationDialog("Restart Prism to Apply Language", isPresented: $languageRestartRequired) {
+            Button("Restart Now") { restart() }
+                .accessibilityIdentifier("settings.languageRestartNow")
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Prism will use the selected language the next time it opens.")
         }
     }
 
@@ -146,7 +171,7 @@ struct SettingsManagementView: View {
         }
 
         if defaultHandlerState != .active {
-            Text(defaultHandlerExplanation)
+            Text(LocalizedStringKey(defaultHandlerExplanation))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -173,6 +198,21 @@ struct SettingsManagementView: View {
 
     private var automaticRulesEnabled: Binding<Bool> {
         setting(\.automaticRulesEnabled)
+    }
+
+    private var appLanguage: Binding<AppLanguage> {
+        Binding(
+            get: { environment.settings.language },
+            set: { language in
+                guard language != environment.settings.language else { return }
+                guard environment.mutateSettings({ $0.language = language }) else {
+                    actionMessage = "Prism could not save this setting. Your previous value is still in use."
+                    return
+                }
+                updateAppLanguagePreference(language)
+                languageRestartRequired = true
+            }
+        )
     }
 
     private var showMenuBarItem: Binding<Bool> {
@@ -307,6 +347,17 @@ struct SettingsManagementView: View {
         } catch {
             loginItemState = loginItemService.status()
             actionMessage = "Prism could not update the launch-at-login setting."
+        }
+    }
+
+    private func updateAppLanguagePreference(_ language: AppLanguage) {
+        #if DEBUG
+        guard !ProcessInfo.processInfo.arguments.contains("--ui-testing") else { return }
+        #endif
+        if let code = language.interfaceLocalizationCode {
+            UserDefaults.standard.set([code], forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
         }
     }
 }

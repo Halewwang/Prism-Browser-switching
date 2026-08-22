@@ -207,6 +207,7 @@ struct DebugAppFixture {
         if Self.opensHistoryInShell(variant) {
             var settings = AppSettings.defaults
             settings.onboardingCompleted = true
+            settings.language = .english
             try? settingsRepository.save(settings)
         }
         let historyRepository: any HistoryRepository = variant == .historyLoadFailure

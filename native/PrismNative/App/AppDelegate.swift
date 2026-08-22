@@ -188,6 +188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "Prism"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbar = nil
         window.minSize = NSSize(width: 940, height: 640)
         window.isReleasedWhenClosed = false
         let hostingView = MainWindowHostingView(rootView: mainWindowRoot())

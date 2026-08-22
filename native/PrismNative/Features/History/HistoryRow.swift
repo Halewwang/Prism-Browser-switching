@@ -54,7 +54,7 @@ struct HistoryRow: View {
             .foregroundStyle(.secondary)
 
             if let failureReason = entry.failureReason, entry.result == .failure {
-                Text(failureReasonText(failureReason))
+                Text(LocalizedStringKey(failureReasonText(failureReason)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Failure: \(failureReasonText(failureReason))")
@@ -131,7 +131,7 @@ struct HistoryRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(14)
+        .padding(18)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
@@ -192,10 +192,10 @@ struct HistoryRow: View {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.small)
-                Text(busyTitle)
+                Text(LocalizedStringKey(busyTitle))
             }
         } else {
-            Text(idleTitle)
+            Text(LocalizedStringKey(idleTitle))
         }
     }
 

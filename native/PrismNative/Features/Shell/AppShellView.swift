@@ -4,6 +4,7 @@ enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
     case testLink
     case openApplicationsFolder
     case openDefaultAppsSettings
+    case restart
 }
 
 @MainActor
@@ -11,15 +12,18 @@ struct AppShellActions {
     private let testLink: () -> Void
     private let openApplicationsFolder: () -> Void
     private let openDefaultAppsSettings: () -> Void
+    private let restart: () -> Void
 
     init(
         testLink: @escaping () -> Void = {},
         openApplicationsFolder: @escaping () -> Void = {},
-        openDefaultAppsSettings: @escaping () -> Void = {}
+        openDefaultAppsSettings: @escaping () -> Void = {},
+        restart: @escaping () -> Void = {}
     ) {
         self.testLink = testLink
         self.openApplicationsFolder = openApplicationsFolder
         self.openDefaultAppsSettings = openDefaultAppsSettings
+        self.restart = restart
     }
 
     func perform(_ action: AppShellActionID) {
@@ -30,6 +34,8 @@ struct AppShellActions {
             openApplicationsFolder()
         case .openDefaultAppsSettings:
             openDefaultAppsSettings()
+        case .restart:
+            restart()
         }
     }
 }
@@ -84,6 +90,7 @@ struct AppShellView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 940, minHeight: 640)
         .tint(.accentColor)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -99,9 +106,7 @@ struct AppShellView: View {
 
             if route == .overview {
                 OverviewView(
-                    browserCatalog: browserCatalog,
-                    testLink: { actions.perform(.testLink) },
-                    openRoute: { route = $0 }
+                    browserCatalog: browserCatalog
                 )
             } else if route == .history, let historyModel {
                 HistoryView(model: historyModel) {
@@ -118,7 +123,8 @@ struct AppShellView: View {
             } else if route == .settings {
                 SettingsManagementView(
                     browserCatalog: browserCatalog,
-                    openDefaultAppsSettings: { actions.perform(.openDefaultAppsSettings) }
+                    openDefaultAppsSettings: { actions.perform(.openDefaultAppsSettings) },
+                    restart: { actions.perform(.restart) }
                 )
             } else {
                 PageStateView(model: AppShellPresentation.historyFallback) { rawAction in
@@ -129,6 +135,5 @@ struct AppShellView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
-        .navigationTitle(AppShellDestination.destination(for: route).title)
     }
 }

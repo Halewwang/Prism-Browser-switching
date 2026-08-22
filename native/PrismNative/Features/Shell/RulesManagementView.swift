@@ -54,6 +54,7 @@ struct RulesManagementView: View {
                     )
                 }
                 .listStyle(.inset)
+                .padding(16)
             }
         }
         .task { await reload() }
@@ -90,7 +91,7 @@ struct RulesManagementView: View {
         ) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
-            Text(errorMessage ?? "")
+            Text(LocalizedStringKey(errorMessage ?? ""))
         }
     }
 
@@ -116,8 +117,8 @@ struct RulesManagementView: View {
                     .accessibilityIdentifier("rules.create")
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 32)
+        .padding(.vertical, 24)
     }
 
     private var filteredRules: [RoutingRule] {
@@ -178,11 +179,11 @@ struct RulesManagementView: View {
                     }
                 }
             } header: {
-                Text(title)
+                Text(LocalizedStringKey(title))
             } footer: {
-                Text(searchText.isEmpty
+                Text(LocalizedStringKey(searchText.isEmpty
                     ? "\(detail) Use the arrows to set their top-to-bottom priority."
-                    : "\(detail) Clear search to change priority.")
+                    : "\(detail) Clear search to change priority."))
             }
         }
     }
@@ -244,7 +245,7 @@ struct RulesManagementView: View {
             .labelStyle(.iconOnly)
             .foregroundStyle(.red)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
     }
 
     private func beginCreatingRule() {

@@ -72,6 +72,7 @@ struct StatusItemControllerTests {
         settings.showMenuBarItem = true
         settings.lastUsedBrowserID = "com.example.kept"
         settings.historyLimit = 321
+        settings.language = .english
         let fixture = await StatusItemFixture.make(route: .history, settings: settings)
         _ = fixture.makeController()
         let menu = try #require(fixture.host.menu)
@@ -170,6 +171,20 @@ struct StatusItemControllerTests {
         #expect(image.accessibilityDescription == "Prism")
     }
 
+    @Test func menuUsesTheSelectedAppLanguage() async throws {
+        var settings = AppSettings.defaults
+        settings.language = .simplifiedChinese
+        settings.automaticRulesEnabled = true
+        settings.showMenuBarItem = true
+        let fixture = await StatusItemFixture.make(route: .history, settings: settings)
+
+        _ = fixture.makeController()
+
+        let menu = try #require(fixture.host.menu)
+        #expect(menu.items[2].title == "打开 Prism")
+        #expect(menu.items[7].title == "暂停自动规则")
+    }
+
     private func menuLabel(_ item: NSMenuItem) -> String {
         item.isSeparatorItem ? "<separator>" : item.title
     }
@@ -213,6 +228,7 @@ private final class StatusItemFixture {
         var settings = AppSettings.defaults
         settings.automaticRulesEnabled = automaticRulesEnabled
         settings.showMenuBarItem = showMenuBarItem
+        settings.language = .english
         return await make(route: route, settings: settings)
     }
 

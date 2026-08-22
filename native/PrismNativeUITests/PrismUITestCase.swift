@@ -28,6 +28,8 @@ class PrismUITestCase: XCTestCase {
         let application = XCUIApplication()
         application.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US",
             "-AppleInterfaceStyle", appearance.rawValue,
             "--ui-testing", "--app-fixture", fixture,
         ]

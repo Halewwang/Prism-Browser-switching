@@ -91,24 +91,25 @@ final class StatusItemController: NSObject {
     }
 
     private func configureMenu() {
+        menu.removeAllItems()
         menu.autoenablesItems = false
         let header = NSMenuItem(title: "Prism", action: nil, keyEquivalent: "")
         header.image = StatusItemVisuals.prismMark()
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())
-        menu.addItem(makeItem(title: "Open Prism", action: #selector(openPrism), symbol: "rectangle.on.rectangle"))
-        menu.addItem(makeItem(title: "History", action: #selector(openHistory), symbol: "clock.arrow.circlepath"))
-        menu.addItem(makeItem(title: "Rules", action: #selector(openRules), symbol: "list.bullet.rectangle"))
-        menu.addItem(makeItem(title: "Browsers", action: #selector(openBrowsers), symbol: "safari"))
-        menu.addItem(makeItem(title: "Settings", action: #selector(openSettings), symbol: "gearshape"))
+        menu.addItem(makeItem(title: localized("status.openPrism", "Open Prism"), action: #selector(openPrism), symbol: "rectangle.on.rectangle"))
+        menu.addItem(makeItem(title: localized("status.history", "History"), action: #selector(openHistory), symbol: "clock.arrow.circlepath"))
+        menu.addItem(makeItem(title: localized("status.rules", "Rules"), action: #selector(openRules), symbol: "list.bullet.rectangle"))
+        menu.addItem(makeItem(title: localized("status.browsers", "Browsers"), action: #selector(openBrowsers), symbol: "safari"))
+        menu.addItem(makeItem(title: localized("status.settings", "Settings"), action: #selector(openSettings), symbol: "gearshape"))
 
         automaticRulesItem = makeItem(title: "", action: #selector(toggleAutomaticRules), symbol: "pause.circle")
         menu.addItem(automaticRulesItem)
 
         if updateChecker.canCheckForUpdates {
             let item = makeItem(
-                title: "Check for Updates",
+                title: localized("status.checkForUpdates", "Check for Updates"),
                 action: #selector(checkForUpdates),
                 symbol: "arrow.clockwise"
             )
@@ -116,7 +117,7 @@ final class StatusItemController: NSObject {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        menu.addItem(makeItem(title: "Quit Prism", action: #selector(quitPrism), symbol: "power"))
+        menu.addItem(makeItem(title: localized("status.quit", "Quit Prism"), action: #selector(quitPrism), symbol: "power"))
     }
 
     private func makeItem(title: String, action: Selector, symbol: String) -> NSMenuItem {
@@ -129,8 +130,8 @@ final class StatusItemController: NSObject {
 
     private func synchronizeWithEnvironment() {
         automaticRulesItem.title = environment.settings.automaticRulesEnabled
-            ? "Pause Automatic Rules"
-            : "Resume Automatic Rules"
+            ? localized("status.pauseRules", "Pause Automatic Rules")
+            : localized("status.resumeRules", "Resume Automatic Rules")
         automaticRulesItem.image = StatusItemVisuals.menuSymbol(
             environment.settings.automaticRulesEnabled ? "pause.circle" : "play.circle"
         )
@@ -149,6 +150,16 @@ final class StatusItemController: NSObject {
                 self.observeSettings()
             }
         }
+    }
+
+    private func localized(_ key: String, _ defaultValue: String) -> String {
+        guard let code = environment.settings.language.interfaceLocalizationCode,
+              let path = Bundle.main.path(forResource: code, ofType: "lproj"),
+              let bundle = Bundle(path: path)
+        else {
+            return Bundle.main.localizedString(forKey: key, value: defaultValue, table: nil)
+        }
+        return bundle.localizedString(forKey: key, value: defaultValue, table: nil)
     }
 
     @objc private func openPrism() {

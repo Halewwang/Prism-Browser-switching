@@ -3,10 +3,9 @@ import SwiftUI
 
 struct OverviewView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.locale) private var locale
 
     let browserCatalog: any BrowserCataloging
-    let testLink: () -> Void
-    let openRoute: (AppRoute) -> Void
 
     @State private var browserCount: Int?
     @State private var ruleCount = 0
@@ -15,25 +14,25 @@ struct OverviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 32) {
                 header
                 statusGrid
-                quickActions
             }
-            .padding(28)
-            .frame(maxWidth: 1_080, alignment: .leading)
+            .padding(.horizontal, 40)
+            .padding(.vertical, 36)
+            .frame(maxWidth: 1_120, alignment: .leading)
         }
         .background(Color(nsColor: .controlBackgroundColor))
         .task { await refresh() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(isReady ? "Prism is ready" : "Finish your Prism setup")
                     .font(.system(size: 28, weight: .bold))
                     .accessibilityIdentifier("appShell.page.overview.heading")
-                Text(headerMessage)
+                Text(LocalizedStringKey(headerMessage))
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -47,7 +46,7 @@ struct OverviewView: View {
     }
 
     private var statusGrid: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 16) {
             OverviewStatusCard(
                 title: "Link handling",
                 value: linkHandlerValue,
@@ -59,59 +58,19 @@ struct OverviewView: View {
             OverviewStatusCard(
                 title: "Automatic rules",
                 value: environment.settings.automaticRulesEnabled ? "Active" : "Paused",
-                detail: "\(ruleCount) \(ruleCount == 1 ? "rule" : "rules") configured",
+                detail: ruleCountDescription,
                 symbol: environment.settings.automaticRulesEnabled ? "checkmark.circle.fill" : "pause.circle.fill",
                 tint: environment.settings.automaticRulesEnabled ? .green : .orange,
                 accessibilityIdentifier: "overview.automaticRules"
             )
             OverviewStatusCard(
                 title: "Available browsers",
-                value: browserCount.map { "\($0) ready" } ?? "Checking…",
+                value: browserCount.map(browserCountDescription) ?? "Checking…",
                 detail: "Selector order is managed in Browsers",
                 symbol: "safari.fill",
                 tint: browserCount == 0 ? .orange : .accentColor,
                 accessibilityIdentifier: "overview.browsers"
             )
-        }
-    }
-
-    private var quickActions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Quick actions")
-                .font(.headline)
-            HStack(spacing: 10) {
-                Button("Test Link", systemImage: "link") {
-                    testLink()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(browserCount == 0 || isRefreshing)
-                .accessibilityIdentifier("overview.testLink")
-
-                Button("Manage Rules", systemImage: "list.bullet.rectangle") {
-                    openRoute(.rules)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("overview.manageRules")
-
-                Button("Manage Browsers", systemImage: "safari") {
-                    openRoute(.browsers)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("overview.manageBrowsers")
-
-                Button("Review Link Handling", systemImage: "gearshape") {
-                    openRoute(.settings)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("overview.openSettings")
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
         }
     }
 
@@ -141,6 +100,35 @@ struct OverviewView: View {
         return "Set Prism as default for \(inactiveSchemes.joined(separator: " and "))"
     }
 
+    private var ruleCountDescription: String {
+        let format = if ruleCount == 1 {
+            String(
+                localized: "overview.ruleCount.one",
+                defaultValue: "%lld rule configured",
+                locale: locale
+            )
+        } else {
+            String(
+                localized: "overview.ruleCount.other",
+                defaultValue: "%lld rules configured",
+                locale: locale
+            )
+        }
+        return String(
+            format: format,
+            locale: locale,
+            Int64(ruleCount)
+        )
+    }
+
+    private func browserCountDescription(_ count: Int) -> String {
+        String(
+            format: String(localized: "overview.browserCount", defaultValue: "%lld ready", locale: locale),
+            locale: locale,
+            Int64(count)
+        )
+    }
+
     private func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
@@ -165,23 +153,23 @@ private struct OverviewStatusCard: View {
     let accessibilityIdentifier: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Image(systemName: symbol)
                 .font(.title2)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-            Text(value)
+            Text(LocalizedStringKey(value))
                 .font(.title3.weight(.semibold))
-            Text(detail)
+            Text(LocalizedStringKey(detail))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
+        .padding(22)
+        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)

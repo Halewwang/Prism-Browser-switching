@@ -113,7 +113,8 @@ struct AppShellActionDispatchTests {
         let actions = AppShellActions(
             testLink: { received.append(.testLink) },
             openApplicationsFolder: { received.append(.openApplicationsFolder) },
-            openDefaultAppsSettings: { received.append(.openDefaultAppsSettings) }
+            openDefaultAppsSettings: { received.append(.openDefaultAppsSettings) },
+            restart: { received.append(.restart) }
         )
 
         for action in AppShellActionID.allCases {
