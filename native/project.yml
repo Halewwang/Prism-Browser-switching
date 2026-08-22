@@ -6,6 +6,9 @@ options:
 packages:
   PrismCore:
     path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.6
 targets:
   PrismNative:
     type: application
@@ -15,6 +18,8 @@ targets:
       - path: PrismNative/Resources/SupportedSources.json
     dependencies:
       - package: PrismCore
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prism.app
@@ -25,6 +30,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         MARKETING_VERSION: 1.0.0
         CURRENT_PROJECT_VERSION: 1
+        SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
       properties:
@@ -39,6 +45,10 @@ targets:
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         SUFeedURL: https://github.com/Halewwang/Prism-Browser-switching/releases/latest/download/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
+        SUEnableAutomaticChecks: true
+        SUAllowsAutomaticUpdates: false
+        SUAutomaticallyUpdate: false
     entitlements:
       path: PrismNative/Resources/PrismNative.entitlements
   PrismNativeTests:

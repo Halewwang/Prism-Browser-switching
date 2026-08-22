@@ -34,6 +34,9 @@ final class AppShellUITests: PrismUITestCase {
         _ = requireElement("settings.historyEnabled", in: application)
         _ = requireElement("settings.setDefaultHandler", in: application)
         _ = requireElement("settings.launchAtLogin", in: application)
+        let automaticUpdateChecks = requireElement("settings.automaticUpdateChecks", in: application)
+        XCTAssertFalse(automaticUpdateChecks.isEnabled)
+        XCTAssertFalse(application.buttons["settings.checkForUpdates"].exists)
         try attachWindowScreenshot(
             "settings-management",
             application: application,

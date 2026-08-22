@@ -78,6 +78,23 @@ struct SettingsManagementView: View {
                     }
                 }
 
+                Section("Updates") {
+                    Toggle("Automatically check for updates", isOn: automaticUpdateChecks)
+                        .disabled(!environment.updateChecker.canCheckForUpdates)
+                        .accessibilityIdentifier("settings.automaticUpdateChecks")
+
+                    if environment.updateChecker.canCheckForUpdates {
+                        Button("Check for Updates") {
+                            environment.updateChecker.checkForUpdates()
+                        }
+                        .accessibilityIdentifier("settings.checkForUpdates")
+                    } else {
+                        Text("Updates are available in signed release builds.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("History") {
                     Toggle("Save History", isOn: historyEnabled)
                         .accessibilityIdentifier("settings.historyEnabled")
@@ -188,6 +205,13 @@ struct SettingsManagementView: View {
             set: { wantsLaunchAtLogin in
                 Task { await updateLaunchAtLogin(wantsLaunchAtLogin) }
             }
+        )
+    }
+
+    private var automaticUpdateChecks: Binding<Bool> {
+        Binding(
+            get: { environment.updateChecker.automaticallyChecksForUpdates },
+            set: { environment.updateChecker.automaticallyChecksForUpdates = $0 }
         )
     }
 
