@@ -353,7 +353,9 @@ private final class DebugSelectorRoutingCoordinator: LinkRoutingCoordinating {
         .drained
     }
 
-    func select(browserID _: BrowserID, for _: UUID) async {}
+    func select(browserID _: BrowserID, for requestID: UUID) async {
+        presenter?.dismiss(requestID: requestID)
+    }
 
     func retry(browserID _: BrowserID, for _: UUID) async {}
 

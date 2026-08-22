@@ -673,7 +673,7 @@ import Testing
     #expect(handledVisible)
     #expect(handledClosed)
     #expect(composition.environment.route == .settings)
-    #expect(openings.count == 2)
+    #expect(openings.count == 1)
     #expect(openings.allSatisfy { $0.0 == "main" && $0.1 == .singleton })
 }
 

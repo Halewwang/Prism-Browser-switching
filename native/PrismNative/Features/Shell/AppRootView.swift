@@ -341,12 +341,18 @@ final class AppRootCoordinator {
     var shellActions: AppShellActions {
         return AppShellActions(
             testLink: { [weak self] in self?.startShellTestLink() },
-            rescan: { [weak self] in self?.rescanBrowsers() },
-            addCustomBrowser: { [weak self] in self?.addCustomBrowserFromShell() },
             openApplicationsFolder: { [systemActions] in
                 systemActions.openApplicationsFolder()
             }
         )
+    }
+
+    func addCustomBrowser() async -> OnboardingCustomBrowserResult {
+        let result = await systemActions.addCustomBrowser()
+        if result == .added {
+            _ = try? await composition.browserCatalog.scan()
+        }
+        return result
     }
 
     var recoveryRendering: AppRootRecoveryRendering? {
@@ -358,6 +364,10 @@ final class AppRootCoordinator {
 
     var environment: AppEnvironment {
         composition.environment
+    }
+
+    var browserCatalog: any BrowserCataloging {
+        composition.browserCatalog
     }
 
     func checkForUpdates() {
@@ -411,16 +421,6 @@ final class AppRootCoordinator {
         }
     }
 
-    private func rescanBrowsers() {
-        Task { try? await composition.browserCatalog.scan() }
-    }
-
-    private func addCustomBrowserFromShell() {
-        Task {
-            guard await systemActions.addCustomBrowser() == .added else { return }
-            _ = try? await composition.browserCatalog.scan()
-        }
-    }
 }
 
 struct AppRootView: View {
@@ -475,6 +475,8 @@ struct AppRootView: View {
                 route: coordinator.routeBinding,
                 actions: coordinator.shellActions,
                 historyModel: coordinator.historyModel,
+                browserCatalog: coordinator.browserCatalog,
+                addCustomBrowser: { await coordinator.addCustomBrowser() },
                 recoveryBanner: coordinator.recoveryRendering?.banner,
                 onRecoveryAction: coordinator.performRecoveryAction
             )

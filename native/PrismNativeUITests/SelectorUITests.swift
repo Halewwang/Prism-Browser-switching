@@ -55,7 +55,7 @@ final class SelectorUITests: XCTestCase {
         )
     }
 
-    func testFiveBrowserPanelShowsThreeAndAHalfThenKeyboardRevealsFifth() throws {
+    func testFiveBrowserPanelShowsThreeAndAHalfThenArrowNavigationRevealsFifth() throws {
         let application = launchSelector(variant: "five", appearance: "light")
         defer { application.terminate() }
 
@@ -78,12 +78,24 @@ final class SelectorUITests: XCTestCase {
         XCTAssertEqual(visibleWidth(of: cards[3], in: viewport), expectedWidth / 2, accuracy: 1.5)
         XCTAssertEqual(visibleWidth(of: cards[4], in: viewport), 0, accuracy: 1.5)
 
-        panel.typeKey("5", modifierFlags: [])
+        for _ in 0 ..< 4 {
+            panel.typeKey(.rightArrow, modifierFlags: [])
+        }
         XCTAssertTrue(waitUntil(timeout: 2) {
             abs(self.visibleWidth(of: cards[4], in: viewport) - expectedWidth) <= 1.5
         })
         XCTAssertTrue(cards[4].label.contains("Selected"))
 
+    }
+
+    func testNumberKeyLaunchesItsMatchingBrowserWithoutASeparateSelectionStep() {
+        let application = launchSelector(variant: "three", appearance: "light")
+        defer { application.terminate() }
+
+        let panel = selectorPanel(in: application)
+        panel.typeKey("2", modifierFlags: [])
+
+        XCTAssertTrue(waitUntil(timeout: 2) { !panel.exists })
     }
 
     func testDraggingFromBrowserCardScrollsWithoutActivatingABrowser() {

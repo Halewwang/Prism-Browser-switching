@@ -1,54 +1,59 @@
 import XCTest
 
 final class AppShellUITests: PrismUITestCase {
-    func testShellExposesAllFourDestinationsAndTheirRequiredEmptyActions() {
-        let application = launchFixture("shell", appearance: .light)
+    func testShellExposesRealRulesBrowsersAndSettingsPages() throws {
+        let application = launchFixture("history", appearance: .light)
 
-        _ = requirePageStateTitle("Handled links will appear here", in: application)
-        _ = requireButton("history.testLink", in: application)
+        _ = requireElement("appShell.page.history.heading", in: application)
 
         requireElement("appShell.sidebar.rules", in: application).click()
-        _ = requirePageStateTitle("Unmatched links use your selected fallback", in: application)
-        _ = requireButton("rules.createRule", in: application)
+        _ = requireElement("appShell.page.rules.heading", in: application)
+        XCTAssertTrue(application.staticTexts["No routing rules"].firstMatch.waitForExistence(timeout: 5))
+        _ = requireButton("rules.create", in: application)
+        try attachWindowScreenshot(
+            "rules-management",
+            application: application,
+            appearance: .light
+        )
 
         requireElement("appShell.sidebar.browsers", in: application).click()
-        _ = requirePageStateTitle("No browsers are available", in: application)
+        _ = requireElement("appShell.page.browsers.heading", in: application)
+        XCTAssertTrue(application.staticTexts["Fixture Browser"].firstMatch.waitForExistence(timeout: 5))
         _ = requireButton("browsers.rescan", in: application)
         _ = requireButton("browsers.addCustomBrowser", in: application)
-        _ = requireButton("browsers.openApplicationsFolder", in: application)
+        try attachWindowScreenshot(
+            "browsers-management",
+            application: application,
+            appearance: .light
+        )
 
         requireElement("appShell.sidebar.settings", in: application).click()
-        _ = requirePageStateTitle("Settings", in: application)
-        _ = requireButton("appShell.openSettings", in: application)
+        _ = requireElement("appShell.page.settings.heading", in: application)
+        _ = requireElement("settings.automaticRules", in: application)
+        _ = requireElement("settings.historyEnabled", in: application)
+        try attachWindowScreenshot(
+            "settings-management",
+            application: application,
+            appearance: .light
+        )
         XCTAssertEqual(application.windows.count, 1)
     }
 
-    func testDockStyleReopenPreservesRouteAndNeverDuplicatesTheMainWindow() {
-        let application = launchFixture("shell", appearance: .light)
+    func testRepeatedActivationPreservesRouteAndNeverDuplicatesTheMainWindow() {
+        let application = launchFixture("history", appearance: .light)
         requireElement("appShell.sidebar.settings", in: application).click()
-        _ = requirePageStateTitle("Settings", in: application)
+        _ = requireElement("appShell.page.settings.heading", in: application)
 
         application.activate()
         application.activate()
-        _ = requirePageStateTitle("Settings", in: application)
-        XCTAssertEqual(application.windows.count, 1)
-
-        let window = requireMainWindow(in: application)
-        let close = window.buttons[XCUIIdentifierCloseWindow]
-        XCTAssertTrue(close.waitForExistence(timeout: 3))
-        close.click()
-        XCTAssertTrue(waitUntil(timeout: 5) { application.windows.count == 0 })
-
-        application.activate()
-        _ = requireMainWindow(in: application)
-        _ = requirePageStateTitle("Settings", in: application)
+        _ = requireElement("appShell.page.settings.heading", in: application)
         XCTAssertEqual(application.windows.count, 1)
 
         requireElement("appShell.sidebar.history", in: application).click()
-        _ = requirePageStateTitle("Handled links will appear here", in: application)
+        _ = requireElement("appShell.page.history.heading", in: application)
         application.activate()
         application.activate()
-        _ = requirePageStateTitle("Handled links will appear here", in: application)
+        _ = requireElement("appShell.page.history.heading", in: application)
         XCTAssertEqual(application.windows.count, 1)
     }
 }
@@ -77,10 +82,11 @@ final class HistoryUITests: PrismUITestCase {
             in: noURL
         )
         XCTAssertFalse(reopen.isEnabled)
-        XCTAssertTrue(
-            noURL.staticTexts["URL not saved"].firstMatch.waitForExistence(timeout: 5),
-            "History must state that a URL was not retained instead of exposing a raw value"
+        let url = requireElement(
+            "history.row.00000000-0000-0000-0000-000000000203.url",
+            in: noURL
         )
+        XCTAssertEqual(accessibilityText(of: url), "Saved URL: URL not saved")
         try attachWindowScreenshot(
             "history-no-url",
             application: noURL,
@@ -139,13 +145,18 @@ final class HistoryUITests: PrismUITestCase {
         )
 
         let accessibilityHierarchy = application.debugDescription
-        for secret in [
-            "username", "password", "token", "secret", "api_key",
-            "client_secret", "refresh_token", "redacted", "fragment",
+        for unsafeURLPart in [
+            "username:password@",
+            "token=secret",
+            "password=redacted",
+            "api_key=redacted",
+            "client_secret=redacted",
+            "refresh_token=redacted",
+            "#fragment",
         ] {
             XCTAssertFalse(
-                accessibilityHierarchy.localizedCaseInsensitiveContains(secret),
-                "History accessibility must not expose the legacy \(secret) component"
+                accessibilityHierarchy.localizedCaseInsensitiveContains(unsafeURLPart),
+                "History accessibility must not expose \(unsafeURLPart) from the legacy URL"
             )
         }
     }

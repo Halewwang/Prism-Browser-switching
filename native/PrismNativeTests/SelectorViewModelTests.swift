@@ -186,6 +186,30 @@ struct SelectorViewModelTests {
         #expect(model.shortcut(forBrowserAt: 9) == nil)
     }
 
+    @Test func numericShortcutActivatesTheMatchingBrowserThroughTheSelectionPath() async {
+        let fixture = SelectorFixture(browserCount: 3)
+
+        #expect(fixture.model.canActivateShortcut(2))
+        await fixture.model.activateShortcut(2)
+
+        #expect(fixture.routing.calls == [
+            .select(browserID: fixture.browsers[1].id, requestID: fixture.request.id)
+        ])
+        #expect(fixture.model.selectedIndex == 1)
+    }
+
+    @Test func numericShortcutWithNoMatchingBrowserDoesNothing() async {
+        let fixture = SelectorFixture(browserCount: 2)
+
+        #expect(!fixture.model.canActivateShortcut(3))
+        await fixture.model.activateShortcut(3)
+        await fixture.model.activateShortcut(0)
+        await fixture.model.activateShortcut(10)
+
+        #expect(fixture.routing.calls.isEmpty)
+        #expect(fixture.model.selectedIndex == 0)
+    }
+
     @Test func enterEscapeAndMouseActionsUseExactRequestAndNeverDismissDirectly() async {
         let fixture = SelectorFixture(browserCount: 3)
         let model = fixture.model

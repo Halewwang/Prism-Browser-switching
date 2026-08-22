@@ -18,21 +18,12 @@ struct AppShellPresentationTests {
         ])
     }
 
-    @Test func eachRouteResolvesToItsOwnStablePage() {
-        let presentation = AppShellPresentation()
-
-        #expect(presentation.page(for: .history).accessibilityIdentifier == "appShell.page.history")
-        #expect(presentation.page(for: .rules).accessibilityIdentifier == "appShell.page.rules")
-        #expect(presentation.page(for: .browsers).accessibilityIdentifier == "appShell.page.browsers")
-        #expect(presentation.page(for: .settings).accessibilityIdentifier == "appShell.page.settings")
-    }
-
     @Test func historyEmptyStateExplainsWhenLinksAppearAndOffersTestLink() {
-        let page = AppShellPresentation().page(for: .history)
+        let page = AppShellPresentation.historyFallback
 
-        #expect(page.state.kind == .empty)
-        #expect(page.state.title == "Handled links will appear here")
-        #expect(page.state.actions == [
+        #expect(page.kind == .empty)
+        #expect(page.title == "Handled links will appear here")
+        #expect(page.actions == [
             PageStateAction(
                 id: AppShellActionID.testLink.rawValue,
                 title: "Test Link",
@@ -41,32 +32,6 @@ struct AppShellPresentationTests {
         ])
     }
 
-    @Test func rulesRepositoryEmptyAndSearchEmptyRemainDifferentStates() {
-        let repositoryEmpty = AppShellPresentation(rulesState: .empty).page(for: .rules)
-        let searchEmpty = AppShellPresentation(rulesState: .noSearchResults).page(for: .rules)
-
-        #expect(repositoryEmpty.state.title == "Unmatched links use your selected fallback")
-        #expect(repositoryEmpty.state.actions.map(\.id) == [AppShellActionID.createRule.rawValue])
-        #expect(searchEmpty.state.title == "No rules match your search")
-        #expect(searchEmpty.state.actions.map(\.id) == [AppShellActionID.clearRuleSearch.rawValue])
-        #expect(searchEmpty.state.actions.first?.accessibilityIdentifier == "rules.clearSearch")
-    }
-
-    @Test func browsersEmptyStateKeepsAllThreeRecoveryPathsAvailable() {
-        let page = AppShellPresentation().page(for: .browsers)
-
-        #expect(page.state.kind == .empty)
-        #expect(page.state.actions.map(\.id) == [
-            AppShellActionID.rescan.rawValue,
-            AppShellActionID.addCustomBrowser.rawValue,
-            AppShellActionID.openApplicationsFolder.rawValue,
-        ])
-        #expect(page.state.actions.map(\.accessibilityIdentifier) == [
-            "browsers.rescan",
-            "browsers.addCustomBrowser",
-            "browsers.openApplicationsFolder",
-        ])
-    }
 }
 
 @Suite("Page state semantics")
@@ -145,10 +110,6 @@ struct AppShellActionDispatchTests {
         var received: [AppShellActionID] = []
         let actions = AppShellActions(
             testLink: { received.append(.testLink) },
-            createRule: { received.append(.createRule) },
-            clearRuleSearch: { received.append(.clearRuleSearch) },
-            rescan: { received.append(.rescan) },
-            addCustomBrowser: { received.append(.addCustomBrowser) },
             openApplicationsFolder: { received.append(.openApplicationsFolder) }
         )
 

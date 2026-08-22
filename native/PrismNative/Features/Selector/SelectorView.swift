@@ -60,9 +60,10 @@ struct SelectorView: View {
         .onKeyPress(characters: .decimalDigits) { keyPress in
             guard let character = keyPress.characters.first,
                   let number = character.wholeNumberValue,
-                  number > 0
+                  hasKeyboardFocus,
+                  model.canActivateShortcut(number)
             else { return .ignored }
-            model.selectShortcut(number)
+            Task { await model.activateShortcut(number) }
             return .handled
         }
         .onChange(of: model.revealBrowserID) { _, browserID in

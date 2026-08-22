@@ -1,4 +1,9 @@
 import AppKit
+import SwiftUI
+
+private final class MainWindowHostingView: NSHostingView<AnyView> {
+    override var acceptsFirstResponder: Bool { true }
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let makeStatusItemController: StatusItemControllerFactory
     private var launchTask: Task<Void, Never>?
     private var statusItemController: StatusItemController?
+    private var mainWindow: NSWindow?
 
     var retainedStatusItemController: StatusItemController? {
         statusItemController
@@ -57,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         copyCurrentSenderPID = AppleEventSenderReader.copyCurrentSenderPID
         makeStatusItemController = Self.makeProductionStatusItemController
         super.init()
+        configureMainWindowOpening()
 #if DEBUG
         if debugUITestMode == .application || debugUITestMode == .malformedSelector {
             activateDebugApplicationFixture()
@@ -101,11 +108,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         case .malformedSelector:
             activateDebugApplicationFixture()
+            showMainWindow()
             return
         case .application:
             activateDebugApplicationFixture()
+            showMainWindow()
         case .disabled:
-            break
+            if ProcessInfo.processInfo.arguments.contains("--source-probe") {
+                showMainWindow()
+            }
         }
 #endif
         if statusItemController == nil {
@@ -142,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ sender: NSApplication,
         hasVisibleWindows flag: Bool
     ) -> Bool {
+        guard !flag else { return true }
         composition.mainWindowOpening.open(route: environment.route)
         return true
     }
@@ -154,6 +166,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             environment: composition.environment,
             updateChecker: composition.environment.updateChecker
         )
+    }
+
+    private func configureMainWindowOpening() {
+        composition.mainWindowOpening.register { [weak self] _, _ in
+            self?.showMainWindow()
+        }
+    }
+
+    private func showMainWindow() {
+        if let mainWindow {
+            mainWindow.makeKeyAndOrderFront(nil)
+            _ = NSRunningApplication.current.activate(options: [.activateAllWindows])
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Prism"
+        window.minSize = NSSize(width: 940, height: 640)
+        window.isReleasedWhenClosed = false
+        let hostingView = MainWindowHostingView(rootView: mainWindowRoot())
+        window.contentView = hostingView
+        window.initialFirstResponder = hostingView
+        window.makeFirstResponder(hostingView)
+        window.center()
+        mainWindow = window
+        window.makeKeyAndOrderFront(nil)
+        _ = NSRunningApplication.current.activate(options: [.activateAllWindows])
+    }
+
+    private func mainWindowRoot() -> AnyView {
+#if DEBUG
+        switch debugUITestMode {
+        case .application:
+            return AnyView(
+                AppRootView(composition: composition, systemActions: .inert)
+                    .preferredColorScheme(DebugApplicationFixtureAppearance.current()?.colorScheme)
+                    .onAppear { [weak self] in
+                        self?.finishDebugApplicationFixtureActivation()
+                    }
+            )
+        case .malformedSelector:
+            return AnyView(
+                Text("Invalid UI test configuration")
+                    .frame(minWidth: 760, minHeight: 520)
+                    .accessibilityIdentifier("uiTest.configurationError")
+            )
+        case .disabled where ProcessInfo.processInfo.arguments.contains("--source-probe"):
+            return AnyView(
+                SourceProbeView(recorder: sourceProbeRecorder)
+                    .environment(environment)
+            )
+        case .selector, .disabled:
+            break
+        }
+#endif
+        return AnyView(AppRootView(composition: composition))
     }
 
 #if DEBUG

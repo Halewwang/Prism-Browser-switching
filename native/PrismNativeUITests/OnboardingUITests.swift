@@ -111,8 +111,14 @@ final class OnboardingUITests: PrismUITestCase {
         requireElement("selector.browser.invalid.prism.fixture.browser", in: application).click()
         XCTAssertTrue(waitUntil(timeout: 5) { !selector.exists })
 
-        _ = requirePageStateTitle("Handled links will appear here", in: application)
-        _ = requireButton("history.testLink", in: application)
+        let historyURL = application.staticTexts.matching(
+            NSPredicate(format: "identifier ENDSWITH %@", ".url")
+        ).firstMatch
+        XCTAssertTrue(historyURL.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            accessibilityText(of: historyURL).contains("example.com/prism-onboarding-test"),
+            "A successful test handoff must create the corresponding History row"
+        )
         _ = requireMainWindow(in: application)
         try attachWindowScreenshot(
             "shell-history",
@@ -121,7 +127,7 @@ final class OnboardingUITests: PrismUITestCase {
         )
 
         requireElement("appShell.sidebar.settings", in: application).click()
-        _ = requirePageStateTitle("Settings", in: application)
+        _ = requireElement("appShell.page.settings.heading", in: application)
         try attachWindowScreenshot(
             "shell-settings",
             application: application,
@@ -180,7 +186,7 @@ final class OnboardingUITests: PrismUITestCase {
             "recoveryBanner.corruptDataRecovered.title",
             in: application
         )
-        XCTAssertEqual(recoveryTitle.label, "Prism recovered damaged data")
+        XCTAssertEqual(accessibilityText(of: recoveryTitle), "Prism recovered damaged data")
         XCTAssertTrue(recoveryTitle.isHittable)
 
         let restart = requireButton("recovery.restart", in: application)

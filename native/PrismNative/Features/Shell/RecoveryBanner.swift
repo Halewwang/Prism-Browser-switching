@@ -73,11 +73,13 @@ struct RecoveryBanner: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.title)
                     .font(.headline)
+                    .accessibilityLabel(model.title)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
                 Text(model.message)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(model.message)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).message")
             }
 

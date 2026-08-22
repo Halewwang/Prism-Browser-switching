@@ -186,6 +186,15 @@ final class SelectorViewModel {
         revealBrowserID = browsers[index].id
     }
 
+    func canActivateShortcut(_ number: Int) -> Bool {
+        !isPerformingAction && browserID(forShortcut: number) != nil
+    }
+
+    func activateShortcut(_ number: Int) async {
+        guard let browserID = browserID(forShortcut: number) else { return }
+        await activateBrowser(id: browserID)
+    }
+
     func selectBrowser(id: BrowserID) {
         guard let index = browsers.firstIndex(where: { $0.id == id }) else { return }
         selectedIndex = index
@@ -343,6 +352,11 @@ final class SelectorViewModel {
                 }
                 return $0.id.rawValue < $1.id.rawValue
             }
+    }
+
+    private func browserID(forShortcut number: Int) -> BrowserID? {
+        guard number >= 1, number <= 9 else { return nil }
+        return browsers.indices.contains(number - 1) ? browsers[number - 1].id : nil
     }
 }
 

@@ -45,15 +45,19 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: optionalSelection) {
-            ForEach(AppShellDestination.all) { destination in
-                Label(destination.title, systemImage: destination.systemImage)
-                    .tag(destination.route)
-                    .accessibilityIdentifier(destination.accessibilityIdentifier)
+            Section("Workspace") {
+                ForEach(AppShellDestination.all) { destination in
+                    Label(destination.title, systemImage: destination.systemImage)
+                        .font(.body.weight(.medium))
+                        .tag(destination.route)
+                        .padding(.vertical, 5)
+                        .accessibilityIdentifier(destination.accessibilityIdentifier)
+                }
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Prism")
-        .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
         .scrollContentBackground(.hidden)
         .background(Color(nsColor: .windowBackgroundColor))
     }
