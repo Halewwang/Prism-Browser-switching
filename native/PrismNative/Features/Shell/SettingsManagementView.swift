@@ -21,16 +21,16 @@ struct SettingsManagementView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Settings")
-                        .font(.title2.weight(.semibold))
+                        .font(WorkspaceLayout.pageTitleFont)
                         .accessibilityIdentifier("appShell.page.settings.heading")
                     Text("Control how Prism handles links and keeps local History.")
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 24)
+            .padding(.horizontal, WorkspaceLayout.contentInset)
+            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
 
             Divider()
 

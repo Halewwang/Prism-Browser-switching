@@ -18,11 +18,11 @@ struct OverviewView: View {
                 header
                 statusGrid
             }
-            .padding(.horizontal, 40)
-            .padding(.vertical, 36)
+            .padding(.horizontal, WorkspaceLayout.contentInset)
+            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
             .frame(maxWidth: 1_120, alignment: .leading)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(WorkspaceLayout.contentSurface)
         .task { await refresh() }
     }
 
@@ -30,7 +30,7 @@ struct OverviewView: View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(isReady ? "Prism is ready" : "Finish your Prism setup")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(WorkspaceLayout.pageTitleFont)
                     .accessibilityIdentifier("appShell.page.overview.heading")
                 Text(LocalizedStringKey(headerMessage))
                     .font(.body)

@@ -19,7 +19,7 @@ struct HistoryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(WorkspaceLayout.contentSurface)
         .task { await model.runSession() }
         .alert(
             "History Action Failed",
@@ -58,7 +58,7 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Recent Links")
-                    .font(.headline)
+                    .font(WorkspaceLayout.pageTitleFont)
                     .accessibilityIdentifier("appShell.page.history.heading")
                 Spacer()
                 Button(role: .destructive) {
@@ -81,8 +81,8 @@ struct HistoryView: View {
                     ? "Clear all saved History"
                     : "Clear is unavailable while Prism can still complete or retry a link. Complete or cancel that link first.")
             }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 20)
+            .padding(.horizontal, WorkspaceLayout.contentInset)
+            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
 
             Divider()
 
@@ -107,7 +107,8 @@ struct HistoryView: View {
                         )
                     }
                 }
-                .padding(28)
+                .padding(.horizontal, WorkspaceLayout.contentInset)
+                .padding(.vertical, 28)
             }
         }
     }

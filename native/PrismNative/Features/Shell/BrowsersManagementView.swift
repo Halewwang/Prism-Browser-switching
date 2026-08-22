@@ -81,10 +81,10 @@ struct BrowsersManagementView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Browsers")
-                    .font(.title2.weight(.semibold))
+                    .font(WorkspaceLayout.pageTitleFont)
                     .accessibilityIdentifier("appShell.page.browsers.heading")
                 Text("Manage the browsers shown in the link selector.")
-                    .font(.subheadline)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 20)
@@ -100,8 +100,8 @@ struct BrowsersManagementView: View {
             .disabled(isAddingBrowser)
             .accessibilityIdentifier("browsers.addCustomBrowser")
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 24)
+        .padding(.horizontal, WorkspaceLayout.contentInset)
+        .padding(.vertical, WorkspaceLayout.headerVerticalInset)
     }
 
     private var emptyActions: some View {

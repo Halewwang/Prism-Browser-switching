@@ -1,5 +1,13 @@
 import SwiftUI
 
+enum WorkspaceLayout {
+    static let contentInset: CGFloat = 40
+    static let headerVerticalInset: CGFloat = 28
+    static let pageTitleFont = Font.system(size: 32, weight: .bold)
+    static let sidebarSurface = Color(nsColor: .underPageBackgroundColor)
+    static let contentSurface = Color(nsColor: .windowBackgroundColor)
+}
+
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
     case testLink
     case openApplicationsFolder
@@ -84,16 +92,13 @@ struct AppShellView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HSplitView {
             SidebarView(selection: $route)
-        } detail: {
             detail
         }
-        .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 940, minHeight: 640)
         .tint(.accentColor)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(WorkspaceLayout.contentSurface)
     }
 
     private var detail: some View {
@@ -134,6 +139,6 @@ struct AppShellView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(WorkspaceLayout.contentSurface)
     }
 }

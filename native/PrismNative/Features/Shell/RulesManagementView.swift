@@ -99,10 +99,10 @@ struct RulesManagementView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Rules")
-                    .font(.title2.weight(.semibold))
+                    .font(WorkspaceLayout.pageTitleFont)
                     .accessibilityIdentifier("appShell.page.rules.heading")
                 Text("Choose which links Prism should open automatically.")
-                    .font(.subheadline)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 20)
@@ -117,8 +117,8 @@ struct RulesManagementView: View {
                     .accessibilityIdentifier("rules.create")
             }
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 24)
+        .padding(.horizontal, WorkspaceLayout.contentInset)
+        .padding(.vertical, WorkspaceLayout.headerVerticalInset)
     }
 
     private var filteredRules: [RoutingRule] {

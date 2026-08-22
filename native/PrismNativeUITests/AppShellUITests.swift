@@ -5,6 +5,7 @@ final class AppShellUITests: PrismUITestCase {
         let application = launchFixture("history", appearance: .light)
 
         _ = requireElement("appShell.page.history.heading", in: application)
+        _ = requireElement("appShell.sidebar.brand", in: application)
         XCTAssertFalse(application.buttons["appShell.openSettings"].exists)
 
         requireElement("appShell.sidebar.rules", in: application).click()

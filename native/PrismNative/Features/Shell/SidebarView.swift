@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AppShellDestination: Identifiable {
@@ -47,20 +48,45 @@ struct SidebarView: View {
     @Binding var selection: AppRoute
 
     var body: some View {
-        List(selection: optionalSelection) {
-            ForEach(AppShellDestination.all) { destination in
-                Label(LocalizedStringKey(destination.title), systemImage: destination.systemImage)
-                    .font(.body.weight(.medium))
-                    .tag(destination.route)
-                    .padding(.vertical, 7)
-                    .accessibilityIdentifier(destination.accessibilityIdentifier)
+        VStack(spacing: 0) {
+            brandHeader
+
+            List(selection: optionalSelection) {
+                ForEach(AppShellDestination.all) { destination in
+                    Label(LocalizedStringKey(destination.title), systemImage: destination.systemImage)
+                        .font(.body.weight(.medium))
+                        .tag(destination.route)
+                        .padding(.vertical, 7)
+                        .accessibilityIdentifier(destination.accessibilityIdentifier)
+                }
             }
+            .listStyle(.sidebar)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 228, ideal: 248, max: 300)
-        .scrollContentBackground(.hidden)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .padding(.top, 14)
+        .frame(minWidth: 228, idealWidth: 248, maxWidth: 300)
+        .background(WorkspaceLayout.sidebarSurface)
+    }
+
+    private var brandHeader: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+
+            Text("Prism")
+                .font(.headline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Prism")
+        .accessibilityIdentifier("appShell.sidebar.brand")
     }
 
     private var optionalSelection: Binding<AppRoute?> {
