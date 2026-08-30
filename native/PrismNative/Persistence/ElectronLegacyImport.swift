@@ -106,6 +106,7 @@ enum ElectronLegacyImport {
         return snapshot
     }
 
+    @MainActor
     private static func importCustomBrowsers(
         _ payloads: [ElectronCustomBrowserPayload],
         into browsers: any BrowserPreferenceRepository
@@ -121,6 +122,7 @@ enum ElectronLegacyImport {
         return imported
     }
 
+    @MainActor
     private static func importRules(
         _ payloads: [ElectronRoutingRulePayload],
         customBrowsers: [ElectronCustomBrowserPayload],
@@ -143,6 +145,7 @@ enum ElectronLegacyImport {
         return imported
     }
 
+    @MainActor
     private static func importHistory(
         _ payloads: [ElectronHistoryPayload],
         customBrowsers: [ElectronCustomBrowserPayload],
