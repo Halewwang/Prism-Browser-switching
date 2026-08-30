@@ -22,6 +22,14 @@ public struct SourceApplication: Codable, Equatable, Sendable {
         displayName: "Unknown",
         confidence: .unknown
     )
+
+    /// Source rules may fire only for a confirmed Apple Event attribution with a bundle ID.
+    /// Low-confidence activation inference and unknown sources never count as a hit.
+    public var isConfirmedForSourceRules: Bool {
+        guard confidence == .confirmed else { return false }
+        let bundleIdentifier = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !bundleIdentifier.isEmpty
+    }
 }
 
 public enum LinkRequestState: String, Codable, Equatable, Sendable {

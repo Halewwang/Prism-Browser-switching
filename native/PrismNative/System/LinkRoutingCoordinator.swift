@@ -263,11 +263,13 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             blockForStorage(request)
             return .paused
         }
+        // Source rules match confirmed bundle IDs. The bundled support
+        // manifest stays available for diagnostics and is not a runtime gate.
+        _ = (sourceManifest, operatingSystemVersion)
         let decision = ruleEngine.decide(
             request: request,
             rules: rules,
             availableBrowserIDs: Set(browsers.map(\.id)),
-            eligibleSourceBundleIDs: sourceManifest.eligibleBundleIDs(for: operatingSystemVersion),
             settings: settings.values
         )
 

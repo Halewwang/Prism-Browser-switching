@@ -32,6 +32,7 @@ struct RuleEditorDraft: Identifiable {
     let existingRule: RoutingRule?
     var matchKind: RuleMatchKind
     var matchValue: String
+    var sourceDisplayName: String
     var targetBrowserID: BrowserID?
     var label: String
     var isEnabled: Bool
@@ -40,6 +41,7 @@ struct RuleEditorDraft: Identifiable {
         id = UUID()
         existingRule = rule
         isEnabled = rule?.isEnabled ?? true
+        sourceDisplayName = ""
 
         if let rule {
             targetBrowserID = rule.targetBrowserID
@@ -57,6 +59,7 @@ struct RuleEditorDraft: Identifiable {
             case let .sourceBundleIdentifier(bundleIdentifier):
                 matchKind = .sourceApplication
                 matchValue = bundleIdentifier
+                sourceDisplayName = rule.label ?? ""
             }
             return
         }
@@ -71,12 +74,42 @@ struct RuleEditorDraft: Identifiable {
         case let .source(bundleIdentifier, displayName, browserID):
             matchKind = .sourceApplication
             matchValue = bundleIdentifier
-            label = displayName
+            sourceDisplayName = displayName
+            if label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                label = displayName
+            }
             targetBrowserID = browserID
         case nil:
             matchKind = .domainAndSubdomains
             matchValue = ""
         }
+    }
+
+    mutating func changeMatchKind(_ kind: RuleMatchKind) {
+        guard kind != matchKind else { return }
+        if matchKind == .sourceApplication || kind == .sourceApplication {
+            clearSourceSelection()
+        }
+        matchKind = kind
+    }
+
+    mutating func selectSource(bundleIdentifier: String, displayName: String) {
+        let trimmedID = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        matchValue = trimmedID
+        sourceDisplayName = trimmedName
+        if label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            label = trimmedName
+        }
+    }
+
+    mutating func clearSourceSelection() {
+        matchValue = ""
+        sourceDisplayName = ""
+    }
+
+    var hasSourceSelection: Bool {
+        !matchValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var canSave: Bool {
@@ -104,7 +137,7 @@ struct RuleEditorDraft: Identifiable {
     func makeRule(now: Date = .now) -> RoutingRule? {
         guard let matcher, let targetBrowserID else { return nil }
         let existing = existingRule
-        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLabel = resolvedLabel
         return RoutingRule(
             id: existing?.id ?? UUID(),
             isEnabled: isEnabled,
@@ -116,6 +149,17 @@ struct RuleEditorDraft: Identifiable {
             createdAt: existing?.createdAt ?? now,
             updatedAt: now
         )
+    }
+
+    private var resolvedLabel: String {
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedLabel.isEmpty {
+            return trimmedLabel
+        }
+        if matchKind == .sourceApplication {
+            return sourceDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return ""
     }
 
     private func normalizedHost(_ rawValue: String) -> String? {

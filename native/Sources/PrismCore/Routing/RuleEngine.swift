@@ -81,7 +81,6 @@ public struct RuleEngine: Sendable {
         request: LinkRequest,
         rules: [RoutingRule],
         availableBrowserIDs: Set<BrowserID>,
-        eligibleSourceBundleIDs: Set<String>,
         settings: AppSettings
     ) -> RoutingDecision {
         guard settings.automaticRulesEnabled else {
@@ -92,11 +91,7 @@ public struct RuleEngine: Sendable {
             return decision(for: rule, method: .urlRule, availableBrowserIDs: availableBrowserIDs)
         }
 
-        if let rule = firstMatchingSourceRule(
-            in: rules,
-            request: request,
-            eligibleSourceBundleIDs: eligibleSourceBundleIDs
-        ) {
+        if let rule = firstMatchingSourceRule(in: rules, request: request) {
             return decision(for: rule, method: .sourceRule, availableBrowserIDs: availableBrowserIDs)
         }
 
@@ -114,13 +109,11 @@ public struct RuleEngine: Sendable {
 
     private func firstMatchingSourceRule(
         in rules: [RoutingRule],
-        request: LinkRequest,
-        eligibleSourceBundleIDs: Set<String>
+        request: LinkRequest
     ) -> RoutingRule? {
-        guard request.source.confidence == .confirmed,
-              let bundleID = request.source.bundleIdentifier,
-              !bundleID.isEmpty,
-              eligibleSourceBundleIDs.contains(bundleID)
+        guard request.source.isConfirmedForSourceRules,
+              let bundleID = request.source.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !bundleID.isEmpty
         else {
             return nil
         }

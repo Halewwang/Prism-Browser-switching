@@ -541,8 +541,7 @@ private final class QueueMonitoringContentProvider: SelectorContentProviding {
             browserCatalog: catalog,
             routingCoordinator: routing,
             pendingCountProvider: RecoveryQueuePendingCountProvider(queue: queue),
-            navigationHandler: navigation,
-            eligibleSourceBundleIDs: []
+            navigationHandler: navigation
         )
         models[request.id] = WeakSelectorModelBox(model)
         let task = model.startPendingCountMonitoring()
