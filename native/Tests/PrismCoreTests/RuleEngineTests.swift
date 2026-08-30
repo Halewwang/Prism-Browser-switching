@@ -21,7 +21,6 @@ import Testing
         ),
         rules: [sourceRule, urlRule],
         availableBrowserIDs: [safari, chrome],
-        eligibleSourceBundleIDs: ["com.tinyspeck.slackmacgap"],
         settings: .defaults
     )
 
@@ -44,7 +43,6 @@ func exactHostRejectsLookalikes(_ host: String) {
         request: .fixture(),
         rules: [],
         availableBrowserIDs: [safari],
-        eligibleSourceBundleIDs: [],
         settings: settings
     )
 
@@ -82,22 +80,21 @@ func hostAndSubdomainsRespectsLabelBoundaries(url: String, expected: Bool) {
     let valid = rule(id: .test(3), matcher: .exactHost("example.com"), browser: chrome, priority: 2)
 
     let decision = RuleEngine().decide(
-        request: .fixture(), rules: [disabled, invalid, valid], availableBrowserIDs: [safari, chrome], eligibleSourceBundleIDs: [], settings: .defaults
+        request: .fixture(), rules: [disabled, invalid, valid], availableBrowserIDs: [safari, chrome], settings: .defaults
     )
 
     #expect(decision == .open(browserID: chrome, method: .urlRule, ruleID: valid.id))
 }
 
 @Test(arguments: [
-    (SourceConfidence.confirmed, "com.example.source", Set(["com.example.source"]), true),
-    (SourceConfidence.low, "com.example.source", Set(["com.example.source"]), false),
-    (SourceConfidence.confirmed, "", Set(["com.example.source"]), false),
-    (SourceConfidence.confirmed, "com.example.source", Set<String>(), false)
+    (SourceConfidence.confirmed, "com.example.source", true),
+    (SourceConfidence.low, "com.example.source", false),
+    (SourceConfidence.unknown, "com.example.source", false),
+    (SourceConfidence.confirmed, "", false)
 ])
-func sourceRulesRequireConfirmedEligibleNonemptySources(
+func sourceRulesMatchConfirmedBundleIDsWithoutAWhitelist(
     confidence: SourceConfidence,
     bundleID: String,
-    eligibleIDs: Set<String>,
     shouldMatch: Bool
 ) {
     let safari: BrowserID = "com.apple.Safari"
@@ -109,7 +106,9 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
 
     let decision = RuleEngine().decide(
         request: .fixture(sourceBundleID: bundleID, confidence: confidence),
-        rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: eligibleIDs, settings: .defaults
+        rules: [sourceRule],
+        availableBrowserIDs: [safari],
+        settings: .defaults
     )
 
     let expected: RoutingDecision = shouldMatch
@@ -118,17 +117,19 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
     #expect(decision == expected)
 }
 
-@Test func sourceEligibilityIsRecheckedForEveryDecision() {
+@Test func sourceRulesHitByBundleIDWhenTheSupportManifestIsEmpty() {
     let safari: BrowserID = "com.apple.Safari"
     let sourceRule = rule(matcher: .sourceBundleIdentifier("com.example.source"), browser: safari, priority: 0)
     let request = LinkRequest.fixture(sourceBundleID: "com.example.source", confidence: .confirmed)
-    let engine = RuleEngine()
 
-    let eligible = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: ["com.example.source"], settings: .defaults)
-    let removed = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: [], settings: .defaults)
+    let decision = RuleEngine().decide(
+        request: request,
+        rules: [sourceRule],
+        availableBrowserIDs: [safari],
+        settings: .defaults
+    )
 
-    #expect(eligible == .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id))
-    #expect(removed == .ask(reason: .noMatchingRule))
+    #expect(decision == .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id))
 }
 
 @Test func lowerPriorityRuleWinsWithinTheSameCategory() {
@@ -138,7 +139,7 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
     let lowerNumber = rule(id: .test(2), matcher: .exactHost("example.com"), browser: chrome, priority: 1)
 
     let decision = RuleEngine().decide(
-        request: .fixture(), rules: [higherNumber, lowerNumber], availableBrowserIDs: [safari, chrome], eligibleSourceBundleIDs: [], settings: .defaults
+        request: .fixture(), rules: [higherNumber, lowerNumber], availableBrowserIDs: [safari, chrome], settings: .defaults
     )
 
     #expect(decision == .open(browserID: chrome, method: .urlRule, ruleID: lowerNumber.id))
@@ -151,7 +152,7 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
     let secondByID = rule(id: .test(2), matcher: .exactHost("example.com"), browser: chrome, priority: 1)
 
     let decision = RuleEngine().decide(
-        request: .fixture(), rules: [secondByID, firstByID], availableBrowserIDs: [safari, chrome], eligibleSourceBundleIDs: [], settings: .defaults
+        request: .fixture(), rules: [secondByID, firstByID], availableBrowserIDs: [safari, chrome], settings: .defaults
     )
 
     #expect(decision == .open(browserID: safari, method: .urlRule, ruleID: firstByID.id))
@@ -169,7 +170,6 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
         request: .fixture(url: "https://example.com/path"),
         rules: [exact, subdomain, contains],
         availableBrowserIDs: [safari, chrome, firefox],
-        eligibleSourceBundleIDs: [],
         settings: .defaults
     )
 
@@ -183,7 +183,7 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
     let fallback = rule(id: .test(2), matcher: .exactHost("example.com"), browser: chrome, priority: 1)
 
     let decision = RuleEngine().decide(
-        request: .fixture(), rules: [fallback, selected], availableBrowserIDs: [chrome], eligibleSourceBundleIDs: [], settings: .defaults
+        request: .fixture(), rules: [fallback, selected], availableBrowserIDs: [chrome], settings: .defaults
     )
 
     #expect(decision == .ask(reason: .targetUnavailable(unavailableSafari)))
@@ -211,7 +211,7 @@ func unmatchedBehaviorsReturnTheApprovedDecision(
     settings.lastUsedBrowserID = lastUsedID
 
     let decision = RuleEngine().decide(
-        request: .fixture(), rules: [], availableBrowserIDs: availableIDs, eligibleSourceBundleIDs: [], settings: settings
+        request: .fixture(), rules: [], availableBrowserIDs: availableIDs, settings: settings
     )
 
     #expect(decision == expected)

@@ -52,7 +52,6 @@ final class SelectorViewModel {
     private let routingCoordinator: any LinkRoutingCoordinating
     private let pendingCountProvider: any SelectorPendingCountProviding
     private let navigationHandler: any SelectorNavigationHandling
-    private let eligibleSourceBundleIDs: Set<String>
     @ObservationIgnored private var pendingCountMonitoringTask: Task<Void, Never>?
 
     init(
@@ -62,8 +61,7 @@ final class SelectorViewModel {
         browserCatalog: any BrowserCataloging,
         routingCoordinator: any LinkRoutingCoordinating,
         pendingCountProvider: any SelectorPendingCountProviding,
-        navigationHandler: any SelectorNavigationHandling,
-        eligibleSourceBundleIDs: Set<String>
+        navigationHandler: any SelectorNavigationHandling
     ) {
         requestID = request.id
         url = request.url
@@ -75,7 +73,6 @@ final class SelectorViewModel {
         self.routingCoordinator = routingCoordinator
         self.pendingCountProvider = pendingCountProvider
         self.navigationHandler = navigationHandler
-        self.eligibleSourceBundleIDs = eligibleSourceBundleIDs
         pendingCount = 0
         isLoading = false
         scanFailureMessage = nil
@@ -155,11 +152,18 @@ final class SelectorViewModel {
     }
 
     var canCreateSourceRule: Bool {
-        guard source.confidence == .confirmed,
-              let bundleIdentifier = source.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !bundleIdentifier.isEmpty
-        else { return false }
-        return eligibleSourceBundleIDs.contains(bundleIdentifier)
+        source.isConfirmedForSourceRules
+    }
+
+    var showsConfirmedSource: Bool {
+        canCreateSourceRule
+    }
+
+    var sourceTitle: String {
+        if showsConfirmedSource {
+            return source.displayName
+        }
+        return String(localized: "selector.source.unknown", defaultValue: "Unknown Source")
     }
 
     func shortcut(forBrowserAt index: Int) -> Int? {

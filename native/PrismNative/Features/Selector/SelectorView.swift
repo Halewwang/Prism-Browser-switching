@@ -97,17 +97,16 @@ struct SelectorView: View {
 
     private var sourceField: some View {
         HStack(spacing: 7) {
-            Image(nsImage: sourceIcon)
-                .resizable()
-                .scaledToFit()
+            sourceIconView
                 .frame(width: 19, height: 19)
                 .accessibilityHidden(true)
-            Text(model.source.displayName)
+            Text(model.sourceTitle)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(SelectorPalette.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
+        .opacity(model.showsConfirmedSource ? 1 : 0.45)
         .padding(.horizontal, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .selectorHeaderField(contrast: contrast)
@@ -126,8 +125,8 @@ struct SelectorView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(localized: "selector.source", defaultValue: "Source"))
         .accessibilityValue(model.pendingAccessibilityValue.map {
-            "\(model.source.displayName), \($0)"
-        } ?? model.source.displayName)
+            "\(model.sourceTitle), \($0)"
+        } ?? model.sourceTitle)
         .accessibilityIdentifier("selector.source")
     }
 
@@ -249,7 +248,7 @@ struct SelectorView: View {
             if model.canCreateSourceRule {
                 Button(String(
                     localized: "selector.rule.source",
-                    defaultValue: "Always open links from \(model.source.displayName) in \(browser.displayName)"
+                    defaultValue: "Always open from this App"
                 )) {
                     model.openSourceRule(browserID: browser.id)
                 }
@@ -284,13 +283,19 @@ struct SelectorView: View {
         .accessibilityIdentifier("selector.recovery")
     }
 
-    private var sourceIcon: NSImage {
-        guard let bundleIdentifier = model.source.bundleIdentifier,
-              let icon = iconProvider.icon(bundleIdentifier: bundleIdentifier)
-        else {
-            return NSImage(systemSymbolName: "link", accessibilityDescription: nil) ?? NSImage()
+    @ViewBuilder
+    private var sourceIconView: some View {
+        if model.showsConfirmedSource,
+           let bundleIdentifier = model.source.bundleIdentifier,
+           let icon = iconProvider.icon(bundleIdentifier: bundleIdentifier) {
+            Image(nsImage: icon)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: "questionmark.app.dashed")
+                .resizable()
+                .scaledToFit()
         }
-        return icon
     }
 
     private func setOffset(_ proposed: CGFloat) {

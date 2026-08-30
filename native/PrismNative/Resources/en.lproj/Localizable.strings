@@ -181,3 +181,12 @@
 "Restart Now" = "Restart Now";
 "Later" = "Later";
 "Prism will use the selected language the next time it opens." = "Prism will use the selected language the next time it opens.";
+"selector.source.unknown" = "Unknown Source";
+"selector.rule.source" = "Always open from this App";
+"rules.source.picker" = "Source application";
+"rules.source.empty" = "Choose Application";
+"rules.source.choose" = "Choose…";
+"rules.source.change" = "Change…";
+"rules.source.chooseApplication" = "Choose Application…";
+"rules.source.untitled" = "Unknown Application";
+"rules.source.notInstalled" = "Not Installed";

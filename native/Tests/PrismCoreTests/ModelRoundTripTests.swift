@@ -36,6 +36,30 @@ import Testing
     #expect(rule.validationState == .valid)
 }
 
+@Test func confirmedSourcesRequireANonemptyBundleIdentifier() {
+    #expect(
+        SourceApplication(
+            bundleIdentifier: "com.example.source",
+            displayName: "Source",
+            confidence: .confirmed
+        ).isConfirmedForSourceRules
+    )
+    #expect(
+        !SourceApplication(
+            bundleIdentifier: "com.example.source",
+            displayName: "Source",
+            confidence: .low
+        ).isConfirmedForSourceRules
+    )
+    #expect(
+        !SourceApplication(
+            bundleIdentifier: nil,
+            displayName: "Source",
+            confidence: .confirmed
+        ).isConfirmedForSourceRules
+    )
+}
+
 @Test func linkRequestDefaultsToQueuedWithoutStoredSelectionOrHistoryReference() {
     let request = LinkRequest(
         id: .test(1),

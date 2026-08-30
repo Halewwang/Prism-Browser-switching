@@ -356,7 +356,7 @@ struct SelectorViewModelTests {
         #expect(fixture.model.canRescan)
     }
 
-    @Test func ruleIntentsUseExactHostAndGateSourceByConfidenceAndEligibility() {
+    @Test func ruleIntentsUseExactHostAndConfirmedSourceWithoutWhitelist() {
         let confirmed = SourceApplication(
             bundleIdentifier: "com.example.eligible",
             displayName: "Eligible Source",
@@ -364,13 +364,15 @@ struct SelectorViewModelTests {
         )
         let fixture = SelectorFixture(
             browserCount: 2,
-            source: confirmed,
-            eligibleSourceBundleIDs: ["com.example.eligible"]
+            source: confirmed
         )
 
         fixture.model.openDomainRule(browserID: fixture.browsers[0].id)
         fixture.model.openSourceRule(browserID: fixture.browsers[1].id)
 
+        #expect(fixture.model.canCreateSourceRule)
+        #expect(fixture.model.showsConfirmedSource)
+        #expect(fixture.model.sourceTitle == "Eligible Source")
         #expect(fixture.navigation.rulePrefills == [
             .domain(host: "private.example", browserID: fixture.browsers[0].id),
             .source(
@@ -391,9 +393,23 @@ struct SelectorViewModelTests {
         )
         let fixture = SelectorFixture(
             browserCount: 1,
-            source: source,
-            eligibleSourceBundleIDs: ["com.example.eligible"]
+            source: source
         )
+
+        #expect(fixture.model.canCreateSourceRule == false)
+        #expect(fixture.model.showsConfirmedSource == false)
+        #expect(fixture.model.sourceTitle == String(localized: "selector.source.unknown", defaultValue: "Unknown Source"))
+        fixture.model.openSourceRule(browserID: fixture.browsers[0].id)
+        #expect(fixture.navigation.rulePrefills.isEmpty)
+    }
+
+    @Test func confirmedSourceWithoutBundleIDNeverOffersSourceRule() {
+        let source = SourceApplication(
+            bundleIdentifier: nil,
+            displayName: "Nameless",
+            confidence: .confirmed
+        )
+        let fixture = SelectorFixture(browserCount: 1, source: source)
 
         #expect(fixture.model.canCreateSourceRule == false)
         fixture.model.openSourceRule(browserID: fixture.browsers[0].id)
@@ -436,7 +452,6 @@ private struct SelectorFixture {
         browserCount: Int,
         context: SelectorPresentationContext = .normal,
         source: SourceApplication = .unknown,
-        eligibleSourceBundleIDs: Set<String> = [],
         browserCatalog: MutableBrowserCatalog? = nil,
         pendingCountProvider: MutablePendingCountProvider? = nil
     ) {
@@ -461,8 +476,7 @@ private struct SelectorFixture {
             browserCatalog: browserCatalog ?? MutableBrowserCatalog(results: [.success(browsers)]),
             routingCoordinator: routing,
             pendingCountProvider: pendingCountProvider ?? MutablePendingCountProvider(count: 1),
-            navigationHandler: navigation,
-            eligibleSourceBundleIDs: eligibleSourceBundleIDs
+            navigationHandler: navigation
         )
     }
 }

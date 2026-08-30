@@ -218,7 +218,8 @@ final class ProductionAppComposition {
             bootstrapBuffer: bootstrapBuffer,
             diagnosticRecorder: diagnosticRecorder,
             modelContainerFactory: { try ModelContainerFactory.make(inMemory: false) },
-            recoveryStoreFactory: { try AtomicPendingRequestStore.makeDefault() }
+            recoveryStoreFactory: { try AtomicPendingRequestStore.makeDefault() },
+            importElectronLegacyData: true
         )
     }
 
@@ -235,7 +236,8 @@ final class ProductionAppComposition {
             bootstrapBuffer: bootstrapBuffer,
             diagnosticRecorder: nil,
             modelContainerFactory: modelContainerFactory,
-            recoveryStoreFactory: recoveryStoreFactory
+            recoveryStoreFactory: recoveryStoreFactory,
+            importElectronLegacyData: false
         )
     }
 
@@ -340,7 +342,8 @@ final class ProductionAppComposition {
         bootstrapBuffer: BootstrapLinkBuffer,
         diagnosticRecorder: (@MainActor (LinkCaptureDiagnostic) -> Void)?,
         modelContainerFactory: @escaping @MainActor () throws -> ModelContainerResult,
-        recoveryStoreFactory: @escaping @MainActor @Sendable () throws -> RecoveryPendingRequestStore
+        recoveryStoreFactory: @escaping @MainActor @Sendable () throws -> RecoveryPendingRequestStore,
+        importElectronLegacyData: Bool
     ) -> ProductionAppComposition {
         let repositories: RepositorySet
         var warnings: [PersistenceWarning] = []
@@ -355,6 +358,13 @@ final class ProductionAppComposition {
                 browsers: SwiftDataBrowserPreferenceRepository(container: containerResult.container),
                 settings: SwiftDataSettingsRepository(container: containerResult.container)
             )
+            if importElectronLegacyData {
+                _ = try? ElectronLegacyImport.runIfNeeded(
+                    rules: repositories.rules,
+                    history: repositories.history,
+                    browsers: repositories.browsers
+                )
+            }
         } catch {
             warnings.append(.recoveryStoreUnavailable)
             repositories = .unavailable

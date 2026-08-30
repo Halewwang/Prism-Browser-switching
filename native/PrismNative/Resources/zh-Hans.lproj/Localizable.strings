@@ -181,3 +181,12 @@
 "Restart Now" = "立即重启";
 "Later" = "稍后";
 "Prism will use the selected language the next time it opens." = "下次打开 Prism 时将使用所选语言。";
+"selector.source.unknown" = "未知来源";
+"selector.rule.source" = "总是从这个 App 打开";
+"rules.source.picker" = "来源应用";
+"rules.source.empty" = "选择应用";
+"rules.source.choose" = "选取…";
+"rules.source.change" = "更换…";
+"rules.source.chooseApplication" = "选取应用程序…";
+"rules.source.untitled" = "未知应用";
+"rules.source.notInstalled" = "未安装";

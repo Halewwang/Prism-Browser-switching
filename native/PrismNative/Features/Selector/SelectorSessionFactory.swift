@@ -98,8 +98,7 @@ final class SelectorSessionFactory: SelectorContentProviding {
             browserCatalog: browserCatalog,
             routingCoordinator: routingCoordinator,
             pendingCountProvider: pendingCountProvider,
-            navigationHandler: navigationHandler,
-            eligibleSourceBundleIDs: sourceManifest.eligibleBundleIDs(for: operatingSystemVersion)
+            navigationHandler: navigationHandler
         )
         let monitoringTask = model.startPendingCountMonitoring()
         return SelectorSession(

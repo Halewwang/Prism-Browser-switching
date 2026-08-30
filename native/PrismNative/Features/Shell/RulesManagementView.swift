@@ -1,3 +1,4 @@
+import AppKit
 import PrismCore
 import SwiftUI
 
@@ -124,8 +125,9 @@ struct RulesManagementView: View {
     private var filteredRules: [RoutingRule] {
         guard !searchText.isEmpty else { return rules }
         return rules.filter { rule in
-            return rule.displayName.localizedCaseInsensitiveContains(searchText)
+            return ruleTitle(rule).localizedCaseInsensitiveContains(searchText)
                 || rule.matcherDisplayName.localizedCaseInsensitiveContains(searchText)
+                || rule.matcherSearchValue.localizedCaseInsensitiveContains(searchText)
                 || browserName(for: rule.targetBrowserID).localizedCaseInsensitiveContains(searchText)
         }
     }
@@ -198,12 +200,18 @@ struct RulesManagementView: View {
         moveDown: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: rule.matcherIcon)
-                .frame(width: 22)
-                .foregroundStyle(rule.isEnabled ? Color.accentColor : Color.secondary)
+            ruleIcon(rule)
             VStack(alignment: .leading, spacing: 4) {
-                Text(rule.displayName)
-                    .font(.body.weight(.medium))
+                HStack(spacing: 6) {
+                    Text(ruleTitle(rule))
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(sourceRowIsDimmed(rule) ? Color.secondary : Color.primary)
+                    if let badge = sourceInstallationBadge(rule) {
+                        Text(badge)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Text("\(rule.matcherDisplayName)  →  \(browserName(for: rule.targetBrowserID))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -220,21 +228,21 @@ struct RulesManagementView: View {
             }
             .labelStyle(.iconOnly)
             .disabled(!canMoveUp)
-            .accessibilityLabel("Increase priority for \(rule.displayName)")
+            .accessibilityLabel("Increase priority for \(ruleTitle(rule))")
             .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveUp")
             Button("Decrease priority", systemImage: "arrow.down") {
                 moveDown()
             }
             .labelStyle(.iconOnly)
             .disabled(!canMoveDown)
-            .accessibilityLabel("Decrease priority for \(rule.displayName)")
+            .accessibilityLabel("Decrease priority for \(ruleTitle(rule))")
             .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveDown")
             Toggle("Enable rule", isOn: Binding(
                 get: { rule.isEnabled },
                 set: { _ in toggle(rule) }
             ))
             .labelsHidden()
-            .accessibilityLabel("Enable \(rule.displayName)")
+            .accessibilityLabel("Enable \(ruleTitle(rule))")
             Button("Edit", systemImage: "pencil") {
                 draft = RuleEditorDraft(rule: rule, browsers: browsers)
             }
@@ -296,6 +304,49 @@ struct RulesManagementView: View {
             rules = try environment.ruleRepository.all()
         } catch {
             errorMessage = "Prism could not delete this rule."
+        }
+    }
+
+    private func ruleTitle(_ rule: RoutingRule) -> String {
+        guard case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher else {
+            return rule.displayName
+        }
+        return SourceRulePresentation(
+            bundleIdentifier: bundleIdentifier,
+            label: rule.label,
+            installedDisplayName: InstalledApplicationLookup.displayName(forBundleIdentifier: bundleIdentifier)
+        ).title
+    }
+
+    private func sourceRowIsDimmed(_ rule: RoutingRule) -> Bool {
+        guard case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher else {
+            return false
+        }
+        return InstalledApplicationLookup.applicationURL(forBundleIdentifier: bundleIdentifier) == nil
+    }
+
+    private func sourceInstallationBadge(_ rule: RoutingRule) -> String? {
+        guard sourceRowIsDimmed(rule) else { return nil }
+        return String(localized: "rules.source.notInstalled", defaultValue: "Not Installed")
+    }
+
+    @ViewBuilder
+    private func ruleIcon(_ rule: RoutingRule) -> some View {
+        if case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher,
+           let icon = InstalledApplicationLookup.icon(forBundleIdentifier: bundleIdentifier) {
+            Image(nsImage: icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .opacity(sourceRowIsDimmed(rule) ? 0.45 : 1)
+        } else {
+            Image(systemName: rule.matcherIcon)
+                .frame(width: 22)
+                .foregroundStyle(
+                    sourceRowIsDimmed(rule)
+                        ? Color.secondary
+                        : (rule.isEnabled ? Color.accentColor : Color.secondary)
+                )
         }
     }
 
@@ -375,14 +426,24 @@ private struct RuleEditorSheet: View {
                 .font(.title2.weight(.semibold))
 
             Form {
-                Picker("Match", selection: $draft.matchKind) {
+                Picker("Match", selection: Binding(
+                    get: { draft.matchKind },
+                    set: { draft.changeMatchKind($0) }
+                )) {
                     ForEach(RuleMatchKind.allCases) { kind in
                         Text(kind.title).tag(kind)
                     }
                 }
 
-                TextField(draft.matchKind.prompt, text: $draft.matchValue)
-                    .textFieldStyle(.roundedBorder)
+                if draft.matchKind == .sourceApplication {
+                    SourceApplicationPicker(
+                        draft: $draft,
+                        excludedBundleIDs: Set(browsers.map(\.bundleIdentifier))
+                    )
+                } else {
+                    TextField(draft.matchKind.prompt, text: $draft.matchValue)
+                        .textFieldStyle(.roundedBorder)
+                }
 
                 Picker("Open in", selection: $draft.targetBrowserID) {
                     Text("Choose a browser").tag(BrowserID?.none)
@@ -433,10 +494,21 @@ private extension RoutingRule {
     }
 
     var displayName: String {
-        if let label, !label.isEmpty { return label }
+        if let label, !label.isEmpty, !SourceRulePresentation.looksLikeBundleIdentifier(label) {
+            return label
+        }
         switch matcher {
-        case let .exactHost(host), let .hostAndSubdomains(host), let .urlContains(host), let .sourceBundleIdentifier(host):
+        case let .exactHost(host), let .hostAndSubdomains(host), let .urlContains(host):
             return host
+        case .sourceBundleIdentifier:
+            return String(localized: "rules.source.untitled", defaultValue: "Unknown Application")
+        }
+    }
+
+    var matcherSearchValue: String {
+        switch matcher {
+        case let .exactHost(value), let .hostAndSubdomains(value), let .urlContains(value), let .sourceBundleIdentifier(value):
+            return value
         }
     }
 

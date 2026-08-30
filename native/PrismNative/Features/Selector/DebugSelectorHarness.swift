@@ -328,8 +328,7 @@ private final class DebugSelectorContentProvider: SelectorContentProviding {
             browserCatalog: catalog,
             routingCoordinator: routingCoordinator,
             pendingCountProvider: pendingCountProvider,
-            navigationHandler: navigationHandler,
-            eligibleSourceBundleIDs: []
+            navigationHandler: navigationHandler
         )
         let monitoringTask = model.startPendingCountMonitoring()
         return SelectorSession(

@@ -1444,9 +1444,8 @@ import Testing
     #expect(harness.warning.last == .settingsNotSaved)
 }
 
-@Test @MainActor func sourceRuleUsesManifestEligibilityInProductionCoordinator() async throws {
+@Test @MainActor func sourceRuleHitsConfirmedBundleIDWhenSupportManifestIsEmpty() async throws {
     let sourceID = "com.example.approved"
-    let manifest = try SourceSupportManifest.decode(Data(#"{"schemaVersion":1,"sources":[{"bundleIdentifier":"com.example.approved","minimumMacOS":"15.0.0","maximumMacOS":"15.9.99","coldSamples":20,"warmSamples":20,"confirmedCount":40,"falseAttributionCount":0,"validatedAt":"2026-08-12T00:00:00Z"}]}"#.utf8))
     let rule = RoutingRule(
         id: fixedUUID(54),
         isEnabled: true,
@@ -1461,7 +1460,7 @@ import Testing
     let harness = RoutingHarness(
         launchResults: [.success],
         rulesRepository: rules,
-        sourceManifest: manifest,
+        sourceManifest: .disabled,
         operatingSystemVersion: .init(majorVersion: 15, minorVersion: 2, patchVersion: 0)
     )
     let request = LinkRequest.fixture(
