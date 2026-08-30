@@ -6,13 +6,15 @@ enum WorkspacePalette {
     static let cardFill = Color(nsColor: .windowBackgroundColor)
     static let elevatedFill = Color(nsColor: .windowBackgroundColor)
     static let pillFill = Color(nsColor: .windowBackgroundColor)
-    static let tileFill = Color.primary.opacity(0.045)
+    static let sceneFill = Color.primary.opacity(0.045)
+    static let pageFill = Color(nsColor: .textBackgroundColor)
     static let recessedTrack = Color.primary.opacity(0.07)
     static let pillStroke = Color.primary.opacity(0.16)
     static let cardStroke = Color.primary.opacity(0.10)
     static let rowSelection = Color.primary.opacity(0.06)
     static let primaryFill = Color.primary
     static let primaryForeground = Color(nsColor: .windowBackgroundColor)
+    static let productAccent = Color(red: 109 / 255, green: 93 / 255, blue: 254 / 255)
     static let accent = Color.accentColor
 }
 
@@ -193,86 +195,3 @@ struct WorkspaceOnOffPill: View {
     }
 }
 
-struct WorkspaceWindowPreview<Content: View>: View {
-    var accessibilityIdentifier: String?
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Circle().fill(Color(red: 1, green: 0.38, blue: 0.37)).frame(width: 8, height: 8)
-                Circle().fill(Color(red: 1, green: 0.76, blue: 0.23)).frame(width: 8, height: 8)
-                Circle().fill(Color(red: 0.19, green: 0.80, blue: 0.35)).frame(width: 8, height: 8)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .accessibilityHidden(true)
-
-            content()
-                .frame(maxWidth: .infinity, minHeight: WorkspaceLayout.previewMinHeight - 40, maxHeight: .infinity)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
-        }
-        .frame(maxWidth: .infinity, minHeight: WorkspaceLayout.previewMinHeight)
-        .background(WorkspacePalette.cardFill, in: RoundedRectangle(cornerRadius: WorkspaceLayout.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WorkspaceLayout.cardRadius, style: .continuous)
-                .stroke(WorkspacePalette.cardStroke, lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.07), radius: 14, y: 5)
-        .modifier(WorkspaceOptionalIdentifier(accessibilityIdentifier))
-    }
-}
-
-struct WorkspacePreviewTile: View {
-    var title: String
-    var systemImage: String?
-    var icon: NSImage?
-    var isHighlighted = false
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Group {
-                if let icon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 36, height: 36)
-                } else if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.title2)
-                        .foregroundStyle(isHighlighted ? WorkspacePalette.accent : Color.secondary)
-                }
-            }
-            .frame(width: 44, height: 44)
-
-            Text(LocalizedStringKey(title))
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-        }
-            .frame(width: 92, height: 92)
-        .background(WorkspacePalette.tileFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isHighlighted ? WorkspacePalette.accent : WorkspacePalette.cardStroke, lineWidth: isHighlighted ? 2 : 1)
-        }
-    }
-}
-
-private struct WorkspaceOptionalIdentifier: ViewModifier {
-    let identifier: String?
-
-    init(_ identifier: String?) {
-        self.identifier = identifier
-    }
-
-    func body(content: Content) -> some View {
-        if let identifier {
-            content.accessibilityIdentifier(identifier)
-        } else {
-            content
-        }
-    }
-}

@@ -64,7 +64,11 @@ struct SidebarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scrollContentBackground(.hidden)
         }
-        .frame(minWidth: 228, idealWidth: 248, maxWidth: 300)
+        .frame(
+            minWidth: WorkspaceLayout.sidebarMinWidth,
+            idealWidth: WorkspaceLayout.sidebarIdealWidth,
+            maxWidth: WorkspaceLayout.sidebarMaxWidth
+        )
         .background(WorkspaceLayout.sidebarSurface)
     }
 

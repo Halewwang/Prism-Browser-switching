@@ -1,4 +1,3 @@
-import AppKit
 import PrismCore
 import SwiftUI
 
@@ -33,12 +32,15 @@ struct BrowsersManagementView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(alignment: .leading, spacing: 18) {
-                    browserPreviewCard
-                    browserList
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        browserPreviewCard
+                        browserList
+                    }
+                    .padding(.horizontal, WorkspaceLayout.contentInset)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, WorkspaceLayout.contentInset)
-                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .tint(.primary)
@@ -108,47 +110,58 @@ struct BrowsersManagementView: View {
 
     @ViewBuilder
     private func browserRow(_ browser: BrowserDescriptor) -> some View {
-        HStack(spacing: 12) {
-            browserIcon(browser, size: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(browser.displayName)
-                    .font(.body.weight(.medium))
-                Text("\(selectorIndex(for: browser) + 1)")
+        Button {
+            selectedBrowserID = browser.id
+        } label: {
+            HStack(spacing: 12) {
+                WorkspaceBrowserIcon(browser: browser, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(browser.displayName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text(WorkspaceCopy.selectorPosition(
+                        order: selectorIndex(for: browser),
+                        count: browsers.count
+                    ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if selectorIndex(for: browser) < 9 {
+                    KeyboardShortcutBadge(number: selectorIndex(for: browser) + 1)
+                }
+                Text(browser.origin.displayName)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
-            Text(browser.origin.displayName)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, WorkspaceLayout.listRowVerticalPadding)
+            .background(
+                selectedBrowserID == browser.id ? WorkspacePalette.rowSelection : Color.clear,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
         }
-        .padding(.vertical, 4)
-        .tag(browser.id)
+        .buttonStyle(.plain)
         .accessibilityIdentifier("browsers.row.\(browser.id.rawValue)")
-        .listRowBackground(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(selectedBrowserID == browser.id ? WorkspacePalette.rowSelection : Color.clear)
-        )
-        .listRowSeparator(.hidden)
+        .draggable(browser.id.rawValue)
+        .dropDestination(for: String.self) { items, _ in
+            guard let rawValue = items.first else { return false }
+            move(rawValue, before: browser.id)
+            return true
+        }
     }
 
     private var browserPreviewCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            WorkspaceWindowPreview(accessibilityIdentifier: "browsers.inspector") {
-                HStack(spacing: 10) {
-                    ForEach(Array(browsers.prefix(3).enumerated()), id: \.element.id) { index, browser in
-                        VStack(spacing: 8) {
-                            Text("\(index + 1)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(index == 0 ? WorkspacePalette.accent : Color.secondary)
-                            WorkspacePreviewTile(
-                                title: browser.displayName,
-                                icon: NSWorkspace.shared.icon(forFile: browser.applicationURL.path),
-                                isHighlighted: selectedBrowserID == browser.id || (selectedBrowserID == nil && index == 0)
-                            )
-                        }
-                    }
-                }
+            WorkspacePreviewCard(accessibilityIdentifier: "browsers.inspector") {
+                WorkspaceScaledSelectorPreview(
+                    browsers: browsers,
+                    selectedID: selectedBrowserID ?? browsers.first?.id,
+                    sourceName: "Safari",
+                    sourceIcon: WorkspaceApplicationIcon.nsImage(bundleIdentifier: "com.apple.Safari"),
+                    urlText: "https://example.com",
+                    showsShortcuts: true
+                )
             }
             Text("Drag browsers into the order you want Prism to show them. Numbers in the selector follow this order.")
                 .font(.body)
@@ -165,15 +178,11 @@ struct BrowsersManagementView: View {
     }
 
     private var browserList: some View {
-        List(selection: $selectedBrowserID) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(browsers, id: \.id) { browser in
                 browserRow(browser)
             }
-            .onMove(perform: move)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var selectedBrowser: BrowserDescriptor? {
@@ -184,13 +193,23 @@ struct BrowsersManagementView: View {
         browsers.firstIndex(where: { $0.id == browser.id }) ?? browser.selectorOrder
     }
 
-    private func browserIcon(_ browser: BrowserDescriptor, size: CGFloat) -> some View {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: browser.applicationURL.path))
-            .resizable()
-            .interpolation(.high)
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.2, style: .continuous))
-            .accessibilityHidden(true)
+    private func move(_ rawID: String, before targetID: BrowserID) {
+        let sourceID = BrowserID(rawValue: rawID)
+        guard sourceID != targetID,
+              let source = browsers.firstIndex(where: { $0.id == sourceID }),
+              let destination = browsers.firstIndex(where: { $0.id == targetID })
+        else { return }
+        browsers.move(fromOffsets: IndexSet(integer: source), toOffset: destination > source ? destination + 1 : destination)
+        persistOrder()
+    }
+
+    private func persistOrder() {
+        do {
+            try environment.browserPreferenceRepository.saveOrder(browsers.map(\.id))
+        } catch {
+            errorMessage = "Prism could not save the browser order."
+            Task { await reload() }
+        }
     }
 
     private func reload() async {
@@ -222,16 +241,6 @@ struct BrowsersManagementView: View {
             errorMessage = "That application could not be added as a web browser."
         case .cancelled:
             break
-        }
-    }
-
-    private func move(from offsets: IndexSet, to destination: Int) {
-        browsers.move(fromOffsets: offsets, toOffset: destination)
-        do {
-            try environment.browserPreferenceRepository.saveOrder(browsers.map(\.id))
-        } catch {
-            errorMessage = "Prism could not save the browser order."
-            Task { await reload() }
         }
     }
 

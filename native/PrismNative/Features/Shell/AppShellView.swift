@@ -7,10 +7,17 @@ enum WorkspaceLayout {
     static let sidebarSurface = Color(nsColor: .underPageBackgroundColor)
     static let contentSurface = Color(nsColor: .windowBackgroundColor)
     static let canvas = Color(nsColor: .underPageBackgroundColor)
-    static let previewMinHeight: CGFloat = 220
-    static let cardRadius: CGFloat = 18
+    static let previewMinHeight: CGFloat = 280
+    static let cardRadius: CGFloat = 22
     static let pillRadius: CGFloat = 8
+    static let productIconSize: CGFloat = 52
+    static let selectorPreviewScale: CGFloat = 0.65
+    static let listRowVerticalPadding: CGFloat = 7
     static let settingsReadableWidth: CGFloat = 760
+    static let sidebarMinWidth: CGFloat = 220
+    static let sidebarIdealWidth: CGFloat = 248
+    static let sidebarMaxWidth: CGFloat = 280
+    static let detailMinWidth: CGFloat = 640
 }
 
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
@@ -99,7 +106,14 @@ struct AppShellView: View {
     var body: some View {
         HSplitView {
             SidebarView(selection: $route)
+                .frame(
+                    minWidth: WorkspaceLayout.sidebarMinWidth,
+                    idealWidth: WorkspaceLayout.sidebarIdealWidth,
+                    maxWidth: WorkspaceLayout.sidebarMaxWidth
+                )
             detail
+                .frame(minWidth: WorkspaceLayout.detailMinWidth, maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
         }
         .frame(minWidth: 940, minHeight: 640)
         .tint(.accentColor)

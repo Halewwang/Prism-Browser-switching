@@ -1,4 +1,3 @@
-import AppKit
 import PrismCore
 import SwiftUI
 
@@ -37,7 +36,7 @@ struct SettingsManagementView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    WorkspaceWindowPreview {
+                    WorkspacePreviewCard {
                         unmatchedPreview
                     }
 
@@ -297,58 +296,50 @@ struct SettingsManagementView: View {
     private var unmatchedPreview: some View {
         switch environment.settings.unmatchedBehavior {
         case .alwaysAsk:
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(Array(previewBrowsers.prefix(6).enumerated()), id: \.element.id) { index, browser in
-                        WorkspacePreviewTile(
-                            title: browser.displayName,
-                            icon: NSWorkspace.shared.icon(forFile: browser.applicationURL.path),
-                            isHighlighted: index == 0
-                        )
-                    }
-                    if previewBrowsers.isEmpty {
-                        WorkspacePreviewTile(title: "Safari", systemImage: "safari", isHighlighted: true)
-                        WorkspacePreviewTile(title: "Chrome", systemImage: "globe")
-                        WorkspacePreviewTile(title: "Arc", systemImage: "square.on.square")
-                    }
-                }
-            }
+            WorkspaceScaledSelectorPreview(
+                browsers: previewBrowsers,
+                selectedID: previewBrowsers.first?.id,
+                sourceName: selectorSourceName,
+                sourceIcon: WorkspaceApplicationIcon.nsImage(bundleIdentifier: "com.apple.Safari"),
+                urlText: "https://example.com",
+                showsShortcuts: true
+            )
         case .preferredBrowser:
-            HStack(spacing: 16) {
-                Image(systemName: "arrow.right")
-                    .font(.title.weight(.semibold))
-                    .foregroundStyle(WorkspacePalette.accent)
-                    .accessibilityHidden(true)
-                WorkspacePreviewTile(
-                    title: preferredBrowserTitle,
-                    systemImage: "safari.fill",
-                    isHighlighted: true
-                )
-            }
+            WorkspaceCornerWidgetScene(
+                address: "https://example.com",
+                browser: preferredBrowser
+            )
         case .lastUsedBrowser:
-            HStack(spacing: 16) {
-                WorkspacePreviewTile(title: "Last used", systemImage: "clock")
-                WorkspacePreviewTile(
-                    title: lastUsedBrowserTitle,
-                    systemImage: "safari.fill",
-                    isHighlighted: true
-                )
-            }
+            WorkspaceCornerWidgetScene(
+                address: "https://example.com",
+                browser: lastUsedBrowser
+            )
         }
+    }
+
+    private var selectorSourceName: String {
+        if WorkspaceApplicationIcon.nsImage(bundleIdentifier: "com.apple.Safari") != nil {
+            return "Safari"
+        }
+        return "Prism"
     }
 
     private var previewBrowsers: [BrowserDescriptor] {
         browsers.filter { $0.availability == .available }
     }
 
-    private var preferredBrowserTitle: String {
-        browsers.first(where: { $0.id == environment.settings.preferredBrowserID })?.displayName
-            ?? String(localized: "Choose a browser")
+    private var preferredBrowser: BrowserDescriptor? {
+        previewBrowsers.first(where: { $0.id == environment.settings.preferredBrowserID })
+            ?? previewBrowsers.first
     }
 
-    private var lastUsedBrowserTitle: String {
-        browsers.first(where: { $0.id == environment.settings.lastUsedBrowserID })?.displayName
-            ?? String(localized: "Last used")
+    private var lastUsedBrowser: BrowserDescriptor? {
+        previewBrowsers.first(where: { $0.id == environment.settings.lastUsedBrowserID })
+            ?? previewBrowsers.first
+    }
+
+    private var preferredBrowserTitle: String {
+        preferredBrowser?.displayName ?? String(localized: "Choose a browser")
     }
 
     private var preferredBrowserOptions: [WorkspaceInlineOption<BrowserID?>] {

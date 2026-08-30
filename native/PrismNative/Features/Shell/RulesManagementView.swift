@@ -144,23 +144,11 @@ struct RulesManagementView: View {
             let orderedRules = rule.isSourceRule ? sourceRules : urlRules
             let index = orderedRules.firstIndex(where: { $0.id == rule.id }) ?? 0
             VStack(alignment: .leading, spacing: 14) {
-                WorkspaceWindowPreview(accessibilityIdentifier: "rules.inspector") {
-                    HStack(spacing: 16) {
-                        WorkspacePreviewTile(
-                            title: rule.matcherValue,
-                            systemImage: rule.matcherIcon,
-                            isHighlighted: true
-                        )
-                        Image(systemName: "arrow.right")
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(WorkspacePalette.accent)
-                            .accessibilityHidden(true)
-                        WorkspacePreviewTile(
-                            title: browserName(for: rule.targetBrowserID),
-                            systemImage: "safari.fill",
-                            isHighlighted: true
-                        )
-                    }
+                WorkspacePreviewCard(accessibilityIdentifier: "rules.inspector") {
+                    WorkspaceCornerWidgetScene(
+                        address: ruleAddress(for: rule),
+                        browser: browsers.first(where: { $0.id == rule.targetBrowserID })
+                    )
                 }
                 Text(WorkspaceCopy.rulePreviewSentence(for: rule, browserName: browserName(for: rule.targetBrowserID)))
                     .font(.body)
@@ -200,9 +188,8 @@ struct RulesManagementView: View {
                 }
             }
         } else {
-            WorkspaceWindowPreview(accessibilityIdentifier: "rules.inspector") {
-                Text("Select a rule to review how Prism will open matching links.")
-                    .foregroundStyle(.secondary)
+            WorkspacePreviewCard(accessibilityIdentifier: "rules.inspector") {
+                WorkspaceCornerWidgetScene(address: "https://example.com", browser: browsers.first)
             }
         }
     }
@@ -251,7 +238,7 @@ struct RulesManagementView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, WorkspaceLayout.listRowVerticalPadding)
             .background(
                 selectedRuleID == rule.id ? WorkspacePalette.rowSelection : Color.clear,
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -328,6 +315,17 @@ struct RulesManagementView: View {
 
     private func browserName(for id: BrowserID) -> String {
         browsers.first(where: { $0.id == id })?.displayName ?? "Unavailable browser"
+    }
+
+    private func ruleAddress(for rule: RoutingRule) -> String {
+        switch rule.matcher {
+        case let .exactHost(host), let .hostAndSubdomains(host):
+            host.contains("://") ? host : "https://\(host)"
+        case let .urlContains(value):
+            value.contains("://") ? value : "https://\(value)"
+        case .sourceBundleIdentifier:
+            "https://example.com"
+        }
     }
 
     private func move(_ orderedRules: [RoutingRule], from source: Int, to destination: Int) {
