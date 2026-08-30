@@ -1,5 +1,6 @@
 import Foundation
 import PrismCore
+import SwiftUI
 
 enum WorkspaceCopy {
     static func rulePreviewSentence(for rule: RoutingRule, browserName: String) -> String {
@@ -66,12 +67,27 @@ enum WorkspaceCopy {
         String(localized: "for the interface.")
     }
 
-    static func unmatchedSentenceLead() -> String {
-        String(localized: "When no rule matches, Prism will")
-    }
-
     static func preferredBrowserSentenceLead() -> String {
         String(localized: "Open unmatched links in")
+    }
+
+    static func unmatchedDescription(for behavior: UnmatchedBehavior) -> String {
+        switch behavior {
+        case .alwaysAsk:
+            String(localized: "Prism shows the selector when no rule matches.")
+        case .preferredBrowser:
+            String(localized: "Prism opens unmatched links in your preferred browser.")
+        case .lastUsedBrowser:
+            String(localized: "Prism opens unmatched links in the last browser you chose.")
+        }
+    }
+
+    static func unmatchedSegmentTitle(for behavior: UnmatchedBehavior) -> LocalizedStringKey {
+        switch behavior {
+        case .alwaysAsk: "Always ask"
+        case .preferredBrowser: "Preferred"
+        case .lastUsedBrowser: "Last used"
+        }
     }
 
     private static func formatted(_ key: String, _ values: CVarArg...) -> String {
@@ -124,6 +140,10 @@ extension UnmatchedBehavior {
         case .preferredBrowser: "open in the preferred browser"
         case .lastUsedBrowser: "open in the last used browser"
         }
+    }
+
+    var segmentTitle: LocalizedStringKey {
+        WorkspaceCopy.unmatchedSegmentTitle(for: self)
     }
 }
 

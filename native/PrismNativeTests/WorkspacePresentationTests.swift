@@ -46,13 +46,15 @@ struct WorkspacePresentationTests {
         let chinese = try keys(in: nativeRoot.appending(path: "PrismNative/Resources/zh-Hans.lproj/Localizable.strings"))
         #expect(english == chinese)
         #expect(english.contains("Prism uses"))
-        #expect(english.contains("When no rule matches, Prism will"))
+        #expect(english.contains("Prism shows the selector when no rule matches."))
+        #expect(english.contains("shows"))
+        #expect(english.contains("History, keeping up to"))
         #expect(english.contains("Selector position %lld of %lld"))
     }
 
     @Test func workspaceCopyLooksUpLocalizedSentenceKeys() {
         #expect(NSLocalizedString("Prism uses", comment: "") != "")
-        #expect(NSLocalizedString("When no rule matches, Prism will", comment: "") != "")
+        #expect(NSLocalizedString("Prism shows the selector when no rule matches.", comment: "") != "")
         #expect(NSLocalizedString("Selector position %lld of %lld", comment: "") != "")
         #expect(NSLocalizedString("Used by %lld rules", comment: "") != "")
     }
@@ -63,7 +65,12 @@ struct WorkspacePresentationTests {
                 != WorkspaceCopy.defaultHandlerSentence(for: .inactive(http: false, https: false))
         )
         #expect(!WorkspaceCopy.languageSentenceLead().isEmpty)
-        #expect(!WorkspaceCopy.unmatchedSentenceLead().isEmpty)
+        #expect(WorkspaceCopy.unmatchedDescription(for: .alwaysAsk).contains("selector")
+            || !WorkspaceCopy.unmatchedDescription(for: .alwaysAsk).isEmpty)
+        #expect(WorkspaceCopy.unmatchedDescription(for: .alwaysAsk)
+            != WorkspaceCopy.unmatchedDescription(for: .preferredBrowser))
+        #expect(WorkspaceCopy.unmatchedDescription(for: .preferredBrowser)
+            != WorkspaceCopy.unmatchedDescription(for: .lastUsedBrowser))
         #expect(WorkspaceCopy.historyLimit(100, locale: Locale(identifier: "en")).contains("100"))
         #expect(WorkspaceCopy.historyRetention(30, locale: Locale(identifier: "en")).contains("30"))
     }

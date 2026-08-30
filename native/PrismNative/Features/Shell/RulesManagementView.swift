@@ -18,7 +18,6 @@ struct RulesManagementView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             if isLoading {
                 ProgressView("Loading rules…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -33,35 +32,26 @@ struct RulesManagementView: View {
                     )
                     if searchText.isEmpty {
                         Button("Create Rule") { beginCreatingRule() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(WorkspacePrimaryCapsuleStyle())
                             .disabled(browsers.allSatisfy { $0.availability != .available })
                             .accessibilityIdentifier("rules.create")
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                WorkspaceMasterDetail(inspectorIdentifier: "rules.inspector") {
-                    List(selection: $selectedRuleID) {
-                        ruleSection(
-                            title: "Link rules",
-                            detail: "Prism evaluates these before source-application rules.",
-                            rules: filteredURLRules,
-                            orderedRules: urlRules
-                        )
-                        ruleSection(
-                            title: "Source-application rules",
-                            detail: "These apply only when macOS can confirm the source application.",
-                            rules: filteredSourceRules,
-                            orderedRules: sourceRules
-                        )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        rulePreviewCard
+                        ruleList
                     }
-                    .listStyle(.inset)
-                    .scrollContentBackground(.hidden)
-                } inspector: {
-                    ruleInspector
+                    .padding(.horizontal, WorkspaceLayout.contentInset)
+                    .padding(.bottom, 28)
                 }
             }
         }
+        .tint(.primary)
+        .background(WorkspacePalette.canvas)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await reload() }
         .onChange(of: searchText) { _, _ in
             selectRuleIfNeeded()
@@ -106,7 +96,6 @@ struct RulesManagementView: View {
     private var header: some View {
         WorkspacePageHeader(
             title: "Rules",
-            subtitle: "Choose which links Prism should open automatically.",
             headingIdentifier: "appShell.page.rules.heading"
         ) {
             HStack(spacing: 8) {
@@ -116,7 +105,7 @@ struct RulesManagementView: View {
                     .accessibilityIdentifier("rules.search")
                 if !searchText.isEmpty || !filteredRules.isEmpty {
                     Button("Create Rule", systemImage: "plus") { beginCreatingRule() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(WorkspacePrimaryCapsuleStyle())
                         .disabled(browsers.allSatisfy { $0.availability != .available })
                         .accessibilityIdentifier("rules.create")
                 }
@@ -150,93 +139,44 @@ struct RulesManagementView: View {
     }
 
     @ViewBuilder
-    private func ruleSection(
-        title: String,
-        detail: String,
-        rules: [RoutingRule],
-        orderedRules: [RoutingRule]
-    ) -> some View {
-        if !rules.isEmpty {
-            Section {
-                if searchText.isEmpty {
-                    ForEach(Array(orderedRules.enumerated()), id: \.element.id) { index, rule in
-                        ruleRow(rule, priority: index + 1)
-                    }
-                } else {
-                    ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
-                        ruleRow(
-                            rule,
-                            priority: displayedPriority(for: rule, in: orderedRules, fallback: index + 1)
-                        )
-                    }
-                }
-            } header: {
-                Text(LocalizedStringKey(title))
-            } footer: {
-                Text(LocalizedStringKey(searchText.isEmpty
-                    ? "\(detail) Use the arrows to set their top-to-bottom priority."
-                    : "\(detail) Clear search to change priority."))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func ruleRow(_ rule: RoutingRule, priority: Int) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: rule.matcherIcon)
-                .frame(width: 22)
-                .foregroundStyle(rule.isEnabled ? Color.primary : Color.secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(rule.displayName)
-                    .font(.body.weight(.medium))
-                Text("\(rule.matcherDisplayName)  →  \(browserName(for: rule.targetBrowserID))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Text("Priority \(priority)")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 4)
-        .tag(rule.id)
-        .accessibilityIdentifier("rules.row.\(rule.id.uuidString)")
-    }
-
-    @ViewBuilder
-    private var ruleInspector: some View {
+    private var rulePreviewCard: some View {
         if let rule = selectedRule {
             let orderedRules = rule.isSourceRule ? sourceRules : urlRules
             let index = orderedRules.firstIndex(where: { $0.id == rule.id }) ?? 0
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: rule.matcherIcon)
-                    .font(.title)
-                    .foregroundStyle(rule.isEnabled ? Color.accentColor : Color.secondary)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(rule.displayName)
-                        .font(.title3.weight(.semibold))
-                    Text(WorkspaceCopy.rulePreviewSentence(for: rule, browserName: browserName(for: rule.targetBrowserID)))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("rules.inspector.sentence")
+            VStack(alignment: .leading, spacing: 14) {
+                WorkspaceWindowPreview(accessibilityIdentifier: "rules.inspector") {
+                    HStack(spacing: 16) {
+                        WorkspacePreviewTile(
+                            title: rule.matcherValue,
+                            systemImage: rule.matcherIcon,
+                            isHighlighted: true
+                        )
+                        Image(systemName: "arrow.right")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(WorkspacePalette.accent)
+                            .accessibilityHidden(true)
+                        WorkspacePreviewTile(
+                            title: browserName(for: rule.targetBrowserID),
+                            systemImage: "safari.fill",
+                            isHighlighted: true
+                        )
+                    }
                 }
+                Text(WorkspaceCopy.rulePreviewSentence(for: rule, browserName: browserName(for: rule.targetBrowserID)))
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("rules.inspector.sentence")
 
-                HStack {
+                HStack(spacing: 8) {
                     Text("Priority \(index + 1)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
-                    Spacer()
                     Button("Increase priority", systemImage: "arrow.up") {
                         move(orderedRules, from: index, to: index - 1)
                     }
                     .labelStyle(.iconOnly)
+                    .buttonStyle(WorkspaceSecondaryCapsuleStyle())
                     .disabled(searchText.isEmpty ? index == 0 : true)
                     .accessibilityLabel("Increase priority for \(rule.displayName)")
                     .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveUp")
@@ -244,37 +184,81 @@ struct RulesManagementView: View {
                         move(orderedRules, from: index, to: index + 1)
                     }
                     .labelStyle(.iconOnly)
+                    .buttonStyle(WorkspaceSecondaryCapsuleStyle())
                     .disabled(searchText.isEmpty ? index >= orderedRules.count - 1 : true)
                     .accessibilityLabel("Decrease priority for \(rule.displayName)")
                     .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveDown")
-                }
-
-                Toggle("This rule is enabled", isOn: Binding(
-                    get: { rule.isEnabled },
-                    set: { _ in toggle(rule) }
-                ))
-
-                HStack(spacing: 8) {
-                    Button("Edit", systemImage: "pencil") {
+                    Spacer(minLength: 0)
+                    Button("Edit") {
                         draft = RuleEditorDraft(rule: rule, browsers: browsers)
                     }
-                    Button("Delete", systemImage: "trash", role: .destructive) {
+                    .buttonStyle(WorkspaceSecondaryCapsuleStyle())
+                    Button("Delete", role: .destructive) {
                         rulePendingDeletion = rule
                     }
+                    .buttonStyle(WorkspaceSecondaryCapsuleStyle())
                 }
-
-                Text(LocalizedStringKey(searchText.isEmpty
-                    ? "Use the arrows to set top-to-bottom priority."
-                    : "Clear search to change priority."))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         } else {
-            WorkspaceInspectorPlaceholder(
-                systemImage: "list.bullet.rectangle",
-                message: "Select a rule to review how Prism will open matching links."
+            WorkspaceWindowPreview(accessibilityIdentifier: "rules.inspector") {
+                Text("Select a rule to review how Prism will open matching links.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var ruleList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(filteredURLRules, id: \.id) { rule in
+                ruleRow(rule, priority: displayedPriority(for: rule, in: urlRules, fallback: 1))
+            }
+            if !filteredSourceRules.isEmpty {
+                Text("Source-application rules")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 10)
+                Text("These apply only when macOS can confirm the source application.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                ForEach(filteredSourceRules, id: \.id) { rule in
+                    ruleRow(rule, priority: displayedPriority(for: rule, in: sourceRules, fallback: 1))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ruleRow(_ rule: RoutingRule, priority: Int) -> some View {
+        Button {
+            selectedRuleID = rule.id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: rule.matcherIcon)
+                    .frame(width: 22)
+                    .foregroundStyle(rule.isEnabled ? Color.primary : Color.secondary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(rule.displayName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text("\(rule.matcherDisplayName)  →  \(browserName(for: rule.targetBrowserID))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text("Priority \(priority)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                selectedRuleID == rule.id ? WorkspacePalette.rowSelection : Color.clear,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("rules.row.\(rule.id.uuidString)")
     }
 
     private var selectedRule: RoutingRule? {

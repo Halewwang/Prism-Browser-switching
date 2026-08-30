@@ -18,10 +18,8 @@ struct AppShellPresentationTests {
             "appShell.sidebar.browsers",
             "appShell.sidebar.settings",
         ])
-        #expect(WorkspaceLayout.inspectorMinWidth == 280)
-        #expect(WorkspaceLayout.inspectorMaxWidth == 320)
-        #expect((WorkspaceLayout.inspectorMinWidth...WorkspaceLayout.inspectorMaxWidth)
-            .contains(WorkspaceLayout.inspectorIdealWidth))
+        #expect(WorkspaceLayout.previewMinHeight == 220)
+        #expect(WorkspaceLayout.cardRadius >= 16)
     }
 
     @Test func historyEmptyStateExplainsWhenLinksAppearAndOffersTestLink() {

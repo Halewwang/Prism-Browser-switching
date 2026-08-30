@@ -1,65 +1,43 @@
+import AppKit
 import SwiftUI
+
+enum WorkspacePalette {
+    static let canvas = Color(nsColor: .underPageBackgroundColor)
+    static let cardFill = Color(nsColor: .windowBackgroundColor)
+    static let elevatedFill = Color(nsColor: .windowBackgroundColor)
+    static let pillFill = Color(nsColor: .windowBackgroundColor)
+    static let tileFill = Color.primary.opacity(0.045)
+    static let recessedTrack = Color.primary.opacity(0.07)
+    static let pillStroke = Color.primary.opacity(0.16)
+    static let cardStroke = Color.primary.opacity(0.10)
+    static let rowSelection = Color.primary.opacity(0.06)
+    static let primaryFill = Color.primary
+    static let primaryForeground = Color(nsColor: .windowBackgroundColor)
+    static let accent = Color.accentColor
+}
 
 struct WorkspacePageHeader<Trailing: View>: View {
     let title: LocalizedStringKey
-    let subtitle: LocalizedStringKey
     let headingIdentifier: String
     @ViewBuilder var trailing: () -> Trailing
 
-    init(
-        title: LocalizedStringKey,
-        subtitle: LocalizedStringKey,
-        headingIdentifier: String,
-        @ViewBuilder trailing: @escaping () -> Trailing
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.headingIdentifier = headingIdentifier
-        self.trailing = trailing
-    }
-
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(WorkspaceLayout.pageTitleFont)
-                    .accessibilityIdentifier(headingIdentifier)
-                Text(subtitle)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(WorkspaceLayout.pageTitleFont)
+                .accessibilityIdentifier(headingIdentifier)
             Spacer(minLength: 20)
             trailing()
         }
         .padding(.horizontal, WorkspaceLayout.contentInset)
-        .padding(.vertical, WorkspaceLayout.headerVerticalInset)
+        .padding(.top, WorkspaceLayout.headerVerticalInset)
+        .padding(.bottom, 12)
     }
 }
 
 extension WorkspacePageHeader where Trailing == EmptyView {
-    init(title: LocalizedStringKey, subtitle: LocalizedStringKey, headingIdentifier: String) {
-        self.init(
-            title: title,
-            subtitle: subtitle,
-            headingIdentifier: headingIdentifier
-        ) {
-            EmptyView()
-        }
-    }
-}
-
-struct WorkspaceSettingsGroup<Content: View>: View {
-    let title: LocalizedStringKey
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    init(title: LocalizedStringKey, headingIdentifier: String) {
+        self.init(title: title, headingIdentifier: headingIdentifier) { EmptyView() }
     }
 }
 
@@ -69,43 +47,217 @@ struct WorkspaceSentence<Content: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
             content()
-            Spacer(minLength: 0)
         }
         .font(.body)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-struct WorkspaceSentenceRow<Control: View>: View {
-    let title: LocalizedStringKey
-    @ViewBuilder var control: () -> Control
+struct WorkspacePrimaryCapsuleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(WorkspacePalette.primaryForeground)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(WorkspacePalette.primaryFill, in: Capsule())
+            .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+struct WorkspaceSecondaryCapsuleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.medium))
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(WorkspacePalette.elevatedFill, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(WorkspacePalette.pillStroke, lineWidth: 1)
+            }
+            .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+struct WorkspaceSegmentedTrack<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: LocalizedStringKey)]
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(title)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            control()
+        HStack(spacing: 2) {
+            ForEach(options, id: \.value) { option in
+                Button {
+                    selection = option.value
+                } label: {
+                    Text(option.title)
+                        .font(.body.weight(selection == option.value ? .semibold : .regular))
+                        .foregroundStyle(selection == option.value ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background {
+                            if selection == option.value {
+                                Capsule()
+                                    .fill(WorkspacePalette.elevatedFill)
+                                    .shadow(color: .black.opacity(0.10), radius: 3, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(4)
+        .background(WorkspacePalette.recessedTrack, in: Capsule())
+        .accessibilityElement(children: .contain)
     }
 }
 
-struct WorkspaceMenuPill<Selection: Hashable, Content: View>: View {
+struct WorkspaceInlinePill<Selection: Hashable>: View {
     @Binding var selection: Selection
+    var title: String
     var accessibilityIdentifier: String?
+    var accessibilityLabel: LocalizedStringKey?
     var isDisabled = false
+    var options: [WorkspaceInlineOption<Selection>]
+
+    var body: some View {
+        Menu {
+            ForEach(options) { option in
+                if let identifier = option.accessibilityIdentifier, !identifier.isEmpty {
+                    Button(option.title) { selection = option.value }
+                        .accessibilityIdentifier(identifier)
+                } else {
+                    Button(option.title) { selection = option.value }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(LocalizedStringKey(title))
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(WorkspacePalette.pillFill, in: RoundedRectangle(cornerRadius: WorkspaceLayout.pillRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: WorkspaceLayout.pillRadius, style: .continuous)
+                    .stroke(WorkspacePalette.pillStroke, lineWidth: 1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .tint(.primary)
+        .disabled(isDisabled)
+        .fixedSize()
+        .opacity(isDisabled ? 0.45 : 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel ?? LocalizedStringKey(title))
+        .accessibilityValue(Text(LocalizedStringKey(title)))
+        .modifier(WorkspaceOptionalIdentifier(accessibilityIdentifier))
+    }
+}
+
+struct WorkspaceInlineOption<Value: Hashable>: Identifiable {
+    let value: Value
+    let title: String
+    var accessibilityIdentifier: String?
+    var id: Value { value }
+}
+
+struct WorkspaceOnOffPill: View {
+    @Binding var isOn: Bool
+    var accessibilityIdentifier: String
+    var accessibilityLabel: LocalizedStringKey
+    var isDisabled = false
+    var onTitle: String = String(localized: "On")
+    var offTitle: String = String(localized: "Off")
+
+    var body: some View {
+        WorkspaceInlinePill(
+            selection: $isOn,
+            title: isOn ? onTitle : offTitle,
+            accessibilityIdentifier: accessibilityIdentifier,
+            accessibilityLabel: accessibilityLabel,
+            isDisabled: isDisabled,
+            options: [
+                WorkspaceInlineOption(value: true, title: onTitle),
+                WorkspaceInlineOption(value: false, title: offTitle),
+            ]
+        )
+    }
+}
+
+struct WorkspaceWindowPreview<Content: View>: View {
+    var accessibilityIdentifier: String?
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        Picker("", selection: $selection) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Circle().fill(Color(red: 1, green: 0.38, blue: 0.37)).frame(width: 8, height: 8)
+                Circle().fill(Color(red: 1, green: 0.76, blue: 0.23)).frame(width: 8, height: 8)
+                Circle().fill(Color(red: 0.19, green: 0.80, blue: 0.35)).frame(width: 8, height: 8)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .accessibilityHidden(true)
+
             content()
+                .frame(maxWidth: .infinity, minHeight: WorkspaceLayout.previewMinHeight - 40, maxHeight: .infinity)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .disabled(isDisabled)
-        .fixedSize()
+        .frame(maxWidth: .infinity, minHeight: WorkspaceLayout.previewMinHeight)
+        .background(WorkspacePalette.cardFill, in: RoundedRectangle(cornerRadius: WorkspaceLayout.cardRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WorkspaceLayout.cardRadius, style: .continuous)
+                .stroke(WorkspacePalette.cardStroke, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.07), radius: 14, y: 5)
         .modifier(WorkspaceOptionalIdentifier(accessibilityIdentifier))
+    }
+}
+
+struct WorkspacePreviewTile: View {
+    var title: String
+    var systemImage: String?
+    var icon: NSImage?
+    var isHighlighted = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Group {
+                if let icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 36, height: 36)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.title2)
+                        .foregroundStyle(isHighlighted ? WorkspacePalette.accent : Color.secondary)
+                }
+            }
+            .frame(width: 44, height: 44)
+
+            Text(LocalizedStringKey(title))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+            .frame(width: 92, height: 92)
+        .background(WorkspacePalette.tileFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isHighlighted ? WorkspacePalette.accent : WorkspacePalette.cardStroke, lineWidth: isHighlighted ? 2 : 1)
+        }
     }
 }
 
@@ -121,106 +273,6 @@ private struct WorkspaceOptionalIdentifier: ViewModifier {
             content.accessibilityIdentifier(identifier)
         } else {
             content
-        }
-    }
-}
-
-struct WorkspaceOnOffPill: View {
-    @Binding var isOn: Bool
-    var accessibilityIdentifier: String
-    var accessibilityLabel: LocalizedStringKey
-    var isDisabled = false
-
-    var body: some View {
-        Picker(accessibilityLabel, selection: $isOn) {
-            Text("On").tag(true)
-            Text("Off").tag(false)
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .fixedSize()
-        .disabled(isDisabled)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(isOn ? Text("On") : Text("Off"))
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-}
-
-struct WorkspaceStatusPill: View {
-    let title: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        Label(LocalizedStringKey(title), systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.quaternary, in: Capsule())
-    }
-}
-
-struct WorkspaceInspectorColumn<Content: View>: View {
-    let accessibilityIdentifier: String
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        ScrollView {
-            content()
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(
-            minWidth: WorkspaceLayout.inspectorMinWidth,
-            idealWidth: WorkspaceLayout.inspectorIdealWidth,
-            maxWidth: WorkspaceLayout.inspectorMaxWidth
-        )
-        .frame(maxHeight: .infinity)
-        .background {
-            Rectangle()
-                .fill(.regularMaterial)
-        }
-        .overlay(alignment: .leading) {
-            Divider()
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-}
-
-struct WorkspaceInspectorPlaceholder: View {
-    let systemImage: String
-    let message: LocalizedStringKey
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 220)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-    }
-}
-
-struct WorkspaceMasterDetail<ListContent: View, InspectorContent: View>: View {
-    let inspectorIdentifier: String
-    @ViewBuilder var list: () -> ListContent
-    @ViewBuilder var inspector: () -> InspectorContent
-
-    var body: some View {
-        HStack(spacing: 0) {
-            list()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            WorkspaceInspectorColumn(accessibilityIdentifier: inspectorIdentifier) {
-                inspector()
-            }
         }
     }
 }

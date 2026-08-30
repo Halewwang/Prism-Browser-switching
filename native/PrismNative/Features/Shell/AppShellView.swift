@@ -6,10 +6,11 @@ enum WorkspaceLayout {
     static let pageTitleFont = Font.system(size: 32, weight: .bold)
     static let sidebarSurface = Color(nsColor: .underPageBackgroundColor)
     static let contentSurface = Color(nsColor: .windowBackgroundColor)
-    static let inspectorMinWidth: CGFloat = 280
-    static let inspectorIdealWidth: CGFloat = 300
-    static let inspectorMaxWidth: CGFloat = 320
-    static let settingsReadableWidth: CGFloat = 720
+    static let canvas = Color(nsColor: .underPageBackgroundColor)
+    static let previewMinHeight: CGFloat = 220
+    static let cardRadius: CGFloat = 18
+    static let pillRadius: CGFloat = 8
+    static let settingsReadableWidth: CGFloat = 760
 }
 
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
