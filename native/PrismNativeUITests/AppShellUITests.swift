@@ -23,6 +23,7 @@ final class AppShellUITests: PrismUITestCase {
         XCTAssertTrue(application.staticTexts["Fixture Browser"].firstMatch.waitForExistence(timeout: 5))
         _ = requireButton("browsers.rescan", in: application)
         _ = requireButton("browsers.addCustomBrowser", in: application)
+        _ = requireElement("browsers.inspector", in: application)
         try attachWindowScreenshot(
             "browsers-management",
             application: application,
@@ -31,6 +32,7 @@ final class AppShellUITests: PrismUITestCase {
 
         requireElement("appShell.sidebar.settings", in: application).click()
         _ = requireElement("appShell.page.settings.heading", in: application)
+        _ = requireElement("settings.sentences", in: application)
         _ = requireElement("settings.showMenuBarItem", in: application)
         _ = requireElement("settings.automaticRules", in: application)
         _ = requireElement("settings.historyEnabled", in: application)
@@ -63,6 +65,7 @@ final class AppShellUITests: PrismUITestCase {
         )
         requireElement("appShell.sidebar.rules", in: application).click()
         _ = requireElement("appShell.page.rules.heading", in: application)
+        _ = requireElement("rules.inspector", in: application)
         let documentationUp = requireElement(
             "rules.rule.00000000-0000-0000-0000-000000000301.moveUp",
             in: application

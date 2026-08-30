@@ -1,3 +1,4 @@
+import AppKit
 import PrismCore
 import SwiftUI
 
@@ -9,6 +10,8 @@ struct BrowsersManagementView: View {
     let openApplicationsFolder: () -> Void
 
     @State private var browsers: [BrowserDescriptor] = []
+    @State private var rules: [RoutingRule] = []
+    @State private var selectedBrowserID: BrowserID?
     @State private var isLoading = true
     @State private var isAddingBrowser = false
     @State private var browserPendingDeletion: BrowserDescriptor?
@@ -32,20 +35,25 @@ struct BrowsersManagementView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    Section {
-                        ForEach(browsers, id: \.id) { browser in
-                            browserRow(browser)
+                WorkspaceMasterDetail(inspectorIdentifier: "browsers.inspector") {
+                    List(selection: $selectedBrowserID) {
+                        Section {
+                            ForEach(browsers, id: \.id) { browser in
+                                browserRow(browser)
+                                    .tag(browser.id)
+                            }
+                            .onMove(perform: move)
+                        } header: {
+                            Text("Browser selector order")
+                        } footer: {
+                            Text("Drag browsers into the order you want Prism to show them. Numbers in the selector follow this order.")
                         }
-                        .onMove(perform: move)
-                    } header: {
-                        Text("Browser selector order")
-                    } footer: {
-                        Text("Drag browsers into the order you want Prism to show them. Numbers in the selector follow this order.")
                     }
+                    .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
+                } inspector: {
+                    browserInspector
                 }
-                .listStyle(.inset)
-                .padding(16)
             }
         }
         .task { await reload() }
@@ -78,30 +86,25 @@ struct BrowsersManagementView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Browsers")
-                    .font(WorkspaceLayout.pageTitleFont)
-                    .accessibilityIdentifier("appShell.page.browsers.heading")
-                Text("Manage the browsers shown in the link selector.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+        WorkspacePageHeader(
+            title: "Browsers",
+            subtitle: "Manage the browsers shown in the link selector.",
+            headingIdentifier: "appShell.page.browsers.heading"
+        ) {
+            HStack(spacing: 8) {
+                Button("Rescan", systemImage: "arrow.clockwise") {
+                    Task { await reload() }
+                }
+                .disabled(isLoading || isAddingBrowser)
+                .accessibilityIdentifier("browsers.rescan")
+                Button("Add Browser", systemImage: "plus") {
+                    Task { await addBrowser() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAddingBrowser)
+                .accessibilityIdentifier("browsers.addCustomBrowser")
             }
-            Spacer(minLength: 20)
-            Button("Rescan", systemImage: "arrow.clockwise") {
-                Task { await reload() }
-            }
-            .disabled(isLoading || isAddingBrowser)
-            .accessibilityIdentifier("browsers.rescan")
-            Button("Add Browser", systemImage: "plus") {
-                Task { await addBrowser() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isAddingBrowser)
-            .accessibilityIdentifier("browsers.addCustomBrowser")
         }
-        .padding(.horizontal, WorkspaceLayout.contentInset)
-        .padding(.vertical, WorkspaceLayout.headerVerticalInset)
     }
 
     private var emptyActions: some View {
@@ -117,11 +120,9 @@ struct BrowsersManagementView: View {
 
     @ViewBuilder
     private func browserRow(_ browser: BrowserDescriptor) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: browser.availability == .available ? "safari" : "exclamationmark.triangle")
-                .frame(width: 22)
-                .foregroundStyle(browser.availability == .available ? Color.accentColor : Color.orange)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            browserIcon(browser, size: 28)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(browser.displayName)
                     .font(.body.weight(.medium))
                 Text(browser.applicationURL.path)
@@ -129,28 +130,116 @@ struct BrowsersManagementView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer()
-            Text(browser.origin == .custom ? LocalizedStringKey("Custom") : LocalizedStringKey("Installed"))
+            Spacer(minLength: 8)
+            Text(browser.origin.displayName)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary, in: Capsule())
-            if browser.availability == .unavailable {
-                Text("Unavailable")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.orange)
-            }
-            if browser.origin == .custom {
-                Button("Remove", systemImage: "trash") {
-                    browserPendingDeletion = browser
+        }
+        .padding(.vertical, 4)
+        .accessibilityIdentifier("browsers.row.\(browser.id.rawValue)")
+    }
+
+    @ViewBuilder
+    private var browserInspector: some View {
+        if let browser = selectedBrowser {
+            VStack(alignment: .leading, spacing: 16) {
+                browserIcon(browser, size: 56)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(browser.displayName)
+                        .font(.title3.weight(.semibold))
+                    HStack(spacing: 8) {
+                        WorkspaceStatusPill(
+                            title: String(localized: browser.origin.displayName),
+                            systemImage: browser.origin == .custom ? "plus.circle" : "internaldrive",
+                            tint: .secondary
+                        )
+                        WorkspaceStatusPill(
+                            title: String(localized: browser.availability.displayName),
+                            systemImage: browser.availability == .available
+                                ? "checkmark.circle.fill"
+                                : "exclamationmark.triangle.fill",
+                            tint: browser.availability == .available ? .green : .orange
+                        )
+                    }
                 }
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.red)
-                .accessibilityLabel("Remove \(browser.displayName)")
+
+                VStack(alignment: .leading, spacing: 8) {
+                    inspectorFact(
+                        String(localized: "Application path"),
+                        value: browser.applicationURL.path,
+                        systemImage: "folder"
+                    )
+                    inspectorFact(
+                        WorkspaceCopy.selectorPosition(order: selectorIndex(for: browser), count: browsers.count),
+                        systemImage: "list.number"
+                    )
+                    if let shortcut = WorkspaceCopy.keyboardShortcut(order: selectorIndex(for: browser)) {
+                        inspectorFact(shortcut, systemImage: "keyboard")
+                    }
+                    inspectorFact(
+                        WorkspaceCopy.ruleReferenceCount(rules.filter { $0.targetBrowserID == browser.id }.count),
+                        systemImage: "list.bullet.rectangle"
+                    )
+                }
+
+                if browser.origin == .custom {
+                    Button("Remove", systemImage: "trash", role: .destructive) {
+                        browserPendingDeletion = browser
+                    }
+                    .accessibilityLabel("Remove \(browser.displayName)")
+                }
+
+                Text("Drag browsers into the order you want Prism to show them. Numbers in the selector follow this order.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            WorkspaceInspectorPlaceholder(
+                systemImage: "safari",
+                message: "Select a browser to review its selector order and availability."
+            )
+        }
+    }
+
+    private var selectedBrowser: BrowserDescriptor? {
+        browsers.first(where: { $0.id == selectedBrowserID })
+    }
+
+    private func selectorIndex(for browser: BrowserDescriptor) -> Int {
+        browsers.firstIndex(where: { $0.id == browser.id }) ?? browser.selectorOrder
+    }
+
+    private func browserIcon(_ browser: BrowserDescriptor, size: CGFloat) -> some View {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: browser.applicationURL.path))
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.2, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private func inspectorFact(_ title: String, value: String? = nil, systemImage: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                if let value {
+                    Text(LocalizedStringKey(title))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(value)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                } else {
+                    Text(LocalizedStringKey(title))
+                        .font(.callout)
+                }
             }
         }
-        .padding(.vertical, 8)
     }
 
     private func reload() async {
@@ -158,9 +247,18 @@ struct BrowsersManagementView: View {
         defer { isLoading = false }
         do {
             browsers = try await browserCatalog.scan()
+            rules = (try? environment.ruleRepository.all()) ?? []
+            selectBrowserIfNeeded()
         } catch {
             errorMessage = "Prism could not scan for web browsers."
         }
+    }
+
+    private func selectBrowserIfNeeded() {
+        if let selectedBrowserID, browsers.contains(where: { $0.id == selectedBrowserID }) {
+            return
+        }
+        selectedBrowserID = browsers.first?.id
     }
 
     private func addBrowser() async {
@@ -191,6 +289,9 @@ struct BrowsersManagementView: View {
         defer { browserPendingDeletion = nil }
         do {
             try environment.browserPreferenceRepository.deleteCustomBrowser(id: browser.id)
+            if selectedBrowserID == browser.id {
+                selectedBrowserID = nil
+            }
             Task { await reload() }
         } catch {
             errorMessage = "Prism could not remove this custom browser."
