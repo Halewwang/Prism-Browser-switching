@@ -1,3 +1,5 @@
+import AppKit
+import PrismCore
 import Testing
 @testable import PrismNative
 
@@ -18,6 +20,12 @@ struct AppShellPresentationTests {
             "appShell.sidebar.browsers",
             "appShell.sidebar.settings",
         ])
+        #expect(WorkspaceLayout.previewMinHeight == 280)
+        #expect(WorkspaceLayout.cardRadius >= 16)
+        #expect(WorkspaceLayout.selectorPreviewScale >= 0.55)
+        #expect(WorkspaceLayout.selectorPreviewScale <= 0.65)
+        #expect(WorkspaceLayout.productIconSize == 52)
+        #expect((6...8).contains(Int(WorkspaceLayout.listRowVerticalPadding)))
     }
 
     @Test func historyEmptyStateExplainsWhenLinksAppearAndOffersTestLink() {
@@ -122,5 +130,51 @@ struct AppShellActionDispatchTests {
         }
 
         #expect(received == AppShellActionID.allCases)
+    }
+}
+
+@Suite("Workspace application icons")
+@MainActor
+struct WorkspaceApplicationIconTests {
+    @Test func missingApplicationFilesDoNotResolveToAnIcon() {
+        let ghost = BrowserDescriptor(
+            id: BrowserID("zz.prism.missing.browser"),
+            bundleIdentifier: "zz.prism.missing.browser",
+            displayName: "Ghost",
+            applicationURL: URL(fileURLWithPath: "/tmp/Ghost.app"),
+            securityScopedBookmark: nil,
+            origin: .system,
+            availability: .available,
+            selectorOrder: 0
+        )
+
+        #expect(WorkspaceApplicationIcon.nsImage(for: ghost) == nil)
+        #expect(
+            WorkspaceApplicationIcon.applicationIcon(
+                at: URL(fileURLWithPath: "/Applications/NotInstalledBrowser.app")
+            ) == nil
+        )
+    }
+
+    @Test func chromePrefersTheInstalledBundleOverAMissingChromeDotAppPath() {
+        let fakePath = BrowserDescriptor(
+            id: BrowserID("com.google.Chrome"),
+            bundleIdentifier: "com.google.Chrome",
+            displayName: "Chrome",
+            applicationURL: URL(fileURLWithPath: "/Applications/Chrome.app"),
+            securityScopedBookmark: nil,
+            origin: .system,
+            availability: .available,
+            selectorOrder: 1
+        )
+        let icon = WorkspaceApplicationIcon.nsImage(for: fakePath)
+        if let chromeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") {
+            #expect(icon != nil)
+            #expect(WorkspaceApplicationIcon.applicationIcon(at: chromeURL) != nil)
+            #expect(WorkspaceApplicationIcon.applicationIcon(at: fakePath.applicationURL) == nil
+                || FileManager.default.fileExists(atPath: fakePath.applicationURL.path))
+        } else {
+            #expect(icon == nil)
+        }
     }
 }

@@ -18,67 +18,41 @@ struct SettingsManagementView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Settings")
-                        .font(WorkspaceLayout.pageTitleFont)
-                        .accessibilityIdentifier("appShell.page.settings.heading")
-                    Text("Control how Prism handles links and keeps local History.")
+            WorkspacePageHeader(
+                title: "Settings",
+                headingIdentifier: "appShell.page.settings.heading"
+            )
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    WorkspaceSegmentedTrack(selection: unmatchedBehavior, options: [
+                        (value: .alwaysAsk, title: WorkspaceCopy.unmatchedSegmentTitle(for: .alwaysAsk)),
+                        (value: .preferredBrowser, title: WorkspaceCopy.unmatchedSegmentTitle(for: .preferredBrowser)),
+                        (value: .lastUsedBrowser, title: WorkspaceCopy.unmatchedSegmentTitle(for: .lastUsedBrowser)),
+                    ])
+
+                    Text(WorkspaceCopy.unmatchedDescription(for: environment.settings.unmatchedBehavior))
                         .font(.body)
                         .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, WorkspaceLayout.contentInset)
-            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
-
-            Form {
-                Section("Interface") {
-                    Picker("Language", selection: appLanguage) {
-                        Text("Use System Language")
-                            .tag(AppLanguage.system)
-                            .accessibilityIdentifier("settings.language.system")
-                        Text("English")
-                            .tag(AppLanguage.english)
-                            .accessibilityIdentifier("settings.language.english")
-                        Text("Simplified Chinese")
-                            .tag(AppLanguage.simplifiedChinese)
-                            .accessibilityIdentifier("settings.language.simplifiedChinese")
-                    }
-                    .accessibilityIdentifier("settings.language")
-                }
-
-                Section("Link handling") {
-                    defaultHandlerControl
-
-                    Toggle("Show Prism in the menu bar", isOn: showMenuBarItem)
-                        .accessibilityIdentifier("settings.showMenuBarItem")
-
-                    Toggle("Use routing rules automatically", isOn: automaticRulesEnabled)
-                        .accessibilityIdentifier("settings.automaticRules")
-
-                    Picker("When no rule matches", selection: unmatchedBehavior) {
-                        Text("Always ask").tag(UnmatchedBehavior.alwaysAsk)
-                        Text("Open in preferred browser").tag(UnmatchedBehavior.preferredBrowser)
-                        Text("Open in last used browser").tag(UnmatchedBehavior.lastUsedBrowser)
+                    WorkspacePreviewCard {
+                        unmatchedPreview
                     }
 
-                    if environment.settings.unmatchedBehavior == .preferredBrowser {
-                        Picker("Preferred browser", selection: preferredBrowserID) {
-                            Text("Choose a browser").tag(BrowserID?.none)
-                            ForEach(browsers.filter { $0.availability == .available }, id: \.id) { browser in
-                                Text(browser.displayName).tag(BrowserID?.some(browser.id))
-                            }
+                    VStack(alignment: .leading, spacing: 14) {
+                        languageSentence
+                        menuBarSentence
+                        automaticRulesSentence
+                        if environment.settings.unmatchedBehavior == .preferredBrowser {
+                            preferredBrowserSentence
                         }
+                        launchAtLoginSentence
+                        updatesSentence
+                        historySentence
+                        defaultHandlerSentence
                     }
-                }
-
-                Section("Startup") {
-                    Toggle("Open Prism at login", isOn: launchAtLogin)
-                        .disabled(isUpdatingLoginItem || environment.loginItemService == nil)
-                        .accessibilityIdentifier("settings.launchAtLogin")
+                    .accessibilityIdentifier("settings.sentences")
 
                     if loginItemState == .requiresApproval {
                         Text("macOS needs approval before Prism can open at login.")
@@ -87,61 +61,66 @@ struct SettingsManagementView: View {
                         Button("Open Login Items Settings") {
                             environment.loginItemService?.openApprovalSettingsAfterUserAction()
                         }
+                        .buttonStyle(WorkspaceSecondaryCapsuleStyle())
                         .accessibilityIdentifier("settings.openLoginItems")
                     } else if loginItemState == .notFound {
                         Text("Launch at login is unavailable in this build.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
 
-                Section("Updates") {
-                    Toggle("Automatically check for updates", isOn: automaticUpdateChecks)
-                        .disabled(!environment.updateChecker.canCheckForUpdates)
-                        .accessibilityIdentifier("settings.automaticUpdateChecks")
-
-                    if environment.updateChecker.canCheckForUpdates {
-                        Button("Check for Updates") {
-                            environment.updateChecker.checkForUpdates()
-                        }
-                        .accessibilityIdentifier("settings.checkForUpdates")
-                    } else {
+                    if !environment.updateChecker.canCheckForUpdates {
                         Text("Updates are available in signed release builds.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
 
-                Section("History") {
-                    Toggle("Save History", isOn: historyEnabled)
-                        .accessibilityIdentifier("settings.historyEnabled")
-
-                    if environment.settings.historyEnabled {
-                        Stepper(
-                            "Keep up to \(environment.settings.historyLimit) links",
-                            value: historyLimit,
-                            in: 1...10_000,
-                            step: 25
-                        )
-                        Stepper(
-                            "Keep links for \(environment.settings.historyRetentionDays) days",
-                            value: historyRetentionDays,
-                            in: 1...3_650
-                        )
-                    }
-                }
-
-                Section("About") {
-                    LabeledContent("Version", value: version)
                     Text("Link history stays on this Mac. Prism removes sensitive URL data before showing or copying it.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    WorkspaceSentence {
+                        Text("Version")
+                        Text(version)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        if defaultHandlerState != .active {
+                            Button("Refresh") {
+                                Task { await refreshDefaultHandler() }
+                            }
+                            .buttonStyle(WorkspaceSecondaryCapsuleStyle())
+                            .disabled(isUpdatingDefaultHandler || environment.defaultBrowserService == nil)
+                            .accessibilityIdentifier("settings.refreshDefaultHandler")
+
+                            Button("Open System Settings", action: openDefaultAppsSettings)
+                                .buttonStyle(WorkspaceSecondaryCapsuleStyle())
+                                .disabled(isUpdatingDefaultHandler)
+                                .accessibilityIdentifier("settings.openDefaultApps")
+                        }
+                        Button("Set as Default") {
+                            Task { await setDefaultHandler() }
+                        }
+                        .buttonStyle(WorkspacePrimaryCapsuleStyle())
+                        .disabled(
+                            isUpdatingDefaultHandler
+                                || environment.defaultBrowserService == nil
+                                || defaultHandlerState == .active
+                        )
+                        .accessibilityIdentifier("settings.setDefaultHandler")
+                    }
                 }
+                .padding(.horizontal, WorkspaceLayout.contentInset)
+                .padding(.bottom, 28)
+                .frame(maxWidth: WorkspaceLayout.settingsReadableWidth, alignment: .leading)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
-        .formStyle(.grouped)
+        .tint(.primary)
+        .background(WorkspacePalette.canvas)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await loadContext() }
         .alert(
             "Settings could not be updated",
@@ -163,37 +142,224 @@ struct SettingsManagementView: View {
         }
     }
 
-    @ViewBuilder
-    private var defaultHandlerControl: some View {
-        LabeledContent("Default web link handler") {
-            Label(defaultHandlerLabel, systemImage: defaultHandlerSymbol)
-                .foregroundStyle(defaultHandlerColor)
+    private var languageSentence: some View {
+        WorkspaceSentence {
+            Text(WorkspaceCopy.languageSentenceLead())
+            WorkspaceInlinePill(
+                selection: appLanguage,
+                title: String(localized: environment.settings.language.sentenceTitle),
+                accessibilityIdentifier: "settings.language",
+                accessibilityLabel: "Language",
+                options: [
+                    WorkspaceInlineOption(
+                        value: AppLanguage.system,
+                        title: String(localized: "the system language"),
+                        accessibilityIdentifier: "settings.language.system"
+                    ),
+                    WorkspaceInlineOption(
+                        value: AppLanguage.english,
+                        title: String(localized: "English"),
+                        accessibilityIdentifier: "settings.language.english"
+                    ),
+                    WorkspaceInlineOption(
+                        value: AppLanguage.simplifiedChinese,
+                        title: String(localized: "Simplified Chinese"),
+                        accessibilityIdentifier: "settings.language.simplifiedChinese"
+                    ),
+                ]
+            )
+            Text(WorkspaceCopy.languageSentenceTrail())
         }
+    }
 
-        if defaultHandlerState != .active {
-            Text(LocalizedStringKey(defaultHandlerExplanation))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    private var menuBarSentence: some View {
+        WorkspaceSentence {
+            Text("Prism")
+            WorkspaceOnOffPill(
+                isOn: showMenuBarItem,
+                accessibilityIdentifier: "settings.showMenuBarItem",
+                accessibilityLabel: "Show Prism in the menu bar",
+                onTitle: String(localized: "shows"),
+                offTitle: String(localized: "hides")
+            )
+            Text("in the menu bar.")
+        }
+    }
 
-            HStack(spacing: 8) {
-                Button("Set Prism as Default") {
-                    Task { await setDefaultHandler() }
+    private var automaticRulesSentence: some View {
+        WorkspaceSentence {
+            Text("Prism")
+            WorkspaceOnOffPill(
+                isOn: automaticRulesEnabled,
+                accessibilityIdentifier: "settings.automaticRules",
+                accessibilityLabel: "Use routing rules automatically",
+                onTitle: String(localized: "uses"),
+                offTitle: String(localized: "ignores")
+            )
+            Text("routing rules automatically.")
+        }
+    }
+
+    private var preferredBrowserSentence: some View {
+        WorkspaceSentence {
+            Text(WorkspaceCopy.preferredBrowserSentenceLead())
+            WorkspaceInlinePill(
+                selection: preferredBrowserID,
+                title: preferredBrowserTitle,
+                accessibilityLabel: "Preferred browser",
+                options: preferredBrowserOptions
+            )
+            Text(".")
+        }
+    }
+
+    private var launchAtLoginSentence: some View {
+        WorkspaceSentence {
+            Text("Prism")
+            WorkspaceOnOffPill(
+                isOn: launchAtLogin,
+                accessibilityIdentifier: "settings.launchAtLogin",
+                accessibilityLabel: "Open Prism at login",
+                isDisabled: isUpdatingLoginItem || environment.loginItemService == nil,
+                onTitle: String(localized: "opens"),
+                offTitle: String(localized: "does not open")
+            )
+            Text("at login.")
+        }
+    }
+
+    private var updatesSentence: some View {
+        WorkspaceSentence {
+            Text("Prism")
+            WorkspaceOnOffPill(
+                isOn: automaticUpdateChecks,
+                accessibilityIdentifier: "settings.automaticUpdateChecks",
+                accessibilityLabel: "Automatically check for updates",
+                isDisabled: !environment.updateChecker.canCheckForUpdates,
+                onTitle: String(localized: "checks"),
+                offTitle: String(localized: "does not check")
+            )
+            Text("for updates automatically.")
+            if environment.updateChecker.canCheckForUpdates {
+                Button("Check for Updates") {
+                    environment.updateChecker.checkForUpdates()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isUpdatingDefaultHandler || environment.defaultBrowserService == nil)
-                .accessibilityIdentifier("settings.setDefaultHandler")
-
-                Button("Refresh") {
-                    Task { await refreshDefaultHandler() }
-                }
-                .disabled(isUpdatingDefaultHandler || environment.defaultBrowserService == nil)
-                .accessibilityIdentifier("settings.refreshDefaultHandler")
-
-                Button("Open System Settings", action: openDefaultAppsSettings)
-                    .disabled(isUpdatingDefaultHandler)
-                    .accessibilityIdentifier("settings.openDefaultApps")
+                .buttonStyle(WorkspaceSecondaryCapsuleStyle())
+                .accessibilityIdentifier("settings.checkForUpdates")
             }
         }
+    }
+
+    private var historySentence: some View {
+        WorkspaceSentence {
+            Text("Prism")
+            WorkspaceOnOffPill(
+                isOn: historyEnabled,
+                accessibilityIdentifier: "settings.historyEnabled",
+                accessibilityLabel: "Save History",
+                onTitle: String(localized: "saves"),
+                offTitle: String(localized: "does not save")
+            )
+            if environment.settings.historyEnabled {
+                Text("History, keeping up to")
+                WorkspaceInlinePill(
+                    selection: historyLimit,
+                    title: "\(environment.settings.historyLimit)",
+                    accessibilityLabel: "History limit",
+                    options: historyLimitOptions
+                )
+                Text("links for")
+                WorkspaceInlinePill(
+                    selection: historyRetentionDays,
+                    title: "\(environment.settings.historyRetentionDays)",
+                    accessibilityLabel: "History retention",
+                    options: historyRetentionOptions
+                )
+                Text("days.")
+            } else {
+                Text("History.")
+            }
+        }
+    }
+
+    private var defaultHandlerSentence: some View {
+        WorkspaceSentence {
+            Text(WorkspaceCopy.defaultHandlerSentence(for: defaultHandlerState))
+            if defaultHandlerState != .active {
+                Text(LocalizedStringKey(defaultHandlerExplanation))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var unmatchedPreview: some View {
+        switch environment.settings.unmatchedBehavior {
+        case .alwaysAsk:
+            WorkspaceScaledSelectorPreview(
+                browsers: previewBrowsers,
+                selectedID: previewBrowsers.first?.id,
+                sourceName: selectorSourceName,
+                sourceIcon: WorkspaceApplicationIcon.nsImage(bundleIdentifier: "com.apple.Safari"),
+                urlText: "https://example.com",
+                showsShortcuts: true
+            )
+        case .preferredBrowser:
+            WorkspaceCornerWidgetScene(
+                address: "https://example.com",
+                browser: preferredBrowser
+            )
+        case .lastUsedBrowser:
+            WorkspaceCornerWidgetScene(
+                address: "https://example.com",
+                browser: lastUsedBrowser
+            )
+        }
+    }
+
+    private var selectorSourceName: String {
+        if WorkspaceApplicationIcon.nsImage(bundleIdentifier: "com.apple.Safari") != nil {
+            return "Safari"
+        }
+        return "Prism"
+    }
+
+    private var previewBrowsers: [BrowserDescriptor] {
+        browsers.filter { $0.availability == .available }
+    }
+
+    private var preferredBrowser: BrowserDescriptor? {
+        previewBrowsers.first(where: { $0.id == environment.settings.preferredBrowserID })
+            ?? previewBrowsers.first
+    }
+
+    private var lastUsedBrowser: BrowserDescriptor? {
+        previewBrowsers.first(where: { $0.id == environment.settings.lastUsedBrowserID })
+            ?? previewBrowsers.first
+    }
+
+    private var preferredBrowserTitle: String {
+        preferredBrowser?.displayName ?? String(localized: "Choose a browser")
+    }
+
+    private var preferredBrowserOptions: [WorkspaceInlineOption<BrowserID?>] {
+        [WorkspaceInlineOption(value: nil, title: String(localized: "Choose a browser"))]
+            + previewBrowsers.map { browser in
+                WorkspaceInlineOption(value: Optional(browser.id), title: browser.displayName)
+            }
+    }
+
+    private var historyLimitOptions: [WorkspaceInlineOption<Int>] {
+        intOptions(presets: [50, 100, 250, 500, 1_000, 5_000], current: environment.settings.historyLimit)
+    }
+
+    private var historyRetentionOptions: [WorkspaceInlineOption<Int>] {
+        intOptions(presets: [7, 14, 30, 90, 180, 365], current: environment.settings.historyRetentionDays)
+    }
+
+    private func intOptions(presets: [Int], current: Int) -> [WorkspaceInlineOption<Int>] {
+        let values = presets.contains(current) ? presets : ([current] + presets).sorted()
+        return values.map { WorkspaceInlineOption(value: $0, title: "\($0)") }
     }
 
     private var automaticRulesEnabled: Binding<Bool> {
@@ -253,25 +419,6 @@ struct SettingsManagementView: View {
             get: { environment.updateChecker.automaticallyChecksForUpdates },
             set: { environment.updateChecker.automaticallyChecksForUpdates = $0 }
         )
-    }
-
-    private var defaultHandlerLabel: String {
-        switch defaultHandlerState {
-        case .active:
-            "HTTP + HTTPS active"
-        case .inactive:
-            "Needs attention"
-        case nil:
-            "Checking…"
-        }
-    }
-
-    private var defaultHandlerSymbol: String {
-        defaultHandlerState == .active ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-    }
-
-    private var defaultHandlerColor: Color {
-        defaultHandlerState == .active ? .green : .orange
     }
 
     private var defaultHandlerExplanation: String {
