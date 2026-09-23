@@ -18,17 +18,6 @@ final class AppShellUITests: PrismUITestCase {
             appearance: .light
         )
 
-        requireElement("appShell.sidebar.browsers", in: application).click()
-        _ = requireElement("appShell.page.browsers.heading", in: application)
-        XCTAssertTrue(application.staticTexts["Fixture Browser"].firstMatch.waitForExistence(timeout: 5))
-        _ = requireButton("browsers.rescan", in: application)
-        _ = requireButton("browsers.addCustomBrowser", in: application)
-        try attachWindowScreenshot(
-            "browsers-management",
-            application: application,
-            appearance: .light
-        )
-
         requireElement("appShell.sidebar.settings", in: application).click()
         _ = requireElement("appShell.page.settings.heading", in: application)
         _ = requireElement("settings.showMenuBarItem", in: application)
@@ -47,20 +36,9 @@ final class AppShellUITests: PrismUITestCase {
         XCTAssertEqual(application.windows.count, 1)
     }
 
-    func testWorkspaceOverviewKeepsOperationalStatusAndRulePriorityActionable() throws {
+    func testWorkspaceRulesKeepPriorityActionable() throws {
         let application = launchFixture("workspace", appearance: .dark)
 
-        _ = requireElement("appShell.page.overview.heading", in: application)
-        _ = requireElement("overview.linkHandling", in: application)
-        _ = requireElement("overview.automaticRules", in: application)
-        _ = requireElement("overview.browsers", in: application)
-        XCTAssertFalse(application.buttons["overview.manageRules"].exists)
-        try attachWindowScreenshot(
-            "workspace-overview",
-            application: application,
-            appearance: .dark,
-            verifiesAppearance: true
-        )
         requireElement("appShell.sidebar.rules", in: application).click()
         _ = requireElement("appShell.page.rules.heading", in: application)
         let documentationUp = requireElement(

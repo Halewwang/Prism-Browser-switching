@@ -25,6 +25,19 @@ enum RuleMatchKind: String, CaseIterable, Identifiable {
         case .sourceApplication: "Application bundle identifier"
         }
     }
+
+    var hint: String {
+        switch self {
+        case .exactDomain:
+            "github.com matches only github.com. www.github.com needs its own rule."
+        case .domainAndSubdomains:
+            "github.com also matches docs.github.com and www.github.com."
+        case .urlContains:
+            "Matches when the full link contains this text."
+        case .sourceApplication:
+            "Choose an installed application. The rule runs when macOS confirms that app sent the link."
+        }
+    }
 }
 
 struct RuleEditorDraft: Identifiable {

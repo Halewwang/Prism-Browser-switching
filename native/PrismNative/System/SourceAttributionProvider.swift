@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import PrismCore
 
 @MainActor
@@ -9,6 +10,28 @@ protocol SourceAttributing {
 @MainActor
 protocol RunningApplicationLookup {
     func sourceApplication(processIdentifier: Int32) -> SourceApplication?
+}
+
+@MainActor
+protocol ProcessAncestryProviding {
+    func parentProcessIdentifier(of processIdentifier: Int32) -> Int32?
+}
+
+struct EmptyProcessAncestry: ProcessAncestryProviding {
+    func parentProcessIdentifier(of processIdentifier: Int32) -> Int32? { nil }
+}
+
+struct SystemProcessAncestry: ProcessAncestryProviding {
+    func parentProcessIdentifier(of processIdentifier: Int32) -> Int32? {
+        var info = proc_bsdinfo()
+        let expectedSize = Int32(MemoryLayout<proc_bsdinfo>.stride)
+        let actualSize = proc_pidinfo(processIdentifier, PROC_PIDTBSDINFO, 0, &info, expectedSize)
+        guard actualSize == expectedSize else { return nil }
+        guard info.pbi_ppid > 0, info.pbi_ppid <= UInt32(Int32.max) else { return nil }
+        let parent = Int32(info.pbi_ppid)
+        guard parent != processIdentifier else { return nil }
+        return parent
+    }
 }
 
 struct RunningApplicationSnapshot: Equatable, Sendable {
@@ -34,7 +57,6 @@ final class SystemRunningApplicationLookup: RunningApplicationLookup {
     func sourceApplication(processIdentifier: Int32) -> SourceApplication? {
         guard processIdentifier > 0,
               let snapshot = inspector.snapshot(processIdentifier: processIdentifier),
-              snapshot.isActive,
               !snapshot.isTerminated,
               let bundleIdentifier = usableBundleIdentifier(snapshot.bundleIdentifier)
         else {
@@ -53,21 +75,22 @@ final class SystemRunningApplicationLookup: RunningApplicationLookup {
 @MainActor
 final class SourceAttributionProvider: SourceAttributing {
     private let runningApplications: any RunningApplicationLookup
+    private let processAncestry: any ProcessAncestryProviding
     private let prismBundleIdentifier: String
 
     init(
         runningApplications: any RunningApplicationLookup = SystemRunningApplicationLookup(),
+        processAncestry: any ProcessAncestryProviding = EmptyProcessAncestry(),
         prismBundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.prism.app"
     ) {
         self.runningApplications = runningApplications
+        self.processAncestry = processAncestry
         self.prismBundleIdentifier = prismBundleIdentifier
     }
 
     func resolve(senderPID: Int32?, lastActivated: SourceApplication?) -> SourceApplication {
         if let senderPID {
-            guard let candidate = runningApplications.sourceApplication(processIdentifier: senderPID),
-                  let confirmed = confirmedSource(from: candidate)
-            else {
+            guard let confirmed = confirmedSource(startingAt: senderPID) else {
                 return .unknown
             }
 
@@ -81,26 +104,64 @@ final class SourceAttributionProvider: SourceAttributing {
         return inferred
     }
 
-    private func confirmedSource(from candidate: SourceApplication) -> SourceApplication? {
-        guard let bundleIdentifier = usableNonPrismBundleIdentifier(candidate.bundleIdentifier) else {
+    private func confirmedSource(startingAt processIdentifier: Int32) -> SourceApplication? {
+        var current: Int32? = processIdentifier
+        var seen: Set<Int32> = []
+        var helperFallback: SourceApplication?
+        while let pid = current, pid > 0, seen.insert(pid).inserted, seen.count <= 8 {
+            if let candidate = runningApplications.sourceApplication(processIdentifier: pid) {
+                if let host = hostApplication(from: candidate) {
+                    return host
+                }
+                if helperFallback == nil, let fallback = helperFallbackApplication(from: candidate) {
+                    helperFallback = fallback
+                }
+            }
+            current = processAncestry.parentProcessIdentifier(of: pid)
+        }
+        return helperFallback
+    }
+
+    private func hostApplication(from candidate: SourceApplication) -> SourceApplication? {
+        guard let bundleIdentifier = usableNonPrismBundleIdentifier(candidate.bundleIdentifier),
+              !SourceBundleIdentity.isHelper(bundleIdentifier),
+              let canonical = SourceBundleIdentity.canonical(bundleIdentifier)
+        else {
             return nil
         }
 
         return SourceApplication(
-            bundleIdentifier: bundleIdentifier,
-            displayName: usableDisplayName(candidate.displayName) ?? bundleIdentifier,
+            bundleIdentifier: canonical,
+            displayName: usableDisplayName(candidate.displayName) ?? canonical,
+            confidence: .confirmed
+        )
+    }
+
+    private func helperFallbackApplication(from candidate: SourceApplication) -> SourceApplication? {
+        guard let bundleIdentifier = usableNonPrismBundleIdentifier(candidate.bundleIdentifier),
+              SourceBundleIdentity.isHelper(bundleIdentifier),
+              let canonical = SourceBundleIdentity.canonical(bundleIdentifier)
+        else {
+            return nil
+        }
+
+        return SourceApplication(
+            bundleIdentifier: canonical,
+            displayName: usableDisplayName(candidate.displayName) ?? canonical,
             confidence: .confirmed
         )
     }
 
     private func inferredSource(from candidate: SourceApplication) -> SourceApplication? {
-        guard let bundleIdentifier = usableNonPrismBundleIdentifier(candidate.bundleIdentifier) else {
+        guard let bundleIdentifier = usableNonPrismBundleIdentifier(candidate.bundleIdentifier),
+              let canonical = SourceBundleIdentity.canonical(bundleIdentifier)
+        else {
             return nil
         }
 
         return SourceApplication(
-            bundleIdentifier: bundleIdentifier,
-            displayName: usableDisplayName(candidate.displayName) ?? bundleIdentifier,
+            bundleIdentifier: canonical,
+            displayName: usableDisplayName(candidate.displayName) ?? canonical,
             confidence: .low
         )
     }

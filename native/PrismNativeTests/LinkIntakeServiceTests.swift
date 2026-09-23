@@ -1485,7 +1485,7 @@ import Testing
     await harness.coordinator.processNext()
 
     #expect(harness.launcher.handoffCount == 0)
-    #expect(harness.presenter.context == .normal)
+    #expect(harness.presenter.context == .ruleSkipped(.rulesPaused))
     #expect(harness.warning.last == .settingsNotSaved)
 }
 

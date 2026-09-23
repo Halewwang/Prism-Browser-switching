@@ -81,6 +81,7 @@
 "Your routing controls and recent link activity are ready when you need them." = "Your routing controls and recent link activity are ready when you need them.";
 "Checking your default handler" = "Checking your default handler";
 "Prism receives both web-link schemes" = "Prism receives both web-link schemes";
+"Default web link handler" = "Default web link handler";
 "Selector order is managed in Browsers" = "Selector order is managed in Browsers";
 "Interface" = "Interface";
 "Language" = "Language";
@@ -165,6 +166,8 @@
 "More actions" = "More actions";
 "URL rule" = "URL rule";
 "Source rule" = "Source rule";
+"Attempt %d" = "Attempt %d";
+"No browser selected" = "No browser selected";
 "Manual" = "Manual";
 "Preferred browser" = "Preferred browser";
 "Last used browser" = "Last used browser";
@@ -172,8 +175,18 @@
 "The selected browser did not accept the link." = "The selected browser did not accept the link.";
 "Prism could not confirm whether the browser opened the link." = "Prism could not confirm whether the browser opened the link.";
 "The link could not be opened." = "The link could not be opened.";
+"selector.reason.noMatchingRule" = "No rule matched this link.";
+"selector.reason.rulesPaused" = "Automatic rules are paused.";
+"selector.reason.targetUnavailable" = "The browser in the matching rule is unavailable.";
+"selector.reason.preferredUnavailable" = "The fallback browser is unavailable.";
+"selector.reason.sourceNotConfirmed" = "The source application was not confirmed, so the source rule did not run.";
+"github.com matches only github.com. www.github.com needs its own rule." = "github.com matches only github.com. www.github.com needs its own rule.";
+"github.com also matches docs.github.com and www.github.com." = "github.com also matches docs.github.com and www.github.com.";
+"Matches when the full link contains this text." = "Matches when the full link contains this text.";
+"Choose an installed application. The rule runs when macOS confirms that app sent the link." = "Choose an installed application. The rule runs when macOS confirms that app sent the link.";
 "Handled links will appear here" = "Handled links will appear here";
 "Links handled by Prism will appear here with their browser and result." = "Links handled by Prism will appear here with their browser and result.";
+"Links handled by Prism appear here with their browser and result." = "Links handled by Prism appear here with their browser and result.";
 "Loading" = "Loading";
 "Retrying" = "Retrying";
 "Open Settings" = "Open Settings";

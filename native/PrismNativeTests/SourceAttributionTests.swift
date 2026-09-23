@@ -1,3 +1,5 @@
+import AppKit
+import Carbon
 import Foundation
 import PrismCore
 import Testing
@@ -16,6 +18,94 @@ import Testing
 
 @Test @MainActor func senderPIDRejectsWrongDescriptorType() {
     #expect(AppleEventSenderReader.copySenderPID(from: StubAppleEventDescriptor(.wrongType)) == nil)
+    #expect(AppleEventSenderPIDDecoder.attribute(descriptorType: DescType(typeType), int32Value: 42) == .wrongType)
+}
+
+@Test @MainActor func senderPIDAcceptsKernelProcessIDDescriptors() {
+    #expect(
+        AppleEventSenderPIDDecoder.attribute(descriptorType: DescType(typeKernelProcessID), int32Value: 88)
+            == .signedInteger(88)
+    )
+    #expect(
+        AppleEventSenderPIDDecoder.attribute(descriptorType: DescType(typeSInt32), int32Value: 88)
+            == .signedInteger(88)
+    )
+    var unsignedPID = UInt32(72_110).littleEndian
+    let data = Data(bytes: &unsignedPID, count: MemoryLayout<UInt32>.size)
+    #expect(
+        AppleEventSenderPIDDecoder.attribute(descriptorType: DescType(typeUInt32), int32Value: 0, data: data)
+            == .signedInteger(72_110)
+    )
+}
+
+@Test @MainActor func currentSenderPIDUsesCarbonValueWhenTheNSEventIsMissing() {
+    #expect(AppleEventSenderReader.copySenderPID(nsEvent: nil, carbonPID: 77) == 77)
+    #expect(AppleEventSenderReader.copySenderPID(nsEvent: nil, carbonPID: nil) == nil)
+    #expect(AppleEventSenderReader.copySenderPID(nsEvent: nil, carbonPID: 0) == nil)
+}
+
+@Test @MainActor func getURLEventReadsTheDirectURLAndKernelProcessID() throws {
+    let event = NSAppleEventDescriptor(
+        eventClass: AEEventClass(kInternetEventClass),
+        eventID: AEEventID(kAEGetURL),
+        targetDescriptor: nil,
+        returnID: AEReturnID(kAutoGenerateReturnID),
+        transactionID: AETransactionID(kAnyTransactionID)
+    )
+    event.setParam(NSAppleEventDescriptor(string: "https://example.com/a"), forKeyword: keyDirectObject)
+    var pid = Int32(88).bigEndian
+    let pidData = Data(bytes: &pid, count: MemoryLayout<Int32>.size)
+    let pidDescriptor = try #require(NSAppleEventDescriptor(descriptorType: DescType(typeKernelProcessID), data: pidData))
+
+    #expect(GetURLEvent.urls(in: event) == [URL(string: "https://example.com/a")!])
+    #expect(
+        AppleEventSenderPIDDecoder.attribute(
+            descriptorType: pidDescriptor.descriptorType,
+            int32Value: pidDescriptor.int32Value,
+            data: pidDescriptor.data
+        ) == .signedInteger(88)
+    )
+}
+
+@Test func claimedGetURLDoesNotOpenASecondTime() {
+    var claimed = ClaimedLinkOpens()
+    let url = URL(string: "https://example.com/a")!
+
+    let firstClaim = claimed.claim(url)
+    let secondClaim = claimed.claim(url)
+    let firstConsume = claimed.consume(url)
+    let secondConsume = claimed.consume(url)
+
+    #expect(firstClaim)
+    #expect(!secondClaim)
+    #expect(firstConsume)
+    #expect(!secondConsume)
+}
+
+@Test @MainActor func unsignedSenderPIDUsesTheCoercedInteger() throws {
+    var pid = UInt32(1_603).littleEndian
+    let data = Data(bytes: &pid, count: MemoryLayout<UInt32>.size)
+    let attribute = try #require(
+        NSAppleEventDescriptor(descriptorType: DescType(typeUInt32), data: data)
+    )
+
+    #expect(AppleEventSenderReader.pid(from: attribute) == 1_603)
+}
+
+@Test @MainActor func bundlelessHelperPIDConfirmsTheParentApplication() {
+    let resolver = SourceAttributionProvider(
+        runningApplications: StubRunningApplications(applications: [
+            1332: SourceApplication(bundleIdentifier: "com.electron.lark", displayName: "飞书", confidence: .unknown)
+        ]),
+        processAncestry: StubProcessAncestry(parents: [1603: 1332]),
+        prismBundleIdentifier: "com.prism.app"
+    )
+
+    #expect(resolver.resolve(senderPID: 1603, lastActivated: nil) == SourceApplication(
+        bundleIdentifier: "com.electron.lark",
+        displayName: "飞书",
+        confidence: .confirmed
+    ))
 }
 
 @Test @MainActor func senderPIDRejectsOutOfRangeValues() {
@@ -62,6 +152,67 @@ import Testing
     #expect(result == SourceApplication(bundleIdentifier: "com.tinyspeck.slackmacgap", displayName: "Slack", confidence: .low))
 }
 
+@Test @MainActor func teamPrefixedSenderPIDIsConfirmedAsTheApplicationBundle() {
+    let resolver = SourceAttributionProvider(
+        runningApplications: StubRunningApplications(applications: [
+            42: SourceApplication(
+                bundleIdentifier: "5ZSL2CJU2T.com.dingtalk.mac",
+                displayName: "DingTalk",
+                confidence: .unknown
+            )
+        ]),
+        prismBundleIdentifier: "com.prism.app"
+    )
+
+    let result = resolver.resolve(senderPID: 42, lastActivated: nil)
+
+    #expect(result == SourceApplication(
+        bundleIdentifier: "com.dingtalk.mac",
+        displayName: "DingTalk",
+        confidence: .confirmed
+    ))
+}
+
+@Test @MainActor func helperAndBundlelessSendersConfirmTheirHostApplication() {
+    let resolver = SourceAttributionProvider(
+        runningApplications: StubRunningApplications(applications: [
+            10: SourceApplication(bundleIdentifier: "com.larksuite.larkApp.helper", displayName: "Lark Helper", confidence: .unknown),
+            11: SourceApplication(bundleIdentifier: "com.larksuite.larkApp", displayName: "Lark", confidence: .unknown),
+            20: SourceApplication(bundleIdentifier: "", displayName: "Bundleless", confidence: .unknown),
+            21: SourceApplication(bundleIdentifier: "com.electron.lark", displayName: "Feishu", confidence: .unknown)
+        ]),
+        processAncestry: StubProcessAncestry(parents: [10: 11, 20: 21]),
+        prismBundleIdentifier: "com.prism.app"
+    )
+
+    #expect(resolver.resolve(senderPID: 10, lastActivated: nil) == SourceApplication(
+        bundleIdentifier: "com.larksuite.larkApp",
+        displayName: "Lark",
+        confidence: .confirmed
+    ))
+    #expect(resolver.resolve(senderPID: 20, lastActivated: nil) == SourceApplication(
+        bundleIdentifier: "com.electron.lark",
+        displayName: "Feishu",
+        confidence: .confirmed
+    ))
+}
+
+@Test @MainActor func helperWithoutAHostConfirmsTheBundleWithTheHelperSuffixRemoved() {
+    let resolver = SourceAttributionProvider(
+        runningApplications: StubRunningApplications(applications: [
+            10: SourceApplication(bundleIdentifier: "com.larksuite.larkApp.helper.renderer", displayName: "Lark Helper", confidence: .unknown)
+        ]),
+        processAncestry: StubProcessAncestry(parents: [:]),
+        prismBundleIdentifier: "com.prism.app"
+    )
+
+    #expect(resolver.resolve(senderPID: 10, lastActivated: nil) == SourceApplication(
+        bundleIdentifier: "com.larksuite.larkApp",
+        displayName: "Lark Helper",
+        confidence: .confirmed
+    ))
+}
+
 @Test @MainActor func prismAndBundlelessPIDCandidatesNeverBecomeConfirmed() {
     let resolver = SourceAttributionProvider(
         runningApplications: StubRunningApplications(applications: [
@@ -75,7 +226,7 @@ import Testing
     #expect(resolver.resolve(senderPID: 2, lastActivated: nil) == .unknown)
 }
 
-@Test @MainActor func inactiveOrTerminatedApplicationsCannotResolveToSources() {
+@Test @MainActor func backgroundSendersResolveAndTerminatedApplicationsDoNot() {
     let inactive = RunningApplicationSnapshot(
         bundleIdentifier: "com.apple.Safari",
         displayName: "Safari",
@@ -92,7 +243,11 @@ import Testing
         inspector: StubRunningApplicationInspector(snapshots: [42: inactive, 43: terminated])
     )
 
-    #expect(lookup.sourceApplication(processIdentifier: 42) == nil)
+    #expect(lookup.sourceApplication(processIdentifier: 42) == SourceApplication(
+        bundleIdentifier: "com.apple.Safari",
+        displayName: "Safari",
+        confidence: .unknown
+    ))
     #expect(lookup.sourceApplication(processIdentifier: 43) == nil)
 }
 
@@ -273,6 +428,19 @@ private final class StubAppleEventDescriptor: AppleEventSenderPIDDescriptorReadi
 
     func senderPIDAttribute() -> AppleEventSenderPIDAttribute {
         result
+    }
+}
+
+@MainActor
+private final class StubProcessAncestry: ProcessAncestryProviding {
+    private let parents: [Int32: Int32]
+
+    init(parents: [Int32: Int32]) {
+        self.parents = parents
+    }
+
+    func parentProcessIdentifier(of processIdentifier: Int32) -> Int32? {
+        parents[processIdentifier]
     }
 }
 

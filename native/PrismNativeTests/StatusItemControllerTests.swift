@@ -22,7 +22,6 @@ struct StatusItemControllerTests {
             "Open Prism",
             "History",
             "Rules",
-            "Browsers",
             "Settings",
             "Pause Automatic Rules",
             "Check for Updates",
@@ -44,7 +43,7 @@ struct StatusItemControllerTests {
         _ = fixture.makeController()
         let menu = try #require(fixture.host.menu)
 
-        for index in 2...6 {
+        for index in 2...5 {
             try invokeItem(at: index, in: menu)
         }
 
@@ -52,12 +51,10 @@ struct StatusItemControllerTests {
             .rules,
             .history,
             .rules,
-            .browsers,
             .settings,
         ])
-        #expect(fixture.windows.openedWindowIDs == ["main", "main", "main", "main", "main"])
+        #expect(fixture.windows.openedWindowIDs == ["main", "main", "main", "main"])
         #expect(fixture.windows.openedValues == [
-            .singleton,
             .singleton,
             .singleton,
             .singleton,
@@ -77,21 +74,21 @@ struct StatusItemControllerTests {
         _ = fixture.makeController()
         let menu = try #require(fixture.host.menu)
 
-        try invokeItem(at: 7, in: menu)
+        try invokeItem(at: 6, in: menu)
 
         var expected = settings
         expected.automaticRulesEnabled = false
         #expect(try fixture.settingsRepository.load() == expected)
         #expect(fixture.environment.settings == expected)
-        #expect(menu.items[7].title == "Resume Automatic Rules")
+        #expect(menu.items[6].title == "Resume Automatic Rules")
         #expect(fixture.updates.checkCount == 0)
         #expect(fixture.termination.count == 0)
 
-        try invokeItem(at: 7, in: menu)
+        try invokeItem(at: 6, in: menu)
 
         #expect(try fixture.settingsRepository.load() == settings)
         #expect(fixture.environment.settings == settings)
-        #expect(menu.items[7].title == "Pause Automatic Rules")
+        #expect(menu.items[6].title == "Pause Automatic Rules")
     }
 
     @Test func failedPauseSaveDoesNotFlipStateOrMenuLabel() async throws {
@@ -104,11 +101,11 @@ struct StatusItemControllerTests {
         let menu = try #require(fixture.host.menu)
         fixture.settingsRepository.shouldFailSave = true
 
-        try invokeItem(at: 7, in: menu)
+        try invokeItem(at: 6, in: menu)
 
         #expect(fixture.environment.settings.automaticRulesEnabled)
         #expect(try fixture.settingsRepository.load().automaticRulesEnabled)
-        #expect(menu.items[7].title == "Pause Automatic Rules")
+        #expect(menu.items[6].title == "Pause Automatic Rules")
         #expect(fixture.environment.persistenceWarnings.contains(.settingsNotSaved))
     }
 
@@ -121,7 +118,7 @@ struct StatusItemControllerTests {
         _ = fixture.makeController()
         let menu = try #require(fixture.host.menu)
 
-        try invokeItem(at: 8, in: menu)
+        try invokeItem(at: 7, in: menu)
 
         #expect(fixture.updates.checkCount == 1)
         #expect(fixture.updates.eventsReadCount == 0)
@@ -136,7 +133,7 @@ struct StatusItemControllerTests {
         _ = fixture.makeController()
         let menu = try #require(fixture.host.menu)
 
-        try invokeItem(at: 10, in: menu)
+        try invokeItem(at: 9, in: menu)
 
         #expect(fixture.termination.count == 1)
         #expect(fixture.windows.routes.isEmpty)
@@ -182,7 +179,7 @@ struct StatusItemControllerTests {
 
         let menu = try #require(fixture.host.menu)
         #expect(menu.items[2].title == "打开 Prism")
-        #expect(menu.items[7].title == "暂停自动规则")
+        #expect(menu.items[6].title == "暂停自动规则")
     }
 
     private func menuLabel(_ item: NSMenuItem) -> String {

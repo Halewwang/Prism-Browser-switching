@@ -89,16 +89,16 @@ func hostAndSubdomainsRespectsLabelBoundaries(url: String, expected: Bool) {
 }
 
 @Test(arguments: [
-    (SourceConfidence.confirmed, "com.example.source", Set(["com.example.source"]), true),
-    (SourceConfidence.low, "com.example.source", Set(["com.example.source"]), false),
-    (SourceConfidence.confirmed, "", Set(["com.example.source"]), false),
-    (SourceConfidence.confirmed, "com.example.source", Set<String>(), false)
+    (SourceConfidence.confirmed, "com.example.source", Set(["com.example.source"]), RoutingDecision.open(browserID: "com.apple.Safari", method: .sourceRule, ruleID: nil)),
+    (SourceConfidence.confirmed, "com.example.source", Set<String>(), RoutingDecision.open(browserID: "com.apple.Safari", method: .sourceRule, ruleID: nil)),
+    (SourceConfidence.low, "com.example.source", Set(["com.example.source"]), RoutingDecision.ask(reason: .sourceNotConfirmed)),
+    (SourceConfidence.confirmed, "", Set(["com.example.source"]), RoutingDecision.ask(reason: .noMatchingRule))
 ])
-func sourceRulesRequireConfirmedEligibleNonemptySources(
+func savedSourceRulesMatchAConfirmedBundleWithoutTheSupportManifest(
     confidence: SourceConfidence,
     bundleID: String,
     eligibleIDs: Set<String>,
-    shouldMatch: Bool
+    expected: RoutingDecision
 ) {
     let safari: BrowserID = "com.apple.Safari"
     let sourceRule = rule(
@@ -106,29 +106,105 @@ func sourceRulesRequireConfirmedEligibleNonemptySources(
         browser: safari,
         priority: 0
     )
-
     let decision = RuleEngine().decide(
         request: .fixture(sourceBundleID: bundleID, confidence: confidence),
         rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: eligibleIDs, settings: .defaults
     )
-
-    let expected: RoutingDecision = shouldMatch
-        ? .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id)
-        : .ask(reason: .noMatchingRule)
-    #expect(decision == expected)
+    #expect(decision.ignoringRuleID == expected.ignoringRuleID)
 }
 
-@Test func sourceEligibilityIsRecheckedForEveryDecision() {
+@Test(arguments: [
+    ("5ZSL2CJU2T.com.dingtalk.mac", "com.dingtalk.mac"),
+    ("com.dingtalk.mac", "5ZSL2CJU2T.com.dingtalk.mac"),
+    ("com.larksuite.larkApp.helper", "com.larksuite.larkApp"),
+    ("com.larksuite.larkApp.helper.renderer", "com.larksuite.larkApp")
+])
+func confirmedSourceRulesMatchTeamPrefixesAndHelperBundles(sourceID: String, ruleID: String) {
+    let chrome: BrowserID = "com.google.Chrome"
+    let sourceRule = rule(matcher: .sourceBundleIdentifier(ruleID), browser: chrome, priority: 0)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(sourceBundleID: sourceID, confidence: .confirmed),
+        rules: [sourceRule],
+        availableBrowserIDs: [chrome],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .open(browserID: chrome, method: .sourceRule, ruleID: sourceRule.id))
+}
+
+@Test func unconfirmedSourceStillAsksAfterBundleNormalization() {
+    let chrome: BrowserID = "com.google.Chrome"
+    let sourceRule = rule(matcher: .sourceBundleIdentifier("com.dingtalk.mac"), browser: chrome, priority: 0)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(sourceBundleID: "5ZSL2CJU2T.com.dingtalk.mac", confidence: .low),
+        rules: [sourceRule],
+        availableBrowserIDs: [chrome],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .ask(reason: .sourceNotConfirmed))
+}
+
+@Test func confirmedSourceRulesMatchBundleIDsCaseInsensitively() {
+    let chrome: BrowserID = "com.google.Chrome"
+    let sourceRule = rule(matcher: .sourceBundleIdentifier("com.larksuite.larkapp"), browser: chrome, priority: 0)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(sourceBundleID: "com.larksuite.larkApp", confidence: .confirmed),
+        rules: [sourceRule],
+        availableBrowserIDs: [chrome],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .open(browserID: chrome, method: .sourceRule, ruleID: sourceRule.id))
+}
+
+@Test func helperComponentInsideAnUnrelatedBundleDoesNotCollapse() {
+    let chrome: BrowserID = "com.google.Chrome"
+    let sourceRule = rule(matcher: .sourceBundleIdentifier("com"), browser: chrome, priority: 0)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(sourceBundleID: "com.helper.foo", confidence: .confirmed),
+        rules: [sourceRule],
+        availableBrowserIDs: [chrome],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .ask(reason: .noMatchingRule))
+}
+
+@Test func distinctApplicationsDoNotMatchThroughNormalization() {
+    let chrome: BrowserID = "com.google.Chrome"
+    let sourceRule = rule(matcher: .sourceBundleIdentifier("com.larksuite.larkApp"), browser: chrome, priority: 0)
+
+    let decision = RuleEngine().decide(
+        request: .fixture(sourceBundleID: "com.electron.lark", confidence: .confirmed),
+        rules: [sourceRule],
+        availableBrowserIDs: [chrome],
+        eligibleSourceBundleIDs: [],
+        settings: .defaults
+    )
+
+    #expect(decision == .ask(reason: .noMatchingRule))
+}
+
+@Test func savedSourceRulesIgnoreManifestMembership() {
     let safari: BrowserID = "com.apple.Safari"
     let sourceRule = rule(matcher: .sourceBundleIdentifier("com.example.source"), browser: safari, priority: 0)
     let request = LinkRequest.fixture(sourceBundleID: "com.example.source", confidence: .confirmed)
     let engine = RuleEngine()
 
-    let eligible = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: ["com.example.source"], settings: .defaults)
-    let removed = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: [], settings: .defaults)
+    let listed = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: ["com.example.source"], settings: .defaults)
+    let unlisted = engine.decide(request: request, rules: [sourceRule], availableBrowserIDs: [safari], eligibleSourceBundleIDs: [], settings: .defaults)
 
-    #expect(eligible == .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id))
-    #expect(removed == .ask(reason: .noMatchingRule))
+    #expect(listed == .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id))
+    #expect(unlisted == .open(browserID: safari, method: .sourceRule, ruleID: sourceRule.id))
 }
 
 @Test func lowerPriorityRuleWinsWithinTheSameCategory() {
@@ -215,6 +291,15 @@ func unmatchedBehaviorsReturnTheApprovedDecision(
     )
 
     #expect(decision == expected)
+}
+
+private extension RoutingDecision {
+    var ignoringRuleID: RoutingDecision {
+        if case let .open(browserID, method, _) = self {
+            return .open(browserID: browserID, method: method, ruleID: nil)
+        }
+        return self
+    }
 }
 
 private func rule(

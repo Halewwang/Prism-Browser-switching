@@ -3,6 +3,8 @@ import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import pkg from '../package.json' assert { type: "json" };
 import { scanInstalledBrowsers, saveCustomBrowser } from './browserScanner.js';
 import { consumePendingDeepLinkPayload, getIsPopupMode, getMainWindow, setIsPopupMode } from './windowManager.js';
@@ -10,6 +12,7 @@ import { consumePendingDeepLinkPayload, getIsPopupMode, getMainWindow, setIsPopu
 const ALLOWED_UPDATE_HOSTS = new Set([
   'github.com',
   'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
   'raw.githubusercontent.com',
 ]);
 
@@ -216,42 +219,26 @@ export function registerIpcHandlers() {
     }
 
     const savePath = path.join(app.getPath('downloads'), fileName);
+    const response = await fetch(parsed.toString(), { redirect: 'follow' });
+    if (!response.ok || !response.body) {
+      throw new Error(`Download failed: ${response.status || 'no response'}`);
+    }
 
-    return new Promise((resolve, reject) => {
-      const ses = mainWindow.webContents.session;
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(savePath));
 
-      ses.once('will-download', (_downloadEvent, item) => {
-        item.setSavePath(savePath);
-
-        item.once('done', async (_event, state) => {
-          if (state !== 'completed') {
-            reject(new Error(`Download failed: ${state}`));
-            return;
-          }
-
-          if (expectedSha256) {
-            const actualSha256 = createSha256(savePath);
-            if (actualSha256 !== expectedSha256) {
-              fs.rmSync(savePath, { force: true });
-              reject(new Error('Downloaded update failed checksum verification.'));
-              return;
-            }
-          }
-
-          const openError = await shell.openPath(savePath);
-          if (openError) {
-            shell.showItemInFolder(savePath);
-          }
-
-          resolve({ savePath, fileName, verified: !!expectedSha256 });
-        });
-      });
-
-      try {
-        mainWindow.webContents.downloadURL(downloadUrl);
-      } catch (error) {
-        reject(error);
+    if (expectedSha256) {
+      const actualSha256 = createSha256(savePath);
+      if (actualSha256 !== expectedSha256) {
+        fs.rmSync(savePath, { force: true });
+        throw new Error('Downloaded update failed checksum verification.');
       }
-    });
+    }
+
+    const openError = await shell.openPath(savePath);
+    if (openError) {
+      shell.showItemInFolder(savePath);
+    }
+
+    return { savePath, fileName, verified: !!expectedSha256 };
   });
 }

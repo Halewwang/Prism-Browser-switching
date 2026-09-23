@@ -183,7 +183,7 @@ const main = async () => {
   console.log('\nBuilding and Packaging...');
   run('npm', ['run', 'dist']);
 
-  const dmgName = `Prism-${newVersion}-arm64.dmg`;
+  const dmgName = `Prism-${newVersion}-universal.dmg`;
   const dmgPath = path.join(ROOT_DIR, 'release', dmgName);
   const checksum = createSha256(dmgPath);
   const notesContent = buildReleaseNotes(newVersion, logs, checksum);

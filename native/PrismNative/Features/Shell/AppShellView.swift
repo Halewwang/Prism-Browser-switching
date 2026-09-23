@@ -6,6 +6,8 @@ enum WorkspaceLayout {
     static let pageTitleFont = Font.system(size: 32, weight: .bold)
     static let sidebarSurface = Color(nsColor: .underPageBackgroundColor)
     static let contentSurface = Color(nsColor: .windowBackgroundColor)
+    static let windowContentWidth: CGFloat = 980
+    static let sidebarWidth: CGFloat = 176
 }
 
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
@@ -69,7 +71,6 @@ struct AppShellView: View {
     private let actions: AppShellActions
     private let historyModel: HistoryViewModel?
     private let browserCatalog: any BrowserCataloging
-    private let addCustomBrowser: @MainActor () async -> OnboardingCustomBrowserResult
     private let recoveryBanner: RecoveryBannerModel?
     private let onRecoveryAction: () -> Void
 
@@ -78,7 +79,7 @@ struct AppShellView: View {
         actions: AppShellActions = AppShellActions(),
         historyModel: HistoryViewModel? = nil,
         browserCatalog: any BrowserCataloging,
-        addCustomBrowser: @escaping @MainActor () async -> OnboardingCustomBrowserResult,
+        addCustomBrowser: @escaping @MainActor () async -> OnboardingCustomBrowserResult = { .cancelled },
         recoveryBanner: RecoveryBannerModel? = nil,
         onRecoveryAction: @escaping () -> Void = {}
     ) {
@@ -86,17 +87,22 @@ struct AppShellView: View {
         self.actions = actions
         self.historyModel = historyModel
         self.browserCatalog = browserCatalog
-        self.addCustomBrowser = addCustomBrowser
+        _ = addCustomBrowser
         self.recoveryBanner = recoveryBanner
         self.onRecoveryAction = onRecoveryAction
     }
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             SidebarView(selection: $route)
             detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 940, minHeight: 640)
+        .frame(
+            minWidth: WorkspaceLayout.windowContentWidth,
+            maxWidth: WorkspaceLayout.windowContentWidth,
+            minHeight: 640
+        )
         .tint(.accentColor)
         .background(WorkspaceLayout.contentSurface)
     }
@@ -109,22 +115,12 @@ struct AppShellView: View {
                     .padding(.top, 16)
             }
 
-            if route == .overview {
-                OverviewView(
-                    browserCatalog: browserCatalog
-                )
-            } else if route == .history, let historyModel {
+            if route == .history, let historyModel {
                 HistoryView(model: historyModel) {
                     actions.perform(.testLink)
                 }
             } else if route == .rules {
                 RulesManagementView(browserCatalog: browserCatalog)
-            } else if route == .browsers {
-                BrowsersManagementView(
-                    browserCatalog: browserCatalog,
-                    addCustomBrowser: addCustomBrowser,
-                    openApplicationsFolder: { actions.perform(.openApplicationsFolder) }
-                )
             } else if route == .settings {
                 SettingsManagementView(
                     browserCatalog: browserCatalog,
@@ -139,6 +135,9 @@ struct AppShellView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WorkspaceLayout.contentSurface)
+        .background {
+            WorkspaceLayout.contentSurface
+                .ignoresSafeArea(edges: .top)
+        }
     }
 }

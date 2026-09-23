@@ -4,22 +4,24 @@ import Observation
 enum StatusItemVisuals {
     static func prismMark() -> NSImage {
         let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.black.setStroke()
-        let mark = NSBezierPath()
-        mark.lineWidth = 2.8
-        mark.lineCapStyle = .square
-        mark.move(to: NSPoint(x: 9, y: 2))
-        mark.line(to: NSPoint(x: 9, y: 16))
-        mark.move(to: NSPoint(x: 2, y: 9))
-        mark.line(to: NSPoint(x: 16, y: 9))
-        mark.move(to: NSPoint(x: 3.5, y: 3.5))
-        mark.line(to: NSPoint(x: 14.5, y: 14.5))
-        mark.move(to: NSPoint(x: 3.5, y: 14.5))
-        mark.line(to: NSPoint(x: 14.5, y: 3.5))
-        mark.stroke()
-        image.unlockFocus()
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSGraphicsContext.current?.shouldAntialias = true
+            NSColor.black.setStroke()
+            let mark = NSBezierPath()
+            mark.lineWidth = 1.15
+            mark.lineCapStyle = .round
+            let center = NSPoint(x: rect.midX, y: rect.midY)
+            let radius = min(rect.width, rect.height) / 2 - 1.35
+            for index in 0..<4 {
+                let angle = CGFloat(index) * .pi / 4
+                let dx = cos(angle) * radius
+                let dy = sin(angle) * radius
+                mark.move(to: NSPoint(x: center.x - dx, y: center.y - dy))
+                mark.line(to: NSPoint(x: center.x + dx, y: center.y + dy))
+            }
+            mark.stroke()
+            return true
+        }
         image.isTemplate = true
         image.accessibilityDescription = "Prism"
         return image
@@ -99,9 +101,8 @@ final class StatusItemController: NSObject {
         menu.addItem(header)
         menu.addItem(.separator())
         menu.addItem(makeItem(title: localized("status.openPrism", "Open Prism"), action: #selector(openPrism), symbol: "rectangle.on.rectangle"))
-        menu.addItem(makeItem(title: localized("status.history", "History"), action: #selector(openHistory), symbol: "clock.arrow.circlepath"))
-        menu.addItem(makeItem(title: localized("status.rules", "Rules"), action: #selector(openRules), symbol: "list.bullet.rectangle"))
-        menu.addItem(makeItem(title: localized("status.browsers", "Browsers"), action: #selector(openBrowsers), symbol: "safari"))
+        menu.addItem(makeItem(title: localized("status.history", "History"), action: #selector(openHistory), symbol: "clock"))
+        menu.addItem(makeItem(title: localized("status.rules", "Rules"), action: #selector(openRules), symbol: "list.bullet"))
         menu.addItem(makeItem(title: localized("status.settings", "Settings"), action: #selector(openSettings), symbol: "gearshape"))
 
         automaticRulesItem = makeItem(title: "", action: #selector(toggleAutomaticRules), symbol: "pause.circle")
@@ -172,10 +173,6 @@ final class StatusItemController: NSObject {
 
     @objc private func openRules() {
         mainWindowOpening.open(route: .rules)
-    }
-
-    @objc private func openBrowsers() {
-        mainWindowOpening.open(route: .browsers)
     }
 
     @objc private func openSettings() {

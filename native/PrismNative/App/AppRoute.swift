@@ -1,10 +1,8 @@
 import Foundation
 
 enum AppRoute: Hashable {
-    case overview
     case history
     case rules
-    case browsers
     case settings
 }
 

@@ -177,7 +177,7 @@ final class ProductionAppComposition {
         let intake = LinkIntakeService(
             queue: queue,
             bootstrap: bootstrap,
-            sourceAttributor: SourceAttributionProvider(),
+            sourceAttributor: SourceAttributionProvider(processAncestry: SystemProcessAncestry()),
             lastActivatedSource: { [weak tracker] in tracker?.lastActivatedApplication },
             coordinator: coordinator,
             warningPresenter: environment
@@ -365,7 +365,7 @@ final class ProductionAppComposition {
         let warningSource: (any PersistenceWarningSource)? = reconnectableStore
 
         let environment = AppEnvironment(
-            route: .overview,
+            route: .history,
             unmatchedBehavior: .alwaysAsk,
             updateChecker: SparkleUpdateChecker.makeIfConfigured(),
             ruleRepository: repositories.rules,
@@ -382,7 +382,7 @@ final class ProductionAppComposition {
         let launcher = BrowserLauncherService(workspace: workspace)
         let relay = SelectorPresentationRelay()
         let tracker = ApplicationActivationTracker()
-        let sourceAttributor = SourceAttributionProvider()
+        let sourceAttributor = SourceAttributionProvider(processAncestry: SystemProcessAncestry())
         let sourceManifest = SourceSupportManifest.bundled()
         let operatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
         let coordinator = LinkRoutingCoordinator(

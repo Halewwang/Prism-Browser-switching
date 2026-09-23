@@ -11,28 +11,16 @@ struct AppShellDestination: Identifiable {
 
     static let all: [AppShellDestination] = [
         AppShellDestination(
-            route: .overview,
-            title: "Overview",
-            systemImage: "square.grid.2x2",
-            accessibilityIdentifier: "appShell.sidebar.overview"
-        ),
-        AppShellDestination(
             route: .history,
             title: "History",
-            systemImage: "clock.arrow.circlepath",
+            systemImage: "clock",
             accessibilityIdentifier: "appShell.sidebar.history"
         ),
         AppShellDestination(
             route: .rules,
             title: "Rules",
-            systemImage: "list.bullet.rectangle",
+            systemImage: "list.bullet",
             accessibilityIdentifier: "appShell.sidebar.rules"
-        ),
-        AppShellDestination(
-            route: .browsers,
-            title: "Browsers",
-            systemImage: "safari",
-            accessibilityIdentifier: "appShell.sidebar.browsers"
         ),
         AppShellDestination(
             route: .settings,
@@ -53,19 +41,29 @@ struct SidebarView: View {
 
             List(selection: optionalSelection) {
                 ForEach(AppShellDestination.all) { destination in
-                    Label(LocalizedStringKey(destination.title), systemImage: destination.systemImage)
-                        .font(.body.weight(.medium))
-                        .tag(destination.route)
-                        .padding(.vertical, 7)
-                        .accessibilityIdentifier(destination.accessibilityIdentifier)
+                    Label {
+                        Text(LocalizedStringKey(destination.title))
+                            .font(.system(size: 13, weight: .regular))
+                            .lineLimit(1)
+                    } icon: {
+                        Image(systemName: destination.systemImage)
+                            .font(.system(size: 13, weight: .light))
+                            .frame(width: 16, height: 16)
+                    }
+                    .tag(destination.route)
+                    .padding(.vertical, 2)
+                    .accessibilityIdentifier(destination.accessibilityIdentifier)
                 }
             }
             .listStyle(.sidebar)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scrollContentBackground(.hidden)
         }
-        .frame(minWidth: 228, idealWidth: 248, maxWidth: 300)
-        .background(WorkspaceLayout.sidebarSurface)
+        .frame(width: WorkspaceLayout.sidebarWidth)
+        .background {
+            WorkspaceLayout.sidebarSurface
+                .ignoresSafeArea(edges: .top)
+        }
     }
 
     private var brandHeader: some View {
@@ -81,7 +79,7 @@ struct SidebarView: View {
                 .font(.headline.weight(.semibold))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 14)
         .padding(.top, 18)
         .padding(.bottom, 12)
         .accessibilityElement(children: .combine)

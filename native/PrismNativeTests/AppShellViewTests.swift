@@ -5,17 +5,13 @@ import Testing
 struct AppShellPresentationTests {
     @Test func sidebarKeepsTheOperationalDestinationsInOrder() {
         #expect(AppShellDestination.all.map(\.route) == [
-            .overview,
             .history,
             .rules,
-            .browsers,
             .settings,
         ])
         #expect(AppShellDestination.all.map(\.accessibilityIdentifier) == [
-            "appShell.sidebar.overview",
             "appShell.sidebar.history",
             "appShell.sidebar.rules",
-            "appShell.sidebar.browsers",
             "appShell.sidebar.settings",
         ])
     }

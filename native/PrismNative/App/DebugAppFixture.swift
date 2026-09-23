@@ -221,7 +221,7 @@ struct DebugAppFixture {
             try? ruleRepository.upsert(rule)
         }
         let environment = AppEnvironment(
-            route: variant == .workspace ? .overview : .history,
+            route: .history,
             unmatchedBehavior: .alwaysAsk,
             updateChecker: DisabledUpdateChecker(),
             ruleRepository: ruleRepository,

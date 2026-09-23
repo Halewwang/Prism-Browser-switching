@@ -1,3 +1,4 @@
+import AppKit
 import PrismCore
 import SwiftUI
 
@@ -12,7 +13,7 @@ final class AppSelectorNavigationHandler: SelectorNavigationHandling {
     }
 
     func openBrowserManagement() {
-        mainWindowOpening.open(route: .browsers)
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications", isDirectory: true))
     }
 
     func openRuleEditor(prefill: SelectorRulePrefill) {

@@ -1,3 +1,4 @@
+import AppKit
 import PrismCore
 import SwiftUI
 
@@ -15,133 +16,18 @@ struct SettingsManagementView: View {
     @State private var isUpdatingLoginItem = false
     @State private var actionMessage: String?
     @State private var languageRestartRequired = false
+    @State private var publishedInstaller: GitHubPublishedInstaller?
+    @State private var publishedInstallerUnavailable = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Settings")
-                        .font(WorkspaceLayout.pageTitleFont)
-                        .accessibilityIdentifier("appShell.page.settings.heading")
-                    Text("Control how Prism handles links and keeps local History.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, WorkspaceLayout.contentInset)
-            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
-
-            Divider()
-
-            Form {
-                Section("Interface") {
-                    Picker("Language", selection: appLanguage) {
-                        Text("Use System Language")
-                            .tag(AppLanguage.system)
-                            .accessibilityIdentifier("settings.language.system")
-                        Text("English")
-                            .tag(AppLanguage.english)
-                            .accessibilityIdentifier("settings.language.english")
-                        Text("Simplified Chinese")
-                            .tag(AppLanguage.simplifiedChinese)
-                            .accessibilityIdentifier("settings.language.simplifiedChinese")
-                    }
-                    .accessibilityIdentifier("settings.language")
-                }
-
-                Section("Link handling") {
-                    defaultHandlerControl
-
-                    Toggle("Show Prism in the menu bar", isOn: showMenuBarItem)
-                        .accessibilityIdentifier("settings.showMenuBarItem")
-
-                    Toggle("Use routing rules automatically", isOn: automaticRulesEnabled)
-                        .accessibilityIdentifier("settings.automaticRules")
-
-                    Picker("When no rule matches", selection: unmatchedBehavior) {
-                        Text("Always ask").tag(UnmatchedBehavior.alwaysAsk)
-                        Text("Open in preferred browser").tag(UnmatchedBehavior.preferredBrowser)
-                        Text("Open in last used browser").tag(UnmatchedBehavior.lastUsedBrowser)
-                    }
-
-                    if environment.settings.unmatchedBehavior == .preferredBrowser {
-                        Picker("Preferred browser", selection: preferredBrowserID) {
-                            Text("Choose a browser").tag(BrowserID?.none)
-                            ForEach(browsers.filter { $0.availability == .available }, id: \.id) { browser in
-                                Text(browser.displayName).tag(BrowserID?.some(browser.id))
-                            }
-                        }
-                    }
-                }
-
-                Section("Startup") {
-                    Toggle("Open Prism at login", isOn: launchAtLogin)
-                        .disabled(isUpdatingLoginItem || environment.loginItemService == nil)
-                        .accessibilityIdentifier("settings.launchAtLogin")
-
-                    if loginItemState == .requiresApproval {
-                        Text("macOS needs approval before Prism can open at login.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Button("Open Login Items Settings") {
-                            environment.loginItemService?.openApprovalSettingsAfterUserAction()
-                        }
-                        .accessibilityIdentifier("settings.openLoginItems")
-                    } else if loginItemState == .notFound {
-                        Text("Launch at login is unavailable in this build.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Updates") {
-                    Toggle("Automatically check for updates", isOn: automaticUpdateChecks)
-                        .disabled(!environment.updateChecker.canCheckForUpdates)
-                        .accessibilityIdentifier("settings.automaticUpdateChecks")
-
-                    if environment.updateChecker.canCheckForUpdates {
-                        Button("Check for Updates") {
-                            environment.updateChecker.checkForUpdates()
-                        }
-                        .accessibilityIdentifier("settings.checkForUpdates")
-                    } else {
-                        Text("Updates are available in signed release builds.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("History") {
-                    Toggle("Save History", isOn: historyEnabled)
-                        .accessibilityIdentifier("settings.historyEnabled")
-
-                    if environment.settings.historyEnabled {
-                        Stepper(
-                            "Keep up to \(environment.settings.historyLimit) links",
-                            value: historyLimit,
-                            in: 1...10_000,
-                            step: 25
-                        )
-                        Stepper(
-                            "Keep links for \(environment.settings.historyRetentionDays) days",
-                            value: historyRetentionDays,
-                            in: 1...3_650
-                        )
-                    }
-                }
-
-                Section("About") {
-                    LabeledContent("Version", value: version)
-                    Text("Link history stays on this Mac. Prism removes sensitive URL data before showing or copying it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+        PageColumn {
+            SystemSettingsPageHeader(
+                    title: "Settings",
+                    subtitle: "Control how Prism handles links and keeps local History.",
+                    accessibilityIdentifier: "appShell.page.settings.heading"
+                )
+                settingsCards
         }
-        .formStyle(.grouped)
         .task { await loadContext() }
         .alert(
             "Settings could not be updated",
@@ -163,19 +49,227 @@ struct SettingsManagementView: View {
         }
     }
 
-    @ViewBuilder
-    private var defaultHandlerControl: some View {
-        LabeledContent("Default web link handler") {
-            Label(defaultHandlerLabel, systemImage: defaultHandlerSymbol)
-                .foregroundStyle(defaultHandlerColor)
+    private var settingsCards: some View {
+        VStack(spacing: 16) {
+            SettingsGroup {
+                settingsRow(
+                    title: "Language",
+                    detail: "Prism applies the language the next time it opens.",
+                    symbol: "globe",
+                    tint: .blue
+                ) {
+                    languagePicker
+                }
+                SettingsSeparator()
+                defaultHandlerRow
+                SettingsSeparator()
+                settingsToggle(
+                    "Use routing rules automatically",
+                    detail: "Enabled rules open matching links without asking.",
+                    symbol: "arrow.triangle.branch",
+                    tint: .blue,
+                    isOn: automaticRulesEnabled,
+                    identifier: "settings.automaticRules"
+                )
+                SettingsSeparator()
+                settingsRow(
+                    title: "When no rule matches",
+                    detail: "Choose what happens after rules are checked.",
+                    symbol: "questionmark.circle",
+                    tint: .orange
+                ) {
+                    unmatchedPicker
+                }
+                if environment.settings.unmatchedBehavior == .preferredBrowser {
+                    SettingsSeparator()
+                    settingsRow(
+                        title: "Preferred browser",
+                        detail: "Used when no rule matches.",
+                        symbol: "safari",
+                        tint: .blue
+                    ) {
+                        preferredBrowserPicker
+                    }
+                }
+            }
+
+            SettingsGroup {
+                settingsToggle(
+                    "Open Prism at login",
+                    detail: loginItemDetail,
+                    symbol: "person.crop.circle",
+                    tint: .gray,
+                    isOn: launchAtLogin,
+                    identifier: "settings.launchAtLogin",
+                    disabled: isUpdatingLoginItem || environment.loginItemService == nil
+                )
+                SettingsSeparator()
+                settingsToggle(
+                    "Show Prism in the menu bar",
+                    detail: "Pause rules, open History, and quit from the menu bar.",
+                    symbol: "menubar.rectangle",
+                    tint: .indigo,
+                    isOn: showMenuBarItem,
+                    identifier: "settings.showMenuBarItem"
+                )
+                if loginItemState == .requiresApproval {
+                    SettingsSeparator()
+                    settingsAction("Open Login Items Settings", symbol: "gearshape", tint: .gray, identifier: "settings.openLoginItems") {
+                        environment.loginItemService?.openApprovalSettingsAfterUserAction()
+                    }
+                }
+            }
+
+            SettingsGroup {
+                settingsToggle(
+                    "Save History",
+                    detail: "Saved links stay on this Mac. Prism removes sensitive URL data before showing or copying them.",
+                    symbol: "clock",
+                    tint: .orange,
+                    isOn: historyEnabled,
+                    identifier: "settings.historyEnabled"
+                )
+                if environment.settings.historyEnabled {
+                    SettingsSeparator()
+                    settingsRow(
+                        title: "How many links to keep",
+                        detail: "Older links are removed first.",
+                        symbol: "number",
+                        tint: .gray
+                    ) {
+                        historyLimitPicker
+                    }
+                    SettingsSeparator()
+                    settingsRow(
+                        title: "How long to keep links",
+                        detail: "Links older than this are removed.",
+                        symbol: "calendar",
+                        tint: .gray
+                    ) {
+                        historyRetentionPicker
+                    }
+                }
+            }
+
+            SettingsGroup {
+                settingsToggle(
+                    "Automatically check for updates",
+                    detail: sparkleUpdateDetail,
+                    symbol: "arrow.down.circle",
+                    tint: .blue,
+                    isOn: automaticUpdateChecks,
+                    identifier: "settings.automaticUpdateChecks",
+                    disabled: !environment.updateChecker.canCheckForUpdates
+                )
+                if environment.updateChecker.canCheckForUpdates {
+                    SettingsSeparator()
+                    settingsAction("Check for Updates", symbol: "arrow.clockwise", tint: .blue, identifier: "settings.checkForUpdates") {
+                        environment.updateChecker.checkForUpdates()
+                    }
+                }
+                SettingsSeparator()
+                publishedInstallerRow
+            }
+
+            SettingsGroup {
+                settingsRow(
+                    title: "Version",
+                    detail: "Link history stays on this Mac.",
+                    symbol: "info.circle",
+                    tint: .gray
+                ) {
+                    Text(version)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
+    }
 
+    private var languagePicker: some View {
+        Picker("Language", selection: appLanguage) {
+            Text("Use System Language")
+                .tag(AppLanguage.system)
+                .accessibilityIdentifier("settings.language.system")
+            Text("English")
+                .tag(AppLanguage.english)
+                .accessibilityIdentifier("settings.language.english")
+            Text("Simplified Chinese")
+                .tag(AppLanguage.simplifiedChinese)
+                .accessibilityIdentifier("settings.language.simplifiedChinese")
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .accessibilityIdentifier("settings.language")
+    }
+
+    private var unmatchedPicker: some View {
+        Picker("When no rule matches", selection: unmatchedBehavior) {
+            Text("Always ask").tag(UnmatchedBehavior.alwaysAsk)
+            Text("Preferred browser").tag(UnmatchedBehavior.preferredBrowser)
+            Text("Last used").tag(UnmatchedBehavior.lastUsedBrowser)
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var preferredBrowserPicker: some View {
+        Picker("Preferred browser", selection: preferredBrowserID) {
+            Text("Choose a browser").tag(BrowserID?.none)
+            ForEach(browsers.filter { $0.availability == .available }, id: \.id) { browser in
+                Text(browser.displayName).tag(BrowserID?.some(browser.id))
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var historyLimitPicker: some View {
+        Picker("How many links to keep", selection: historyLimit) {
+            ForEach([50, 100, 250, 500, 1_000], id: \.self) { limit in
+                Text("\(limit)").tag(limit)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    private var historyRetentionPicker: some View {
+        Picker("How long to keep links", selection: historyRetentionDays) {
+            Text("7 days").tag(7)
+            Text("30 days").tag(30)
+            Text("90 days").tag(90)
+            Text("1 year").tag(365)
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var defaultHandlerRow: some View {
+        settingsRow(
+            title: "Default web link handler",
+            detail: defaultHandlerState == .active ? "Prism receives both web-link schemes" : defaultHandlerExplanation,
+            symbol: "link",
+            tint: defaultHandlerState == .active ? .green : .orange
+        ) {
+            Label {
+                Text(LocalizedStringKey(defaultHandlerLabel))
+            } icon: {
+                Image(systemName: defaultHandlerSymbol)
+            }
+            .foregroundStyle(defaultHandlerColor)
+            .font(.body)
+            .labelStyle(.titleAndIcon)
+        }
         if defaultHandlerState != .active {
-            Text(LocalizedStringKey(defaultHandlerExplanation))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
             HStack(spacing: 8) {
+                Spacer(minLength: 0)
                 Button("Set Prism as Default") {
                     Task { await setDefaultHandler() }
                 }
@@ -193,7 +287,136 @@ struct SettingsManagementView: View {
                     .disabled(isUpdatingDefaultHandler)
                     .accessibilityIdentifier("settings.openDefaultApps")
             }
+            .padding(.leading, 48)
+            .padding(.trailing, 14)
+            .padding(.bottom, 12)
         }
+    }
+
+    @ViewBuilder
+    private var publishedInstallerRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            settingsRow(
+                title: "Published installer",
+                detail: publishedInstallerDetail,
+                symbol: "square.and.arrow.down",
+                tint: .blue
+            ) {
+                EmptyView()
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                if let publishedInstaller {
+                    Button("Download installer") {
+                        NSWorkspace.shared.open(publishedInstaller.downloadURL)
+                    }
+                    .accessibilityIdentifier("settings.downloadInstaller")
+                }
+                Button("Open GitHub Releases") {
+                    NSWorkspace.shared.open(GitHubPublishedInstaller.releasesURL)
+                }
+                .accessibilityIdentifier("settings.openReleases")
+            }
+            .padding(.leading, 48)
+            .padding(.trailing, 14)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private var publishedInstallerDetail: String {
+        if let publishedInstaller {
+            return "\(publishedInstaller.version) · \(publishedInstaller.fileName). GitHub publishes this disk image separately from Sparkle. This build installs signed updates only when appcast.xml and an EdDSA key are present."
+        }
+        if publishedInstallerUnavailable {
+            return "Prism could not read the published installer from GitHub."
+        }
+        return "Checking the published GitHub installer…"
+    }
+
+    private var loginItemDetail: String {
+        switch loginItemState {
+        case .requiresApproval:
+            "macOS needs approval before Prism can open at login."
+        case .notFound:
+            "Launch at login is unavailable in this build."
+        default:
+            "Prism opens when you log in to this Mac."
+        }
+    }
+
+    private var sparkleUpdateDetail: String {
+        environment.updateChecker.canCheckForUpdates
+            ? "Sparkle checks the signed appcast and asks before installing."
+            : "Signed in-app updates are off until this build includes an EdDSA key. The latest GitHub release also has no appcast.xml."
+    }
+
+    private func settingsToggle(
+        _ title: String,
+        detail: String,
+        symbol: String,
+        tint: Color,
+        isOn: Binding<Bool>,
+        identifier: String,
+        disabled: Bool = false
+    ) -> some View {
+        settingsRow(title: title, detail: detail, symbol: symbol, tint: tint) {
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(disabled)
+                .accessibilityIdentifier(identifier)
+        }
+    }
+
+    private func settingsAction(
+        _ title: String,
+        symbol: String,
+        tint: Color,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            settingsRow(title: title, detail: "", symbol: symbol, tint: tint) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func settingsRow<Control: View>(
+        title: String,
+        detail: String,
+        symbol: String,
+        tint: Color,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(LocalizedStringKey(title))
+                    .font(.body)
+                if !detail.isEmpty {
+                    Text(LocalizedStringKey(detail))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            control()
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
     private var automaticRulesEnabled: Binding<Bool> {
@@ -307,6 +530,17 @@ struct SettingsManagementView: View {
         browsers = (try? await browserCatalog.scan()) ?? []
         await refreshDefaultHandler()
         loginItemState = environment.loginItemService?.status()
+        await loadPublishedInstaller()
+    }
+
+    private func loadPublishedInstaller() async {
+        do {
+            publishedInstaller = try await GitHubPublishedInstallerLookup.load()
+            publishedInstallerUnavailable = false
+        } catch {
+            publishedInstaller = nil
+            publishedInstallerUnavailable = true
+        }
     }
 
     private func refreshDefaultHandler() async {

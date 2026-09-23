@@ -55,11 +55,36 @@ struct HistoryView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 0) {
+        PageColumn {
+            SystemSettingsPageHeader(
+                title: "Recent Links",
+                subtitle: "Links handled by Prism appear here with their browser and result.",
+                accessibilityIdentifier: "appShell.page.history.heading"
+            )
+            SettingsGroup {
+                ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
+                    HistoryRow(
+                        entry: entry,
+                        presentation: model.presentation(for: entry),
+                        isRetryAvailable: model.retryableRequestIDs.contains(entry.requestID),
+                        isPerformingAction: model.isPerformingAction(for: entry),
+                        activity: model.activity(for: entry),
+                        canReopen: model.canReopen(entry),
+                        reopenDisabledReason: model.reopenDisabledReason(for: entry),
+                        canDelete: model.canDelete(entry),
+                        deleteDisabledReason: model.deleteDisabledReason(for: entry),
+                        retry: { Task { await model.retry(entry) } },
+                        reopen: { Task { await model.reopen(entry) } },
+                        copyURL: { model.copyURL(entry) },
+                        createRule: { model.createRule(entry) },
+                        delete: { model.requestDelete(entry) }
+                    )
+                    if index < model.entries.count - 1 {
+                        SettingsSeparator(leadingInset: 16)
+                    }
+                }
+            }
             HStack {
-                Text("Recent Links")
-                    .font(WorkspaceLayout.pageTitleFont)
-                    .accessibilityIdentifier("appShell.page.history.heading")
                 Spacer()
                 Button(role: .destructive) {
                     model.requestClear()
@@ -80,35 +105,6 @@ struct HistoryView: View {
                 .accessibilityHint(model.canClear
                     ? "Clear all saved History"
                     : "Clear is unavailable while Prism can still complete or retry a link. Complete or cancel that link first.")
-            }
-            .padding(.horizontal, WorkspaceLayout.contentInset)
-            .padding(.vertical, WorkspaceLayout.headerVerticalInset)
-
-            Divider()
-
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    ForEach(model.entries, id: \.id) { entry in
-                        HistoryRow(
-                            entry: entry,
-                            presentation: model.presentation(for: entry),
-                            isRetryAvailable: model.retryableRequestIDs.contains(entry.requestID),
-                            isPerformingAction: model.isPerformingAction(for: entry),
-                            activity: model.activity(for: entry),
-                            canReopen: model.canReopen(entry),
-                            reopenDisabledReason: model.reopenDisabledReason(for: entry),
-                            canDelete: model.canDelete(entry),
-                            deleteDisabledReason: model.deleteDisabledReason(for: entry),
-                            retry: { Task { await model.retry(entry) } },
-                            reopen: { Task { await model.reopen(entry) } },
-                            copyURL: { model.copyURL(entry) },
-                            createRule: { model.createRule(entry) },
-                            delete: { model.requestDelete(entry) }
-                        )
-                    }
-                }
-                .padding(.horizontal, WorkspaceLayout.contentInset)
-                .padding(.vertical, 28)
             }
         }
     }

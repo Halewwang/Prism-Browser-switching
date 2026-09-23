@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 
 private final class MainWindowHostingView: NSHostingView<AnyView> {
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchTask: Task<Void, Never>?
     private var statusItemController: StatusItemController?
     private var mainWindow: NSWindow?
+    private var claimedLinkOpens = ClaimedLinkOpens()
 
     var retainedStatusItemController: StatusItemController? {
         statusItemController
@@ -90,12 +92,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        installGetURLHandler()
+    }
+
+    private func installGetURLHandler() {
+#if DEBUG
+        guard !DebugUITestConfiguration.isEnabled else { return }
+#endif
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
+    @objc func handleGetURLEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+#if DEBUG
+        guard !DebugUITestConfiguration.isEnabled else { return }
+#endif
+        let senderPID = AppleEventSenderReader.copySenderPID(from: event)
+        for url in GetURLEvent.urls(in: event) where BootstrapLinkBuffer.accepts(url) {
+            guard claimedLinkOpens.claim(url) else { continue }
+            composition.linkIntakeService.capture(url: url, senderPID: senderPID)
+        }
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
 #if DEBUG
         guard !DebugUITestConfiguration.isEnabled else { return }
 #endif
         let senderPID = copyCurrentSenderPID()
         for url in urls where BootstrapLinkBuffer.accepts(url) {
+            guard !claimedLinkOpens.consume(url) else { continue }
             composition.linkIntakeService.capture(url: url, senderPID: senderPID)
         }
     }
@@ -130,11 +163,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItemController = makeStatusItemController(composition)
 #endif
         }
-        guard launchTask == nil else { return }
+        guard launchTask == nil else {
+            installGetURLHandler()
+            return
+        }
         let composition = composition
         launchTask = Task { @MainActor in
             await composition.finishLaunchingOnce()
         }
+        installGetURLHandler()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -181,17 +218,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let lockedWidth = WorkspaceLayout.windowContentWidth
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: lockedWidth, height: 680),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "Prism"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.backgroundColor = .windowBackgroundColor
         window.toolbar = nil
-        window.minSize = NSSize(width: 940, height: 640)
+        window.contentMinSize = NSSize(width: lockedWidth, height: 640)
+        window.contentMaxSize = NSSize(width: lockedWidth, height: 10_000)
         window.isReleasedWhenClosed = false
         let hostingView = MainWindowHostingView(rootView: mainWindowRoot())
         window.contentView = hostingView

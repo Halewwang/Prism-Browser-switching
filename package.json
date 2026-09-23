@@ -32,8 +32,12 @@
       "identity": null,
       "category": "public.app-category.utilities",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
       ],
+      "artifactName": "Prism-${version}-universal.${ext}",
       "icon": "build/icon.png",
       "extendInfo": {
         "CFBundleURLTypes": [

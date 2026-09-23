@@ -1,3 +1,4 @@
+import AppKit
 import PrismCore
 import SwiftUI
 
@@ -18,12 +19,8 @@ struct HistoryRow: View {
     let delete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: statusSymbol)
-                    .foregroundStyle(statusColor)
-                    .accessibilityHidden(true)
-
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(urlText)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
@@ -32,82 +29,112 @@ struct HistoryRow: View {
                     .accessibilityLabel("Saved URL: \(urlText)")
                     .accessibilityIdentifier("\(accessibilityPrefix).url")
 
-                Spacer(minLength: 8)
-
-                statusLabel
-            }
-
-            Text("\(entry.sourceDisplayName) → \(entry.targetDisplayName ?? "No browser selected")")
+                HStack(spacing: 6) {
+                    ApplicationIconView(
+                        bundleIdentifier: entry.sourceBundleIdentifier,
+                        fallbackSymbol: "app.dashed",
+                        side: 16
+                    )
+                    Text(entry.sourceDisplayName)
+                        .lineLimit(1)
+                    Image(systemName: "arrow.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    ApplicationIconView(
+                        bundleIdentifier: entry.targetBrowserID?.rawValue,
+                        fallbackSymbol: "safari",
+                        side: 16
+                    )
+                    Text(targetText)
+                        .lineLimit(1)
+                }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .accessibilityLabel("Source \(entry.sourceDisplayName), target \(entry.targetDisplayName ?? "none")")
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Source \(entry.sourceDisplayName), target \(targetText)")
 
-            HStack(spacing: 12) {
-                Label(methodText, systemImage: "arrow.triangle.branch")
-                Label(timeText, systemImage: "clock")
-                if entry.attemptCount > 0 {
-                    Label("Attempt \(entry.attemptCount)", systemImage: "number")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            if let failureReason = entry.failureReason, entry.result == .failure {
-                Text(LocalizedStringKey(failureReasonText(failureReason)))
+                Text(metaText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Failure: \(failureReasonText(failureReason))")
-            }
+                    .fixedSize(horizontal: false, vertical: true)
 
-            if activity == .deleting {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Deleting…")
-                        .font(.caption.weight(.medium))
+                if let failureReason = entry.failureReason,
+                   entry.result == .failure || SelectorReasonCopy.message(forPersistenceCode: failureReason) != nil {
+                    Text(LocalizedStringKey(failureReasonText(failureReason)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Failure: \(failureReasonText(failureReason))")
                 }
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Deleting History item")
-                .accessibilityValue("Deleting")
-            }
 
-            HStack(spacing: 8) {
-                if entry.result == .failure {
-                    Button(action: retry) {
-                        actionLabel(
-                            idleTitle: "Retry",
-                            busyTitle: "Retrying…",
-                            isBusy: activity == .retrying
-                        )
+                if activity == .deleting {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Deleting…")
+                            .font(.caption.weight(.medium))
                     }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!isRetryAvailable || isPerformingAction)
-                        .accessibilityIdentifier("\(accessibilityPrefix).retry")
-                        .accessibilityValue(activity == .retrying ? "Retrying" : "Ready")
-                        .accessibilityHint(isRetryAvailable
-                              ? "Retry with the browser selected for this request"
-                              : "The original full URL is no longer available for retry")
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Deleting History item")
+                    .accessibilityValue("Deleting")
                 }
 
-                if entry.result == .cancelled {
-                    Button(action: reopen) {
-                        actionLabel(
-                            idleTitle: "Reopen",
-                            busyTitle: "Reopening…",
-                            isBusy: activity == .reopening
-                        )
+                if entry.result == .failure || entry.result == .cancelled {
+                    HStack(spacing: 8) {
+                        if entry.result == .failure {
+                            Button(action: retry) {
+                                actionLabel(
+                                    idleTitle: "Retry",
+                                    busyTitle: "Retrying…",
+                                    isBusy: activity == .retrying
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!isRetryAvailable || isPerformingAction)
+                            .accessibilityIdentifier("\(accessibilityPrefix).retry")
+                            .accessibilityValue(activity == .retrying ? "Retrying" : "Ready")
+                            .accessibilityHint(isRetryAvailable
+                                ? "Retry with the browser selected for this request"
+                                : "The original full URL is no longer available for retry")
+                        }
+                        if entry.result == .cancelled {
+                            Button(action: reopen) {
+                                actionLabel(
+                                    idleTitle: "Reopen",
+                                    busyTitle: "Reopening…",
+                                    isBusy: activity == .reopening
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canReopen || isPerformingAction)
+                            .accessibilityIdentifier("\(accessibilityPrefix).reopen")
+                            .accessibilityValue(activity == .reopening ? "Reopening" : "Ready")
+                            .accessibilityHint(canReopen ? "Reopen the saved safe URL" : reopenDisabledReason)
+                        }
                     }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!canReopen || isPerformingAction)
-                        .accessibilityIdentifier("\(accessibilityPrefix).reopen")
-                        .accessibilityValue(activity == .reopening ? "Reopening" : "Ready")
-                        .accessibilityHint(canReopen ? "Reopen the saved safe URL" : reopenDisabledReason)
                 }
 
-                Spacer()
+                if entry.result == .failure, !isRetryAvailable {
+                    Text("Retry is unavailable because the original link is no longer in the recovery queue.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
+                if entry.result == .cancelled, !canReopen {
+                    Text(reopenDisabledReason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                statusLabel
                 Menu {
                     secondaryActions
                 } label: {
@@ -115,28 +142,13 @@ struct HistoryRow: View {
                         .labelStyle(.iconOnly)
                 }
                 .menuStyle(.borderlessButton)
+                .fixedSize()
                 .accessibilityLabel("More actions for \(urlText)")
                 .accessibilityIdentifier("\(accessibilityPrefix).more")
             }
-
-            if entry.result == .failure, !isRetryAvailable {
-                Text("Retry is unavailable because the original link is no longer in the recovery queue.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if entry.result == .cancelled, !canReopen {
-                Text(reopenDisabledReason)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(18)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .contextMenu { secondaryActions }
     }
 
@@ -172,14 +184,36 @@ struct HistoryRow: View {
     }
 
     private var statusLabel: some View {
-        Label(resultText, systemImage: statusSymbol)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(statusColor)
-            .accessibilityLabel("Result: \(resultText)")
+        Label {
+            Text(LocalizedStringKey(resultText))
+        } icon: {
+            Image(systemName: statusSymbol)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(statusColor)
+        .labelStyle(.titleAndIcon)
+        .accessibilityLabel("Result: \(resultText)")
     }
 
     private var urlText: String {
         presentation.urlText
+    }
+
+    private var targetText: String {
+        entry.targetDisplayName ?? String(localized: "No browser selected")
+    }
+
+    private var metaText: String {
+        var parts = [localized(methodText), timeText]
+        if entry.attemptCount > 0 {
+            let format = localized("Attempt %d")
+            parts.append(String(format: format, entry.attemptCount))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func localized(_ key: String) -> String {
+        Bundle.main.localizedString(forKey: key, value: key, table: nil)
     }
 
     private var accessibilityPrefix: String {
@@ -242,7 +276,10 @@ struct HistoryRow: View {
     }
 
     private func failureReasonText(_ reason: String) -> String {
-        switch reason {
+        if let message = SelectorReasonCopy.message(forPersistenceCode: reason) {
+            return message
+        }
+        return switch reason {
         case "launch_failed": "The selected browser did not accept the link."
         case "outcome_unknown": "Prism could not confirm whether the browser opened the link."
         default: "The link could not be opened."

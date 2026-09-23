@@ -350,7 +350,7 @@ private extension SelectorPresentationContext {
         switch self {
         case .outcomeUnknown, .storageUnavailable:
             true
-        case .normal, .launchFailed, .noAvailableBrowsers:
+        case .normal, .launchFailed, .noAvailableBrowsers, .ruleSkipped:
             false
         }
     }

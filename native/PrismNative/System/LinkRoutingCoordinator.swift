@@ -3,6 +3,7 @@ import PrismCore
 
 enum SelectorPresentationContext: Equatable, Sendable {
     case normal
+    case ruleSkipped(SelectorReason)
     case launchFailed(browserID: BrowserID, message: String)
     case outcomeUnknown(browserID: BrowserID?)
     case noAvailableBrowsers
@@ -164,6 +165,7 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     private let sanitizer = URLSanitizer.default
 
     private var historyByRequestID: [UUID: HistoryEntry] = [:]
+    private var selectorReasons: [UUID: SelectorReason] = [:]
     private var uncertainAttempts: [UUID: UncertainAttempt] = [:]
     private var failedHandoffPersistence: [UUID: FailedHandoffPersistence] = [:]
     private var storageBlockedRequests: [UUID: LinkRequest] = [:]
@@ -286,8 +288,9 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
             )
             guard completed, shouldContinue() else { return .paused }
             return await queue.next() == nil ? .drained : .moreWork
-        case .ask:
-            await present(request, as: .normal)
+        case let .ask(reason):
+            selectorReasons[request.id] = reason
+            await present(request, as: .ruleSkipped(reason))
             return .paused
         }
     }
@@ -989,6 +992,9 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
                 entry = newHistory(for: request)
             }
             try historyStateMachine.apply(.cancelled, to: &entry)
+            if let reason = selectorReasons.removeValue(forKey: request.id) {
+                entry.failureReason = reason.persistenceCode
+            }
             return entry
         } catch {
             warningPresenter.present(.historyNotSaved)

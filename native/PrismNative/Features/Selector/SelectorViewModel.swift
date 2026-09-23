@@ -113,6 +113,8 @@ final class SelectorViewModel {
                 localized: "selector.failure.storageUnavailable",
                 defaultValue: "Prism could not save recovery information. The link is still waiting."
             )
+        case let .ruleSkipped(reason):
+            SelectorReasonCopy.message(reason)
         case .normal, .noAvailableBrowsers:
             scanFailureMessage
         }
@@ -144,7 +146,7 @@ final class SelectorViewModel {
             return !browsers.contains(where: { $0.id == browserID })
         case .storageUnavailable:
             return presentationContext.preferredBrowserID == nil
-        case .normal, .launchFailed, .noAvailableBrowsers:
+        case .normal, .launchFailed, .noAvailableBrowsers, .ruleSkipped:
             return false
         }
     }
@@ -268,7 +270,7 @@ final class SelectorViewModel {
         isPerformingAction = true
         defer { isPerformingAction = false }
         switch presentationContext {
-        case .normal, .noAvailableBrowsers:
+        case .normal, .noAvailableBrowsers, .ruleSkipped:
             await routingCoordinator.select(browserID: id, for: requestID)
         case let .launchFailed(failedBrowserID, _):
             if id == failedBrowserID {
@@ -367,7 +369,7 @@ private extension SelectorPresentationContext {
             browserID
         case let .outcomeUnknown(browserID):
             browserID
-        case .normal, .noAvailableBrowsers, .storageUnavailable:
+        case .normal, .noAvailableBrowsers, .storageUnavailable, .ruleSkipped:
             nil
         }
     }

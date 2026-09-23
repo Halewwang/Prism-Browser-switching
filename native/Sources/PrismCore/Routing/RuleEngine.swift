@@ -5,6 +5,17 @@ public enum SelectorReason: Equatable, Sendable {
     case rulesPaused
     case targetUnavailable(BrowserID)
     case preferredBrowserUnavailable(BrowserID?)
+    case sourceNotConfirmed
+
+    public var persistenceCode: String {
+        switch self {
+        case .noMatchingRule: "no_matching_rule"
+        case .rulesPaused: "rules_paused"
+        case .targetUnavailable: "target_unavailable"
+        case .preferredBrowserUnavailable: "preferred_browser_unavailable"
+        case .sourceNotConfirmed: "source_not_confirmed"
+        }
+    }
 }
 
 public enum RoutingDecision: Equatable, Sendable {
@@ -92,11 +103,13 @@ public struct RuleEngine: Sendable {
             return decision(for: rule, method: .urlRule, availableBrowserIDs: availableBrowserIDs)
         }
 
-        if let rule = firstMatchingSourceRule(
-            in: rules,
-            request: request,
-            eligibleSourceBundleIDs: eligibleSourceBundleIDs
-        ) {
+        // A saved source rule matches the confirmed sender bundle ID.
+        // The support manifest only decides whether the selector offers to remember a source.
+        _ = eligibleSourceBundleIDs
+        if let rule = firstMatchingSourceRule(in: rules, request: request) {
+            guard request.source.confidence == .confirmed else {
+                return .ask(reason: .sourceNotConfirmed)
+            }
             return decision(for: rule, method: .sourceRule, availableBrowserIDs: availableBrowserIDs)
         }
 
@@ -114,14 +127,9 @@ public struct RuleEngine: Sendable {
 
     private func firstMatchingSourceRule(
         in rules: [RoutingRule],
-        request: LinkRequest,
-        eligibleSourceBundleIDs: Set<String>
+        request: LinkRequest
     ) -> RoutingRule? {
-        guard request.source.confidence == .confirmed,
-              let bundleID = request.source.bundleIdentifier,
-              !bundleID.isEmpty,
-              eligibleSourceBundleIDs.contains(bundleID)
-        else {
+        guard let bundleID = request.source.bundleIdentifier, !bundleID.isEmpty else {
             return nil
         }
 
@@ -132,7 +140,7 @@ public struct RuleEngine: Sendable {
 
             return rule.isEnabled &&
                 rule.validationState == .valid &&
-                ruleBundleID == bundleID
+                SourceBundleIdentity.matches(ruleBundleID, bundleID)
         }).first
     }
 
