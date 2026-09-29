@@ -1,6 +1,44 @@
 import XCTest
 
 final class OnboardingUITests: PrismUITestCase {
+    func testChineseOnboardingFollowsPenWindowLayout() throws {
+        let application = launchFixture("partial-handler", appearance: .light, language: "zh-Hans")
+        let welcome = requireElement("onboarding.step.welcome", in: application)
+        XCTAssertTrue(accessibilityText(of: welcome).contains("你的链接"))
+        let window = requireMainWindow(in: application)
+        XCTAssertEqual(window.frame.width, 668, accuracy: 1)
+        XCTAssertEqual(window.frame.height, 554, accuracy: 1)
+        try attachWindowScreenshot("pen-onboarding-welcome-zh", application: application, appearance: .light)
+
+        requireButton("onboarding.welcome.continue", in: application).click()
+        _ = requireElement("onboarding.step.linkHandling", in: application)
+        try attachWindowScreenshot("pen-onboarding-link-handling-zh", application: application, appearance: .light)
+        requireButton("onboarding.linkHandling.finishLater", in: application).click()
+        requireButton("onboarding.browsers.rescan", in: application).click()
+        _ = requireElement("onboarding.step.testLink", in: application)
+        _ = requireElement("onboarding.browsers.browser.invalid.prism.fixture.browser", in: application)
+        XCTAssertTrue(requireButton("onboarding.testLink.start", in: application).isHittable)
+        try attachWindowScreenshot("pen-onboarding-browsers-zh", application: application, appearance: .light)
+
+        terminateFixture(application)
+        let workspace = launchFixture("workspace", appearance: .light, language: "zh-Hans")
+        _ = requireElement("appShell.page.history.heading", in: workspace)
+        try attachWindowScreenshot("pen-history-zh", application: workspace, appearance: .light)
+        requireElement("appShell.sidebar.rules", in: workspace).click()
+        _ = requireElement("appShell.page.rules.heading", in: workspace)
+        XCTAssertTrue(workspace.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", "域名及子域名", "域名及子域名")).firstMatch.waitForExistence(timeout: 3))
+        try attachWindowScreenshot("pen-rules-zh", application: workspace, appearance: .light)
+        requireButton("rules.create", in: workspace).click()
+        let save = requireElement("rules.editor.save", in: workspace)
+        XCTAssertFalse(save.isEnabled)
+        try attachWindowScreenshot("pen-rule-editor-zh", application: workspace, appearance: .light)
+        workspace.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitUntil(timeout: 3) { !save.exists })
+        requireElement("appShell.sidebar.settings", in: workspace).click()
+        _ = requireElement("appShell.page.settings.heading", in: workspace)
+        try attachWindowScreenshot("pen-settings-zh", application: workspace, appearance: .light)
+    }
+
     func testLightOnboardingUsesSeparateHandlersRealSelectorAndOpensHistory() throws {
         try runSuccessfulOnboardingAndRecovery(appearance: .light)
     }
@@ -69,6 +107,9 @@ final class OnboardingUITests: PrismUITestCase {
     ) throws {
         let application = launchFixture("partial-handler", appearance: appearance)
         _ = requireElement("onboarding.step.welcome", in: application)
+        let welcomeWindow = requireMainWindow(in: application)
+        XCTAssertEqual(welcomeWindow.frame.width, 668, accuracy: 1)
+        XCTAssertEqual(welcomeWindow.frame.height, 554, accuracy: 1)
         try attachWindowScreenshot(
             "onboarding-welcome",
             application: application,
@@ -111,7 +152,7 @@ final class OnboardingUITests: PrismUITestCase {
         requireElement("selector.browser.invalid.prism.fixture.browser", in: application).click()
         XCTAssertTrue(waitUntil(timeout: 5) { !selector.exists })
 
-        let historyURL = application.staticTexts.matching(
+        let historyURL = application.descendants(matching: .any).matching(
             NSPredicate(format: "identifier ENDSWITH %@", ".url")
         ).firstMatch
         XCTAssertTrue(historyURL.waitForExistence(timeout: 5))
@@ -179,7 +220,7 @@ final class OnboardingUITests: PrismUITestCase {
         let application = launchFixture("onboarding-recovery", appearance: appearance)
         let window = requireMainWindow(in: application)
         let welcome = requireElement("onboarding.step.welcome", in: application)
-        XCTAssertEqual(welcome.label, "Your links, in the right browser")
+        XCTAssertEqual(welcome.label, "Your links,\nyour way to browse.")
         XCTAssertTrue(welcome.isHittable)
 
         let recoveryTitle = requireElement(

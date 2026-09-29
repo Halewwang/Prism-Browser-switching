@@ -685,3 +685,50 @@ private func browserDescriptor(
         selectorOrder: selectorOrder
     )
 }
+
+@Test func browserManagementKeepsSavedCustomEntryRemovableWhenSystemDiscoversSameApplication() throws {
+    let applicationURL = URL(fileURLWithPath: "/Applications/Custom Browser.app")
+    let discovered = browserDescriptor(
+        bundleIdentifier: "com.example.custom",
+        applicationURL: applicationURL
+    )
+    let custom = browserDescriptor(
+        bundleIdentifier: "com.example.custom",
+        applicationURL: applicationURL,
+        origin: .custom,
+        selectorOrder: 7
+    )
+
+    let browsers = BrowserManagementPresentation.browsers(discovered: [discovered], custom: [custom])
+
+    #expect(browsers.count == 1)
+    let row = try #require(browsers.first)
+    #expect(row.id == custom.id)
+    #expect(row.applicationURL == custom.applicationURL)
+    #expect(row.origin == .custom)
+    #expect(row.availability == .available)
+    #expect(row.selectorOrder == custom.selectorOrder)
+}
+
+@Test func browserManagementPreservesAvailableSystemCopyAndMissingCustomPathForSameIdentifier() throws {
+    let discovered = browserDescriptor(
+        bundleIdentifier: "com.example.custom",
+        applicationURL: URL(fileURLWithPath: "/Applications/Custom Browser.app")
+    )
+    let custom = browserDescriptor(
+        bundleIdentifier: "com.example.custom",
+        applicationURL: URL(fileURLWithPath: "/Users/test/Applications/Missing Custom Browser.app"),
+        origin: .custom
+    )
+
+    let browsers = BrowserManagementPresentation.browsers(discovered: [discovered], custom: [custom])
+
+    #expect(browsers.count == 2)
+    let systemRow = try #require(browsers.first { $0.applicationURL == discovered.applicationURL })
+    #expect(systemRow.origin == .system)
+    #expect(systemRow.availability == .available)
+    let customRow = try #require(browsers.first { $0.applicationURL == custom.applicationURL })
+    #expect(customRow.id == systemRow.id)
+    #expect(customRow.origin == .custom)
+    #expect(customRow.availability == .unavailable)
+}

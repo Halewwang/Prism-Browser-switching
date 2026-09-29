@@ -210,3 +210,130 @@
 "Could not check for updates" = "Could not check for updates";
 "Prism could not read this app's version. Open GitHub Releases to check manually." = "Prism could not read this app's version. Open GitHub Releases to check manually.";
 "Prism could not reach GitHub. Check your connection and try again." = "Prism could not reach GitHub. Check your connection and try again.";
+
+/* Pen workspace redesign */
+"Your links, in the right place" = "Your links, in the right place";
+"Automatic routing is on" = "Automatic routing is on";
+"Automatic routing is paused" = "Automatic routing is paused";
+"Records stay on this Mac" = "Records stay on this Mac";
+"Clear search" = "Clear search";
+"URL Rules" = "URL Rules";
+"Source Application Rules" = "Source Application Rules";
+"URL rules are matched first, followed by source applications. Rules in each group run in order." = "URL rules are matched first, followed by source applications. Rules in each group run in order.";
+"No rules in this group" = "No rules in this group";
+"No matching rule" = "No matching rule";
+"Show the browser picker" = "Show the browser picker";
+"Open with the preferred browser" = "Open with the preferred browser";
+"Open with the last used browser" = "Open with the last used browser";
+"Set a condition and choose where matching links should open." = "Set a condition and choose where matching links should open.";
+"Condition" = "Condition";
+"Rule name (optional)" = "Rule name (optional)";
+"Rule actions" = "Rule actions";
+"%lld rules" = "%lld rules";
+"Search applications" = "Search applications";
+"Prism could not save this rule. Try again." = "Prism could not save this rule. Try again.";
+"Link Handling" = "Link Handling";
+"General" = "General";
+"History & Privacy" = "History & Privacy";
+"Software Updates" = "Software Updates";
+"About Prism" = "About Prism";
+"Prism discovers installed browsers. You can also add one manually." = "Prism discovers installed browsers. You can also add one manually.";
+"Done" = "Done";
+"Scanning browsers…" = "Scanning browsers…";
+"Path unavailable" = "Path unavailable";
+"Remove this custom browser?" = "Remove this custom browser?";
+"Removing a custom entry does not uninstall the application." = "Removing a custom entry does not uninstall the application.";
+"The browser could not be added. Choose an application that can open web links." = "The browser could not be added. Choose an application that can open web links.";
+"The custom browser could not be removed. Try again." = "The custom browser could not be removed. Try again.";
+"Browsers could not be loaded. Try scanning again." = "Browsers could not be loaded. Try scanning again.";
+"Every link has a story." = "Every link has a story.";
+"Search URL, source app, or browser" = "Search URL, source app, or browser";
+"Result" = "Result";
+"All" = "All";
+"%d records" = "%d records";
+"No matching history" = "No matching history";
+"Try another search or result filter." = "Try another search or result filter.";
+"Sensitive URL parameters are hidden. History stays on this Mac." = "Sensitive URL parameters are hidden. History stays on this Mac.";
+"Today" = "Today";
+"Yesterday" = "Yesterday";
+"View Details" = "View Details";
+"Link Details" = "Link Details";
+"Saved Safe URL" = "Saved Safe URL";
+"Sensitive parameters such as login tokens are hidden from history and copied URLs." = "Sensitive parameters such as login tokens are hidden from history and copied URLs.";
+"Source App" = "Source App";
+"Target Browser" = "Target Browser";
+"Routing Method" = "Routing Method";
+"Time" = "Time";
+"Attempts" = "Attempts";
+"Retry is available while the original link remains in the recovery queue." = "Retry is available while the original link remains in the recovery queue.";
+
+"History recording is paused" = "History recording is paused";
+"New links are not being saved. You can turn history back on in Settings." = "New links are not being saved. You can turn history back on in Settings.";
+"Step %d of %d" = "Step %d of %d";
+
+"Your links,\nyour way to browse." = "Your links,\nyour way to browse.";
+
+"Work in Chrome, unwind in Safari.\nPrism chooses the right browser using sources and rules." = "Work in Chrome, unwind in Safari.\nPrism chooses the right browser using sources and rules.";
+
+"Let Prism take care of links" = "Let Prism take care of links";
+
+"macOS manages HTTP and HTTPS separately.\nPrism handles every web link only when both are enabled." = "macOS manages HTTP and HTTPS separately.\nPrism handles every web link only when both are enabled.";
+
+"Discover your browsers" = "Discover your browsers";
+
+"We found your browsers" = "We found your browsers";
+
+"Scan installed applications or add another browser manually." = "Scan installed applications or add another browser manually.";
+
+"Found %d available browsers. You can also add another application manually." = "Found %d available browsers. You can also add another application manually.";
+
+"All set" = "All set";
+
+"Try opening a link" = "Try opening a link";
+
+"The test link opened successfully.\nPrism will appear when you need it the next time you click a link." = "The test link opened successfully.\nPrism will appear when you need it the next time you click a link.";
+
+"Choose a browser in the real selector.\nPrism confirms setup only after macOS accepts the handoff." = "Choose a browser in the real selector.\nPrism confirms setup only after macOS accepts the handoff.";
+
+"Route automatically by URL and source application" = "Route automatically by URL and source application";
+
+"Rules and history stay on your Mac" = "Rules and history stay on your Mac";
+
+"If setup did not finish, open System Settings and refresh the status." = "If setup did not finish, open System Settings and refresh the status.";
+
+"Handled" = "Handled";
+
+"Not handled yet" = "Not handled yet";
+
+"Test link opened" = "Test link opened";
+
+"Link handling and browser launch verified" = "Link handling and browser launch verified";
+
+"Choose a browser to confirm the handoff." = "Choose a browser to confirm the handoff.";
+
+"Create your first routing rule next, or start using Prism right away." = "Create your first routing rule next, or start using Prism right away.";
+
+"About one minute" = "About one minute";
+
+"Start Setup" = "Start Setup";
+
+"Set as Default Browser" = "Set as Default Browser";
+
+"Set Up Later" = "Set Up Later";
+
+"Open Test Link" = "Open Test Link";
+
+"Found %d available browsers. Open a test link to check that everything works." = "Found %d available browsers. Open a test link to check that everything works.";
+
+"The rule was saved, but the list could not be refreshed. Reopen Rules to try again." = "The rule was saved, but the list could not be refreshed. Reopen Rules to try again.";
+
+"Actions for rule %@" = "Actions for rule %@";
+
+"Remove %@" = "Remove %@";
+
+"Remove %@ at %@?\n\nRemoving a custom entry does not uninstall the application." = "Remove %@ at %@?\n\nRemoving a custom entry does not uninstall the application.";
+
+"Saved URL: %@. Source: %@. Target: %@. Result: %@. Time: %@." = "Saved URL: %@. Source: %@. Target: %@. Result: %@. Time: %@.";
+
+"Prism is not handling every web link" = "Prism is not handling every web link";
+"HTTP and HTTPS must both use Prism. Try again or review the default application in System Settings." = "HTTP and HTTPS must both use Prism. Try again or review the default application in System Settings.";
