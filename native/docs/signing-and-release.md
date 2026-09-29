@@ -1,6 +1,8 @@
 # Prism 原生版签名与发布
 
-此流程只面向 Developer ID 直发版本。Sparkle 使用官方标准更新界面；只有 Release 归档带有有效的 EdDSA 公钥时，应用才会启用更新检查。
+此流程只面向 Developer ID 直发版本。带有有效 EdDSA 公钥和 HTTPS appcast 的构建通过 Sparkle 检查并安装签名更新；未配置公钥的构建通过 GitHub Releases 检查原生安装包，用户确认下载后手动替换 Applications 中的 Prism。
+
+GitHub 检查包含原生公开测试预发布版本，从 `1.11.0` 起仅识别 `Prism-<version>-universal-test.dmg` 与本流程生成的 `Prism-<version>.dmg`，不使用旧 Electron 的 `latest-release.json`。自动检查开关与 Sparkle 共用 `SUEnableAutomaticChecks` 偏好：启动后检查，之后每天检查，同一新版本只自动提示一次；手动检查始终反馈最新、可用更新或错误。
 
 ## 发布前提
 

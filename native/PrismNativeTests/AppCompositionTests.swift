@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import PrismCore
 import Testing
 @testable import PrismNative
@@ -641,6 +642,72 @@ import Testing
     #expect(buffer.snapshot().map(\.senderPID) == [321, 321])
     #expect(buffer.snapshot().map(\.sequence) == [0, 1])
     #expect(await composition.recoveryQueue.snapshot().isEmpty)
+}
+
+@Test @MainActor func repeatedGetURLEventsEachReachLinkIntake() async throws {
+    let buffer = BootstrapLinkBuffer()
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let graph = TestLaunchGraph(queue: queue, buffer: buffer)
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+    let delegate = AppDelegate(composition: composition, copyCurrentSenderPID: { nil })
+    let url = URL(string: "https://example.com/repeated")!
+
+    for _ in 0..<3 {
+        let event = NSAppleEventDescriptor(
+            eventClass: AEEventClass(kInternetEventClass),
+            eventID: AEEventID(kAEGetURL),
+            targetDescriptor: nil,
+            returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID)
+        )
+        event.setParam(NSAppleEventDescriptor(string: url.absoluteString), forKeyword: keyDirectObject)
+        delegate.handleGetURLEvent(event, withReplyEvent: NSAppleEventDescriptor.null())
+    }
+
+    #expect(buffer.snapshot().map(\.url) == [url, url, url])
+    #expect(Set(buffer.snapshot().map(\.id)).count == 3)
+}
+
+@Test(arguments: [true, false]) @MainActor
+func repeatedLinkClicksRouteOrPresentEveryTime(hasRule: Bool) async throws {
+    let buffer = BootstrapLinkBuffer()
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let launcher = CountingBrowserLauncher()
+    let graph = TestLaunchGraph(
+        queue: queue, buffer: buffer,
+        browserCatalog: SingleBrowserCatalog(), browserLauncher: launcher
+    )
+    if hasRule {
+        try graph.environment.ruleRepository.upsert(RoutingRule(
+            id: UUID(), isEnabled: true, matcher: .exactHost("example.com"),
+            targetBrowserID: "com.apple.Safari", priority: 0, label: nil,
+            createdAt: .now, updatedAt: .now
+        ))
+    }
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+    let delegate = AppDelegate(composition: composition, copyCurrentSenderPID: { nil })
+    await composition.finishLaunchingOnce()
+
+    for click in 1...3 {
+        let event = NSAppleEventDescriptor(
+            eventClass: AEEventClass(kInternetEventClass), eventID: AEEventID(kAEGetURL),
+            targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID)
+        )
+        event.setParam(NSAppleEventDescriptor(string: "https://example.com/repeated"), forKeyword: keyDirectObject)
+        delegate.handleGetURLEvent(event, withReplyEvent: NSAppleEventDescriptor.null())
+        await graph.intake.waitForDrainForTesting()
+        if hasRule {
+            #expect(launcher.handoffCount == click)
+            #expect(graph.presenter.activeRequest == nil)
+        } else {
+            let request = try #require(graph.presenter.activeRequest)
+            #expect(request.url.absoluteString == "https://example.com/repeated")
+            await graph.coordinator.cancel(requestID: request.id)
+            await graph.intake.waitForDrainForTesting()
+        }
+        #expect(await queue.next() == nil)
+    }
 }
 
 @Test @MainActor func appDelegateReopenUsesTheSingletonAdapterAndPreservesTheCurrentRoute() async throws {

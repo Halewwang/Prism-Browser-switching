@@ -154,7 +154,7 @@ struct SettingsManagementView: View {
             SettingsGroup {
                 settingsToggle(
                     "Automatically check for updates",
-                    detail: sparkleUpdateDetail,
+                    detail: updateCheckDetail,
                     symbol: "arrow.down.circle",
                     tint: .blue,
                     isOn: automaticUpdateChecks,
@@ -325,7 +325,8 @@ struct SettingsManagementView: View {
 
     private var publishedInstallerDetail: String {
         if let publishedInstaller {
-            return "\(publishedInstaller.version) · \(publishedInstaller.fileName). GitHub publishes this disk image separately from Sparkle. This build installs signed updates only when appcast.xml and an EdDSA key are present."
+            let channel = publishedInstaller.isPrerelease ? " · " + NSLocalizedString("Public Test", comment: "Release channel") : ""
+            return "\(publishedInstaller.version)\(channel) · \(publishedInstaller.fileName)"
         }
         if publishedInstallerUnavailable {
             return "Prism could not read the published installer from GitHub."
@@ -344,10 +345,13 @@ struct SettingsManagementView: View {
         }
     }
 
-    private var sparkleUpdateDetail: String {
-        environment.updateChecker.canCheckForUpdates
+    private var updateCheckDetail: String {
+        if environment.updateChecker is GitHubUpdateChecker {
+            return "Checks GitHub for a newer native version and offers its installer."
+        }
+        return environment.updateChecker.canCheckForUpdates
             ? "Sparkle checks the signed appcast and asks before installing."
-            : "Signed in-app updates are off until this build includes an EdDSA key. The latest GitHub release also has no appcast.xml."
+            : "Update checks are unavailable in this build."
     }
 
     private func settingsToggle(

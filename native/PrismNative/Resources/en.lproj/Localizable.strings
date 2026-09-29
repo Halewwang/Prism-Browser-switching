@@ -194,3 +194,19 @@
 "Restart Now" = "Restart Now";
 "Later" = "Later";
 "Prism will use the selected language the next time it opens." = "Prism will use the selected language the next time it opens.";
+
+"Checks GitHub for a newer native version and offers its installer." = "Checks GitHub for a newer native version and offers its installer.";
+"Update checks are unavailable in this build." = "Update checks are unavailable in this build.";
+"Sparkle checks the signed appcast and asks before installing." = "Sparkle checks the signed appcast and asks before installing.";
+"Prism could not read the published installer from GitHub." = "Prism could not read the published installer from GitHub.";
+"Checking the published GitHub installer…" = "Checking the published GitHub installer…";
+"No compatible native installer is published on GitHub yet." = "No compatible native installer is published on GitHub yet.";
+"Prism %@ is available" = "Prism %@ is available";
+"Prism %@ public test is available" = "Prism %@ public test is available";
+"Public Test" = "Public Test";
+"Download the installer from GitHub, then replace Prism in Applications to update." = "Download the installer from GitHub, then replace Prism in Applications to update.";
+"Prism is up to date" = "Prism is up to date";
+"You have the latest published native version of Prism." = "You have the latest published native version of Prism.";
+"Could not check for updates" = "Could not check for updates";
+"Prism could not read this app's version. Open GitHub Releases to check manually." = "Prism could not read this app's version. Open GitHub Releases to check manually.";
+"Prism could not reach GitHub. Check your connection and try again." = "Prism could not reach GitHub. Check your connection and try again.";

@@ -67,21 +67,6 @@ import Testing
     )
 }
 
-@Test func claimedGetURLDoesNotOpenASecondTime() {
-    var claimed = ClaimedLinkOpens()
-    let url = URL(string: "https://example.com/a")!
-
-    let firstClaim = claimed.claim(url)
-    let secondClaim = claimed.claim(url)
-    let firstConsume = claimed.consume(url)
-    let secondConsume = claimed.consume(url)
-
-    #expect(firstClaim)
-    #expect(!secondClaim)
-    #expect(firstConsume)
-    #expect(!secondConsume)
-}
-
 @Test @MainActor func unsignedSenderPIDUsesTheCoercedInteger() throws {
     var pid = UInt32(1_603).littleEndian
     let data = Data(bytes: &pid, count: MemoryLayout<UInt32>.size)

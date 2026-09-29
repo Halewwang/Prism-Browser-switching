@@ -2,7 +2,7 @@ import Foundation
 import Sparkle
 
 /// Bridges Prism's small update boundary to Sparkle's maintained standard updater UI.
-/// A build without a real public EdDSA key stays explicitly non-updateable.
+/// Builds without a real public EdDSA key check GitHub for manual installers.
 @MainActor
 final class SparkleUpdateChecker: NSObject, UpdateChecking {
     let events: AsyncStream<UpdateEvent>
@@ -40,7 +40,9 @@ final class SparkleUpdateChecker: NSObject, UpdateChecking {
 
     static func makeIfConfigured(bundle: Bundle = .main) -> any UpdateChecking {
         guard SparkleUpdateConfiguration(bundle: bundle).isReady else {
-            return DisabledUpdateChecker()
+            return GitHubUpdateChecker(
+                currentVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+            )
         }
         return SparkleUpdateChecker()
     }

@@ -159,15 +159,3 @@ enum GetURLEvent {
         return url
     }
 }
-
-struct ClaimedLinkOpens {
-    private var urls: Set<String> = []
-
-    mutating func claim(_ url: URL) -> Bool {
-        urls.insert(url.absoluteString).inserted
-    }
-
-    mutating func consume(_ url: URL) -> Bool {
-        urls.remove(url.absoluteString) != nil
-    }
-}

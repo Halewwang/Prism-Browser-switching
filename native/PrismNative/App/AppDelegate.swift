@@ -17,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchTask: Task<Void, Never>?
     private var statusItemController: StatusItemController?
     private var mainWindow: NSWindow?
-    private var claimedLinkOpens = ClaimedLinkOpens()
 
     var retainedStatusItemController: StatusItemController? {
         statusItemController
@@ -116,8 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !DebugUITestConfiguration.isEnabled else { return }
 #endif
         let senderPID = AppleEventSenderReader.copySenderPID(from: event)
+        // The registered handler owns this event; AppKit does not also deliver it
+        // to application(_:open:). Each event is a separate click, even for one URL.
         for url in GetURLEvent.urls(in: event) where BootstrapLinkBuffer.accepts(url) {
-            guard claimedLinkOpens.claim(url) else { continue }
             composition.linkIntakeService.capture(url: url, senderPID: senderPID)
         }
     }
@@ -128,7 +128,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
         let senderPID = copyCurrentSenderPID()
         for url in urls where BootstrapLinkBuffer.accepts(url) {
-            guard !claimedLinkOpens.consume(url) else { continue }
             composition.linkIntakeService.capture(url: url, senderPID: senderPID)
         }
     }

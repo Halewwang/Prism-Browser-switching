@@ -230,3 +230,19 @@
 "Restart Now" = "立即重启";
 "Later" = "稍后";
 "Prism will use the selected language the next time it opens." = "下次打开 Prism 时将使用所选语言。";
+
+"Checks GitHub for a newer native version and offers its installer." = "检查 GitHub 上更新的原生版本，并提示下载安装包。";
+"Update checks are unavailable in this build." = "此构建无法检查更新。";
+"Sparkle checks the signed appcast and asks before installing." = "检查签名更新，并在安装前询问。";
+"Prism could not read the published installer from GitHub." = "Prism 无法读取 GitHub 上已发布的安装包。";
+"Checking the published GitHub installer…" = "正在检查 GitHub 上已发布的安装包…";
+"No compatible native installer is published on GitHub yet." = "GitHub 上尚未发布兼容的原生安装包。";
+"Prism %@ is available" = "Prism %@ 可供更新";
+"Prism %@ public test is available" = "Prism %@ 公开测试版可供更新";
+"Public Test" = "公开测试版";
+"Download the installer from GitHub, then replace Prism in Applications to update." = "从 GitHub 下载安装包，然后替换“应用程序”中的 Prism 以完成更新。";
+"Prism is up to date" = "Prism 已是最新版本";
+"You have the latest published native version of Prism." = "你使用的是已发布的最新原生版 Prism。";
+"Could not check for updates" = "无法检查更新";
+"Prism could not read this app's version. Open GitHub Releases to check manually." = "Prism 无法读取当前版本。请打开 GitHub 发布页手动检查。";
+"Prism could not reach GitHub. Check your connection and try again." = "Prism 无法连接 GitHub。请检查网络后重试。";
