@@ -294,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func activateDebugApplicationFixture() {
+        guard mainWindow == nil else { return }
         if debugApplicationActivationAnchor == nil {
             debugApplicationActivationAnchor = DebugAppFixtureActivationAnchor()
         }
