@@ -88,7 +88,7 @@
 "Use System Language" = "跟随系统语言";
 "English" = "英语";
 "Simplified Chinese" = "简体中文";
-"Control how Prism handles links and keeps local History." = "控制 Prism 如何处理链接并保存本机历史记录。";
+"Control how Prism handles links and keeps local History." = "按照你的习惯，让 Prism 安静地工作。";
 "Show Prism in the menu bar" = "在菜单栏中显示 Prism";
 "Use routing rules automatically" = "自动使用分流规则";
 "When no rule matches" = "没有匹配规则时";
@@ -112,7 +112,7 @@
 "Link history stays on this Mac. Prism removes sensitive URL data before showing or copying it." = "链接历史仅保留在这台 Mac 上。Prism 会在显示或复制前移除 URL 中的敏感数据。";
 "Prism could not check the current default web-link handler." = "Prism 无法检查当前的默认网页链接处理应用。";
 "Rules could not be updated" = "无法更新规则";
-"Choose which links Prism should open automatically." = "选择 Prism 应自动打开哪些链接。";
+"Choose which links Prism should open automatically." = "让工作与生活的链接，各得其所。";
 "Loading rules…" = "正在载入规则…";
 "No routing rules" = "没有分流规则";
 "No matching rules" = "没有匹配规则";
@@ -246,3 +246,159 @@
 "Could not check for updates" = "无法检查更新";
 "Prism could not read this app's version. Open GitHub Releases to check manually." = "Prism 无法读取当前版本。请打开 GitHub 发布页手动检查。";
 "Prism could not reach GitHub. Check your connection and try again." = "Prism 无法连接 GitHub。请检查网络后重试。";
+
+/* Pen workspace redesign */
+"Your links, in the right place" = "链接，自有去处";
+"Automatic routing is on" = "自动分流已开启";
+"Automatic routing is paused" = "自动分流已暂停";
+"Records stay on this Mac" = "所有记录仅保存在此 Mac";
+"Clear search" = "清除搜索";
+"URL Rules" = "网址规则";
+"Source Application Rules" = "来源应用";
+"URL rules are matched first, followed by source applications. Rules in each group run in order." = "优先匹配网址规则，再匹配来源应用；同组内按顺序执行。";
+"No rules in this group" = "此分组暂无规则";
+"No matching rule" = "没有匹配规则？";
+"Show the browser picker" = "显示浏览器选择器，由你决定。";
+"Open with the preferred browser" = "使用首选浏览器打开。";
+"Open with the last used browser" = "使用上次使用的浏览器打开。";
+"Set a condition and choose where matching links should open." = "符合条件的链接，将自动在指定浏览器中打开。";
+"Condition" = "匹配条件";
+"Rule name (optional)" = "规则名称（可选）";
+"Rule actions" = "规则操作";
+"%lld rules" = "%lld 条规则";
+"Search applications" = "搜索来源应用";
+"Prism could not save this rule. Try again." = "规则未能保存，本次更改未生效。请重试。";
+"Link Handling" = "链接处理";
+"General" = "通用";
+"History & Privacy" = "历史与隐私";
+"Software Updates" = "软件更新";
+"About Prism" = "关于 Prism";
+"Prism discovers installed browsers. You can also add one manually." = "Prism 会自动发现已安装的浏览器，也支持手动添加。";
+"Done" = "完成";
+"Scanning browsers…" = "正在扫描浏览器…";
+"Path unavailable" = "路径不可用";
+"Remove this custom browser?" = "移除此自定义浏览器？";
+"Removing a custom entry does not uninstall the application." = "移除自定义条目不会卸载应用。";
+"The browser could not be added. Choose an application that can open web links." = "未能添加浏览器，请选择可打开网页链接的应用。";
+"The custom browser could not be removed. Try again." = "未能移除自定义浏览器，请重试。";
+"Browsers could not be loaded. Try scanning again." = "未能加载浏览器，请重新扫描。";
+"Every link has a story." = "每一次链接跳转，都有迹可循。";
+"Search URL, source app, or browser" = "搜索网址、来源应用或浏览器";
+"Result" = "结果";
+"All" = "全部";
+"%d records" = "%d 条记录";
+"No matching history" = "没有匹配的历史记录";
+"Try another search or result filter." = "试试其他关键词或结果筛选。";
+"Sensitive URL parameters are hidden. History stays on this Mac." = "敏感网址参数已隐藏，记录仅保存在本机。";
+"Today" = "今天";
+"Yesterday" = "昨天";
+"View Details" = "查看详情";
+"Link Details" = "链接详情";
+"Saved Safe URL" = "已保存的安全网址";
+"Sensitive parameters such as login tokens are hidden from history and copied URLs." = "登录令牌等敏感参数不会出现在记录或复制内容中。";
+"Source App" = "来源应用";
+"Target Browser" = "目标浏览器";
+"Routing Method" = "分流方式";
+"Time" = "发生时间";
+"Attempts" = "尝试次数";
+"Retry is available while the original link remains in the recovery queue." = "仅在原始链接仍保留于恢复队列时可重试。";
+
+"History recording is paused" = "历史记录已暂停";
+"New links are not being saved. You can turn history back on in Settings." = "当前不会保存新的链接记录，你可以随时在设置中重新开启。";
+"Step %d of %d" = "第 %d 步，共 %d 步";
+
+"Your links,\nyour way to browse." = "你的链接，\n你的浏览方式。";
+
+"Work in Chrome, unwind in Safari.\nPrism chooses the right browser using sources and rules." = "工作交给 Chrome，生活留给 Safari。\nPrism 根据来源与规则，自动选择合适的浏览器。";
+
+"Let Prism take care of links" = "让 Prism 接管链接";
+
+"macOS manages HTTP and HTTPS separately.\nPrism handles every web link only when both are enabled." = "macOS 分别管理 HTTP 和 HTTPS。\n两项均已接管时，Prism 才能完整处理网页链接。";
+
+"Discover your browsers" = "发现你的浏览器";
+
+"We found your browsers" = "找到了你的浏览器";
+
+"Scan installed applications or add another browser manually." = "扫描已安装的应用，也可以手动添加其他浏览器。";
+
+"Found %d available browsers. You can also add another application manually." = "已发现 %d 个可用浏览器。也可以手动添加其他应用。";
+
+"All set" = "一切就绪";
+
+"Try opening a link" = "试着打开一个链接";
+
+"The test link opened successfully.\nPrism will appear when you need it the next time you click a link." = "测试链接已成功打开。\n下次点击链接时，Prism 会在需要时出现。";
+
+"Choose a browser in the real selector.\nPrism confirms setup only after macOS accepts the handoff." = "在浏览器选择器中选择浏览器。\nmacOS 接受链接后，Prism 才会确认设置完成。";
+
+"Route automatically by URL and source application" = "按网址与来源应用自动分流";
+
+"Rules and history stay on your Mac" = "规则和历史记录只留在你的 Mac";
+
+"If setup did not finish, open System Settings and refresh the status." = "未成功？打开系统设置后，可刷新接管状态。";
+
+"Handled" = "已接管";
+
+"Not handled yet" = "尚未接管";
+
+"Test link opened" = "测试链接已打开";
+
+"Link handling and browser launch verified" = "已验证链接接管与浏览器启动";
+
+"Choose a browser to confirm the handoff." = "选择浏览器以验证链接打开。";
+
+"Create your first routing rule next, or start using Prism right away." = "接下来可以创建第一条分流规则，也可以直接开始使用。";
+
+"About one minute" = "约需 1 分钟";
+
+"Start Setup" = "开始设置";
+
+"Set as Default Browser" = "设为默认浏览器";
+
+"Set Up Later" = "稍后设置";
+
+"Open Test Link" = "打开测试链接";
+
+"Found %d available browsers. Open a test link to check that everything works." = "已发现 %d 个可用浏览器。打开测试链接，确认一切运行正常。";
+
+"The rule was saved, but the list could not be refreshed. Reopen Rules to try again." = "规则已保存，但列表未能刷新。请重新进入规则页重试。";
+
+"Exact domain" = "精确域名";
+"Domain and subdomains" = "域名及子域名";
+"URL contains" = "网址包含";
+"A word or URL fragment" = "关键词或网址片段";
+"Application bundle identifier" = "应用标识符";
+"Match" = "匹配方式";
+"Open in" = "打开方式";
+"Optional label" = "填写规则名称";
+"Enable this rule" = "启用此规则";
+"Edit Rule" = "编辑规则";
+"New Rule" = "新建规则";
+"Save Rule" = "保存规则";
+"Save Changes" = "保存修改";
+
+"Actions for rule %@" = "规则 %@ 的操作";
+
+"Remove %@" = "移除 %@";
+
+"Remove %@ at %@?\n\nRemoving a custom entry does not uninstall the application." = "移除位于 %2$@ 的 %1$@？\n\n移除自定义条目不会卸载应用。";
+
+"Saved URL: %@. Source: %@. Target: %@. Result: %@. Time: %@." = "已保存的网址：%@。来源应用：%@。目标浏览器：%@。结果：%@。发生时间：%@。";
+
+"Prism is not handling every web link" = "Prism 尚未接管所有网页链接";
+"HTTP and HTTPS must both use Prism. Try again or review the default application in System Settings." = "HTTP 和 HTTPS 链接都需要由 Prism 打开。请重试，或前往系统设置检查默认应用。";
+
+"Link handling could not be checked" = "无法检查链接处理状态";
+"Refresh the status, or open System Settings and confirm the default application manually." = "请刷新状态，或打开系统设置，手动确认默认应用。";
+"No usable browsers were found" = "未找到可用的浏览器";
+"Install a browser, add one manually, or rescan after moving it into Applications." = "请安装浏览器、手动添加，或将浏览器移入“应用程序”文件夹后重新扫描。";
+"Browsers could not be scanned" = "无法扫描浏览器";
+"Prism could not read the installed applications. Try the scan again." = "Prism 无法读取已安装的应用，请重新扫描。";
+"The browser could not be added" = "无法添加浏览器";
+"Choose a valid browser application, or use Rescan to look for installed browsers." = "请选择有效的浏览器应用，或重新扫描已安装的浏览器。";
+"Your changes could not be saved" = "无法保存更改";
+"Keep Prism open and try again. Setup is not complete until the change is saved." = "请保持 Prism 打开并重试。更改保存成功后，设置才会完成。";
+"The test link did not finish" = "测试链接尚未完成";
+"Retry the test, or choose Finish Later to complete setup without a confirmed browser handoff." = "请重新测试，或选择“稍后完成”，跳过浏览器打开结果的确认。";
+"The test link could not be cancelled" = "无法取消测试链接";
+"Prism kept the current test link so it is not duplicated. Try Finish Later again." = "Prism 已保留当前测试链接，避免重复打开。请再次选择“稍后完成”。";

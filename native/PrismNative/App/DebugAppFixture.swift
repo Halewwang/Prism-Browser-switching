@@ -237,6 +237,12 @@ struct DebugAppFixture {
             failsLoad: variant == .recovery
         ))
         let relay = SelectorPresentationRelay()
+        // History action availability needs a real queue-owned request, but no selector
+        // interaction. Keep its restored presentation on an unconnected relay so it
+        // cannot be cancelled by the UI test runner and rewrite the failed History row.
+        let routingPresenter: any LinkSelectionPresenting = variant == .historyActions
+            ? SelectorPresentationRelay()
+            : relay
         let launcher = DebugAppBrowserLauncher(
             recorder: recorder,
             rejectsHandoff: variant == .launchFailure
@@ -251,7 +257,7 @@ struct DebugAppFixture {
             browserLauncher: launcher,
             sourceManifest: .disabled,
             operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersion,
-            presenter: relay,
+            presenter: routingPresenter,
             warningPresenter: environment
         )
         let intake = LinkIntakeService(

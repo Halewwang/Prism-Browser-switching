@@ -217,9 +217,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let lockedWidth = WorkspaceLayout.windowContentWidth
+        let lockedWidth: CGFloat = 668
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: lockedWidth, height: 680),
+            contentRect: NSRect(x: 0, y: 0, width: lockedWidth, height: 554),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -230,10 +230,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarSeparatorStyle = .none
         window.backgroundColor = .windowBackgroundColor
         window.toolbar = nil
-        window.contentMinSize = NSSize(width: lockedWidth, height: 640)
-        window.contentMaxSize = NSSize(width: lockedWidth, height: 10_000)
+        window.contentMinSize = NSSize(width: lockedWidth, height: 554)
+        window.contentMaxSize = NSSize(width: WorkspaceLayout.windowContentWidth, height: 10_000)
         window.isReleasedWhenClosed = false
         let hostingView = MainWindowHostingView(rootView: mainWindowRoot())
+        hostingView.sizingOptions = []
         window.contentView = hostingView
         window.center()
         mainWindow = window
@@ -293,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func activateDebugApplicationFixture() {
+        guard mainWindow == nil else { return }
         if debugApplicationActivationAnchor == nil {
             debugApplicationActivationAnchor = DebugAppFixtureActivationAnchor()
         }

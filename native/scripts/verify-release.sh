@@ -29,7 +29,8 @@ verify_app() {
   local macho
   while IFS= read -r -d '' macho; do
     if file -b "$macho" | grep -q 'Mach-O'; then
-      lipo -verify_arch arm64 x86_64 "$macho"
+      lipo "$macho" -verify_arch arm64
+      lipo "$macho" -verify_arch x86_64
     fi
   done < <(find "$candidate/Contents" -type f -print0)
 

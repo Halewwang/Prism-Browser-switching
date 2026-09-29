@@ -33,36 +33,51 @@ struct AppShellDestination: Identifiable {
 }
 
 struct SidebarView: View {
+    @Environment(AppEnvironment.self) private var environment
     @Binding var selection: AppRoute
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 26) {
             brandHeader
-
-            List(selection: optionalSelection) {
+            VStack(spacing: 7) {
                 ForEach(AppShellDestination.all) { destination in
-                    Label {
-                        Text(LocalizedStringKey(destination.title))
-                            .font(.system(size: 13, weight: .regular))
-                            .lineLimit(1)
-                    } icon: {
-                        Image(systemName: destination.systemImage)
-                            .font(.system(size: 13, weight: .light))
-                            .frame(width: 16, height: 16)
+                    Button {
+                        selection = destination.route
+                    } label: {
+                        HStack(spacing: 11) {
+                            Image(systemName: destination.systemImage)
+                                .font(.system(size: 17, weight: .regular))
+                                .frame(width: 18)
+                                .accessibilityHidden(true)
+                            Text(LocalizedStringKey(destination.title))
+                                .font(.system(size: 15, weight: selection == destination.route ? .medium : .regular))
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(selection == destination.route ? SettingsPalette.primary : SettingsPalette.secondary)
+                        .padding(.horizontal, 12)
+                        .frame(height: 42)
+                        .background {
+                            if selection == destination.route {
+                                RoundedRectangle(cornerRadius: 8).fill(SettingsPalette.group)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .tag(destination.route)
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier(destination.accessibilityIdentifier)
+                    .accessibilityValue(selection == destination.route ? "Selected" : "")
                 }
             }
-            .listStyle(.sidebar)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .scrollContentBackground(.hidden)
+            Spacer(minLength: 24)
+            runtimeStatus
         }
+        .padding(.horizontal, 14)
+        .padding(.top, 60)
+        .padding(.bottom, 20)
         .frame(width: WorkspaceLayout.sidebarWidth)
+        .frame(maxHeight: .infinity)
         .background {
-            WorkspaceLayout.sidebarSurface
-                .ignoresSafeArea(edges: .top)
+            WorkspaceLayout.sidebarSurface.ignoresSafeArea(edges: .top)
         }
     }
 
@@ -72,28 +87,46 @@ struct SidebarView: View {
                 .resizable()
                 .interpolation(.high)
                 .scaledToFit()
-                .frame(width: 28, height: 28)
+                .frame(width: 36, height: 36)
                 .accessibilityHidden(true)
-
-            Text("Prism")
-                .font(.headline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Prism")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(SettingsPalette.primary)
+                Text("Your links, in the right place")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Prism")
         .accessibilityIdentifier("appShell.sidebar.brand")
     }
 
-    private var optionalSelection: Binding<AppRoute?> {
-        Binding(
-            get: { selection },
-            set: { newValue in
-                guard let newValue else { return }
-                selection = newValue
+    private var runtimeStatus: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(environment.settings.automaticRulesEnabled ? SettingsPalette.primary : SettingsPalette.secondary)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                Text(environment.settings.automaticRulesEnabled ? "Automatic routing is on" : "Automatic routing is paused")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SettingsPalette.primary)
             }
-        )
+            Text("Records stay on this Mac")
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(SettingsPalette.group.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("appShell.sidebar.routingStatus")
     }
 }

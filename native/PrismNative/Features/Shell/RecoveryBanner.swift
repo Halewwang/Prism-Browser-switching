@@ -66,18 +66,21 @@ struct RecoveryBanner: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: model.iconSystemName)
-                .font(.title3)
-                .frame(width: 24)
+                .font(.system(size: 17))
+                .foregroundStyle(SettingsPalette.secondary)
+                .frame(width: 34, height: 34)
+                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(LocalizedStringKey(model.title))
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SettingsPalette.primary)
                     .accessibilityLabel(model.title)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
                 Text(LocalizedStringKey(model.message))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(SettingsPalette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel(model.message)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).message")
@@ -98,16 +101,16 @@ struct RecoveryBanner: View {
                     Text(LocalizedStringKey(model.primaryAction.title))
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(WorkspaceButtonStyle(kind: .primary))
             .disabled(!model.canPerformAction)
             .accessibilityValue(model.isPerformingAction ? "Retrying" : "Ready")
             .accessibilityIdentifier(model.primaryAction.accessibilityIdentifier)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+        .padding(16)
+        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                .stroke(SettingsPalette.border, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
     }

@@ -419,10 +419,14 @@ struct AppRootView: View {
 
     var body: some View {
         rootContent
-            .frame(minWidth: 760, minHeight: 520)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .frame(minWidth: isShell ? WorkspaceLayout.windowContentWidth : 668, minHeight: isShell ? 640 : 554)
+            .background(SettingsPalette.canvas)
+            .background(WorkspaceWindowSizing(isShell: isShell))
+            .ignoresSafeArea(.container, edges: .top)
             .environment(coordinator.environment)
     }
+
+    private var isShell: Bool { coordinator.presentation.kind == .shell }
 
     @ViewBuilder
     private var rootContent: some View {
@@ -469,6 +473,41 @@ struct AppRootView: View {
             } else {
                 PageStateView(model: .loading(title: "Opening Prism"))
             }
+        }
+    }
+}
+
+private struct WorkspaceWindowSizing: NSViewRepresentable {
+    let isShell: Bool
+
+    func makeNSView(context: Context) -> SizingView {
+        let view = SizingView()
+        view.isShell = isShell
+        return view
+    }
+
+    func updateNSView(_ view: SizingView, context: Context) {
+        view.isShell = isShell
+        view.applyWindowSize()
+    }
+
+    final class SizingView: NSView {
+        var isShell = false
+        private var appliedShell: Bool?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            applyWindowSize()
+        }
+
+        func applyWindowSize() {
+            guard let window, appliedShell != isShell else { return }
+            appliedShell = isShell
+            let width = isShell ? WorkspaceLayout.windowContentWidth : 668
+            window.contentMinSize = NSSize(width: width, height: isShell ? 640 : 554)
+            window.contentMaxSize = NSSize(width: width, height: isShell ? 10_000 : 554)
+            window.setContentSize(NSSize(width: width, height: isShell ? 800 : 554))
+            window.center()
         }
     }
 }

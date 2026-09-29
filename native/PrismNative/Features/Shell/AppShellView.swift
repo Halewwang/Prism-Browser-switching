@@ -1,13 +1,13 @@
 import SwiftUI
 
 enum WorkspaceLayout {
-    static let contentInset: CGFloat = 40
+    static let contentInset: CGFloat = 36
     static let headerVerticalInset: CGFloat = 28
-    static let pageTitleFont = Font.system(size: 32, weight: .bold)
-    static let sidebarSurface = Color(nsColor: .underPageBackgroundColor)
-    static let contentSurface = Color(nsColor: .windowBackgroundColor)
-    static let windowContentWidth: CGFloat = 980
-    static let sidebarWidth: CGFloat = 176
+    static let pageTitleFont = Font.system(size: 27, weight: .semibold)
+    static let sidebarSurface = SettingsPalette.sidebar
+    static let contentSurface = SettingsPalette.canvas
+    static let windowContentWidth: CGFloat = 1120
+    static let sidebarWidth: CGFloat = 218
 }
 
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {
@@ -71,6 +71,7 @@ struct AppShellView: View {
     private let actions: AppShellActions
     private let historyModel: HistoryViewModel?
     private let browserCatalog: any BrowserCataloging
+    private let addCustomBrowser: @MainActor () async -> OnboardingCustomBrowserResult
     private let recoveryBanner: RecoveryBannerModel?
     private let onRecoveryAction: () -> Void
 
@@ -87,7 +88,7 @@ struct AppShellView: View {
         self.actions = actions
         self.historyModel = historyModel
         self.browserCatalog = browserCatalog
-        _ = addCustomBrowser
+        self.addCustomBrowser = addCustomBrowser
         self.recoveryBanner = recoveryBanner
         self.onRecoveryAction = onRecoveryAction
     }
@@ -103,7 +104,7 @@ struct AppShellView: View {
             maxWidth: WorkspaceLayout.windowContentWidth,
             minHeight: 640
         )
-        .tint(.accentColor)
+        .tint(SettingsPalette.primary)
         .background(WorkspaceLayout.contentSurface)
     }
 
@@ -120,10 +121,11 @@ struct AppShellView: View {
                     actions.perform(.testLink)
                 }
             } else if route == .rules {
-                RulesManagementView(browserCatalog: browserCatalog)
+                RulesManagementView(browserCatalog: browserCatalog, onOpenSettings: { route = .settings })
             } else if route == .settings {
                 SettingsManagementView(
                     browserCatalog: browserCatalog,
+                    addCustomBrowser: addCustomBrowser,
                     openDefaultAppsSettings: { actions.perform(.openDefaultAppsSettings) },
                     restart: { actions.perform(.restart) }
                 )

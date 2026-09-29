@@ -119,7 +119,7 @@ struct RuleEditorDraft: Identifiable {
         let existing = existingRule
         let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         return RoutingRule(
-            id: existing?.id ?? UUID(),
+            id: existing?.id ?? id,
             isEnabled: isEnabled,
             matcher: matcher,
             targetBrowserID: targetBrowserID,

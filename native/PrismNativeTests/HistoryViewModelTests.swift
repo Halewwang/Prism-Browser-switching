@@ -531,3 +531,66 @@ private func historyVMEntry(
 private func historyVMFixedUUID(_ value: Int) -> UUID {
     UUID(uuidString: "00000000-0000-0000-0000-\(String(format: "%012d", value))")!
 }
+
+@Suite("History list presentation")
+@MainActor
+struct HistoryListPresentationTests {
+    @Test func searchUsesSafePresentedURLAndMatchesSourceOrBrowser() async {
+        let entry = historyVMEntry(result: .success, url: "https://example.com/document?token=secret-token")
+        let fixture = makeHistoryVM(entries: [entry])
+        await fixture.model.load()
+        let presented = fixture.model.presentation(for: entry)
+        #expect(!(presented.safeURL?.absoluteString.contains("secret-token") ?? false))
+        for query in ["EXAMPLE.COM", " Source ", "safari"] {
+            let rows = HistoryListPresentation.filtered([entry], query: query, result: .all) {
+                fixture.model.presentation(for: $0)
+            }
+            #expect(rows.map(\.id) == [entry.id])
+        }
+        let hidden = HistoryListPresentation.filtered([entry], query: "secret-token", result: .all) {
+            fixture.model.presentation(for: $0)
+        }
+        #expect(hidden.isEmpty)
+        let absentURL = HistoryListPresentation.filtered([entry], query: "example.com", result: .all) { _ in
+            HistoryRowPresentation(safeURL: nil)
+        }
+        #expect(absentURL.isEmpty)
+    }
+
+    @Test func resultFiltersKeepFailureAndProcessingAccessible() {
+        let rows = [HistoryResult.success, .cancelled, .failure, .processing].enumerated().map { index, result in
+            historyVMEntry(id: historyVMFixedUUID(700 + index), result: result)
+        }
+        let expected: [(HistoryResultFilter, HistoryResult)] = [
+            (.opened, .success), (.cancelled, .cancelled), (.failed, .failure), (.processing, .processing),
+        ]
+        for (filter, result) in expected {
+            let matches = HistoryListPresentation.filtered(rows, query: "", result: filter) { _ in
+                HistoryRowPresentation(safeURL: nil)
+            }
+            #expect(matches.map(\.result) == [result])
+        }
+        #expect(HistoryListPresentation.filtered(rows, query: "", result: .all) { _ in
+            HistoryRowPresentation(safeURL: nil)
+        }.count == 4)
+    }
+
+    @Test func groupingUsesLocalDayAndEventTimeAcrossMidnight() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Asia/Shanghai"))
+        let day = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 29)))
+        let justBeforeMidnight = day.addingTimeInterval(-1)
+        let justAfterMidnight = day.addingTimeInterval(1)
+        var yesterday = historyVMEntry(id: historyVMFixedUUID(710), result: .success)
+        yesterday.completedAt = justBeforeMidnight
+        var today = historyVMEntry(id: historyVMFixedUUID(711), result: .success)
+        today.completedAt = justAfterMidnight
+        let groups = HistoryListPresentation.grouped([yesterday, today], calendar: calendar)
+        #expect(groups.map(\.date) == [day, calendar.startOfDay(for: justBeforeMidnight)])
+        #expect(groups.map { $0.entries.map(\.id) } == [[today.id], [yesterday.id]])
+        #expect(groups[0].title(now: justAfterMidnight, calendar: calendar) == String(localized: "Today"))
+        #expect(groups[1].title(now: justAfterMidnight, calendar: calendar) == String(localized: "Yesterday"))
+        let processing = historyVMEntry(id: historyVMFixedUUID(712), result: .processing)
+        #expect(HistoryListPresentation.eventDate(for: processing) == processing.createdAt)
+    }
+}

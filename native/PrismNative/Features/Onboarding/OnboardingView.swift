@@ -499,11 +499,10 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 23) {
             progressHeader
-            Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 18) {
                     titleBlock
                     stepContent
                     if let alert = presentation.alert {
@@ -513,57 +512,128 @@ struct OnboardingView: View {
                         activityView(activityText)
                     }
                 }
-                .frame(maxWidth: 600, alignment: .leading)
-                .padding(.horizontal, 48)
-                .padding(.vertical, 34)
-                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Divider()
             actionBar
         }
+        .padding(28)
         .frame(
-            minWidth: fillsMinimumWindowSize ? 760 : nil,
-            minHeight: fillsMinimumWindowSize ? 520 : nil
+            minWidth: fillsMinimumWindowSize ? 668 : nil,
+            minHeight: fillsMinimumWindowSize ? 554 : nil
         )
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(SettingsPalette.canvas)
+        .tint(SettingsPalette.primary)
         .task(id: presentation.preferredFocusedActionID) {
             focusedAction = presentation.preferredFocusedActionID
         }
     }
 
     private var progressHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Prism Setup")
-                    .font(.headline)
-                Spacer()
-                Text(presentation.progressText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("onboarding.progress.label")
-            }
-            ProgressView(value: presentation.progressValue)
-                .progressViewStyle(.linear)
-                .tint(.accentColor)
-                .accessibilityLabel("Setup progress")
-                .accessibilityValue(presentation.progressText)
-                .accessibilityIdentifier("onboarding.progress")
+        HStack {
+            Spacer()
+            Text(String(format: "PRISM  /  %02d — 04", displayStepNumber))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(SettingsPalette.secondary)
+                .accessibilityIdentifier("onboarding.progress.label")
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 18)
+        .frame(height: 14)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Setup progress")
+        .accessibilityValue(String(format: String(localized: "Step %d of %d"), displayStepNumber, OnboardingStep.allCases.count))
+        .accessibilityIdentifier("onboarding.progress")
+    }
+
+    private var displayStepNumber: Int {
+        presentation.step == .testLink && !model.testLinkWasAccepted ? 3 : presentation.step.rawValue + 1
+    }
+
+    private var renderedBrowserRows: [OnboardingBrowserRowPresentation] {
+        model.usableBrowsers
+            .filter { $0.availability == .available }
+            .map {
+                OnboardingBrowserRowPresentation(
+                    id: $0.id.rawValue,
+                    name: $0.displayName,
+                    location: $0.applicationURL.path,
+                    statusText: "Ready",
+                    accessibilityIdentifier: "onboarding.browsers.browser.\($0.id.rawValue)"
+                )
+            }
     }
 
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(LocalizedStringKey(presentation.title))
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 18) {
+            if presentation.step == .welcome {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 62, height: 62)
+                    .accessibilityHidden(true)
+            } else if model.testLinkWasAccepted {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 31))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .frame(width: 62, height: 62)
+                    .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 20))
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: stepSymbol)
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(SettingsPalette.primary)
+                    .frame(width: 34, height: 34)
+                    .accessibilityHidden(true)
+            }
+            Text(LocalizedStringKey(displayTitle))
+                .font(.system(size: titleSize, weight: .semibold))
+                .lineSpacing(presentation.step == .welcome ? 10 : 0)
+                .foregroundStyle(SettingsPalette.primary)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(presentation.accessibilityIdentifier)
-            Text(LocalizedStringKey(presentation.message))
-                .font(.body)
-                .foregroundStyle(.secondary)
+            Text(displayMessage)
+                .font(.system(size: 13))
+                .lineSpacing(6)
+                .foregroundStyle(SettingsPalette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var titleSize: CGFloat {
+        presentation.step == .welcome || model.testLinkWasAccepted ? 29 : 25
+    }
+
+    private var displayTitle: String {
+        switch presentation.step {
+        case .welcome: "Your links,\nyour way to browse."
+        case .linkHandling: "Let Prism take care of links"
+        case .browsers: renderedBrowserRows.isEmpty ? "Discover your browsers" : "We found your browsers"
+        case .testLink: model.testLinkWasAccepted ? "All set" : "We found your browsers"
+        }
+    }
+
+    private var displayMessage: String {
+        switch presentation.step {
+        case .welcome:
+            String(localized: "Work in Chrome, unwind in Safari.\nPrism chooses the right browser using sources and rules.")
+        case .linkHandling:
+            String(localized: "macOS manages HTTP and HTTPS separately.\nPrism handles every web link only when both are enabled.")
+        case .browsers:
+            renderedBrowserRows.isEmpty
+                ? String(localized: "Scan installed applications or add another browser manually.")
+                : String(format: String(localized: "Found %d available browsers. You can also add another application manually."), renderedBrowserRows.count)
+        case .testLink:
+            model.testLinkWasAccepted
+                ? String(localized: "The test link opened successfully.\nPrism will appear when you need it the next time you click a link.")
+                : String(format: String(localized: "Found %d available browsers. Open a test link to check that everything works."), renderedBrowserRows.count)
+        }
+    }
+
+    private var stepSymbol: String {
+        switch presentation.step {
+        case .welcome: "arrow.triangle.branch"
+        case .linkHandling: "link"
+        case .browsers: "safari"
+        case .testLink: "safari"
         }
     }
 
@@ -582,201 +652,200 @@ struct OnboardingView: View {
     }
 
     private var welcomeContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            featureRow(
-                icon: "arrow.triangle.branch",
-                title: "Route with clarity",
-                message: "Choose a browser each time or let a rule decide."
-            )
-            featureRow(
-                icon: "lock.shield",
-                title: "Private by design",
-                message: "Rules and link history remain on your Mac."
-            )
+        VStack(alignment: .leading, spacing: 18) {
+            featureRow(icon: "arrow.triangle.branch", message: "Route automatically by URL and source application")
+            featureRow(icon: "lock.shield", message: "Rules and history stay on your Mac")
         }
         .accessibilityElement(children: .contain)
     }
 
     private var handlerContent: some View {
-        VStack(spacing: 10) {
-            ForEach(presentation.statusRows) { row in
-                HStack(spacing: 12) {
-                    Image(systemName: row.iconSystemName)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                        .accessibilityHidden(true)
-                    Text(LocalizedStringKey(row.title))
-                        .font(.body.weight(.medium))
-                    Spacer()
-                    Text(LocalizedStringKey(row.statusText))
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 18) {
+            onboardingCard {
+                VStack(spacing: 17) {
+                    ForEach(presentation.statusRows) { row in
+                        HStack {
+                            Text(LocalizedStringKey(row.title))
+                                .font(.system(size: 13))
+                                .foregroundStyle(SettingsPalette.secondary)
+                            Spacer()
+                            Text(LocalizedStringKey(handlerStatusText(row)))
+                                .font(.system(size: 12))
+                                .foregroundStyle(SettingsPalette.primary)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(row.accessibilityLabel)
+                        .accessibilityIdentifier(row.accessibilityIdentifier)
+                    }
                 }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.accessibilityLabel)
-                .accessibilityIdentifier(row.accessibilityIdentifier)
+                .padding(16)
             }
+            Text("If setup did not finish, open System Settings and refresh the status.")
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.secondary)
+        }
+    }
+
+    private func handlerStatusText(_ row: OnboardingStatusRowPresentation) -> String {
+        switch row.statusText {
+        case "Prism is active": "Handled"
+        case "Needs attention": "Not handled yet"
+        default: row.statusText
         }
     }
 
     @ViewBuilder
     private var browserContent: some View {
-        if presentation.browserRows.isEmpty {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "safari")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
+        if renderedBrowserRows.isEmpty {
+            onboardingCard {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("No browsers are ready yet")
-                        .font(.body.weight(.medium))
+                        .font(.system(size: 13, weight: .medium))
                     Text("Rescan installed applications or add a browser manually.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsPalette.secondary)
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("onboarding.browsers.empty")
         } else {
-            VStack(spacing: 0) {
-                ForEach(Array(presentation.browserRows.enumerated()), id: \.element.id) { index, browser in
-                    if index > 0 {
-                        Divider()
-                    }
-                    HStack(spacing: 12) {
-                        Image(systemName: "safari.fill")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(browser.name)
-                                .font(.body.weight(.medium))
-                            Text(browser.location)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+            onboardingCard {
+                VStack(spacing: 0) {
+                    ForEach(Array(renderedBrowserRows.enumerated()), id: \.element.id) { index, browser in
+                        if index > 0 {
+                            Rectangle().fill(SettingsPalette.border).frame(height: 1)
                         }
-                        Spacer()
-                        Label(browser.statusText, systemImage: "checkmark.circle.fill")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            Image(systemName: "safari")
+                                .font(.system(size: 21))
+                                .foregroundStyle(SettingsPalette.secondary)
+                                .frame(width: 21)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(browser.name)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(SettingsPalette.primary)
+                                Text(browser.location)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(SettingsPalette.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(browser.location)
+                            }
+                            Spacer()
+                            Text(LocalizedStringKey(browser.statusText))
+                                .font(.system(size: 11))
+                                .foregroundStyle(SettingsPalette.primary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 13)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(browser.accessibilityLabel)
+                        .accessibilityIdentifier(browser.accessibilityIdentifier)
                     }
-                    .padding(14)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(browser.accessibilityLabel)
-                    .accessibilityIdentifier(browser.accessibilityIdentifier)
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-            }
         }
     }
 
+    @ViewBuilder
     private var testLinkContent: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "link.circle")
-                .font(.system(size: 34))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("The selector will open for a safe example link")
-                    .font(.body.weight(.medium))
-                Text("Choose a browser in the selector. Prism only completes the test after macOS accepts the handoff.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        if !model.testLinkWasAccepted {
+            VStack(alignment: .leading, spacing: 18) {
+                browserContent
+                Text("Choose a browser to confirm the handoff.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .accessibilityIdentifier("onboarding.testLink.explanation")
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 18) {
+                onboardingCard {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 20))
+                            .foregroundStyle(SettingsPalette.secondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Test link opened")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(SettingsPalette.secondary)
+                            Text("Link handling and browser launch verified")
+                                .font(.system(size: 11))
+                                .foregroundStyle(SettingsPalette.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Opened")
+                            .font(.system(size: 11))
+                            .foregroundStyle(SettingsPalette.primary)
+                    }
+                    .padding(18)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("onboarding.testLink.explanation")
+                Text("Create your first routing rule next, or start using Prism right away.")
+                    .font(.system(size: 12))
+                    .lineSpacing(6)
+                    .foregroundStyle(SettingsPalette.secondary)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("onboarding.testLink.explanation")
     }
 
-    private func featureRow(icon: String, title: String, message: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+    private func featureRow(icon: String, message: String) -> some View {
+        HStack(spacing: 9) {
             Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .frame(width: 30)
+                .font(.system(size: 17))
+                .foregroundStyle(SettingsPalette.primary)
+                .frame(width: 17)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                Text(message)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
+            Text(LocalizedStringKey(message))
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.secondary)
         }
-        .padding(.vertical, 4)
+    }
+
+    private func onboardingCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(SettingsPalette.border, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func alertView(_ alert: OnboardingAlertPresentation) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: alert.iconSystemName)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(LocalizedStringKey(alert.title))
-                    .font(.body.weight(.semibold))
-                Text(LocalizedStringKey(alert.message))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        onboardingCard {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: alert.iconSystemName)
+                    .font(.system(size: 17))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(LocalizedStringKey(alert.title))
+                        .font(.system(size: 13, weight: .medium))
+                    Text(LocalizedStringKey(alert.message))
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsPalette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            .padding(16)
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(alert.accessibilityIdentifier)
     }
 
     private func activityView(_ text: String) -> some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
+        HStack(spacing: 9) {
+            ProgressView().controlSize(.small)
             Text(LocalizedStringKey(text))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(text)
@@ -784,43 +853,57 @@ struct OnboardingView: View {
     }
 
     private var actionBar: some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
-            ForEach(presentation.actions) { action in
+        HStack(spacing: 12) {
+            if presentation.step == .welcome {
+                Text("About one minute")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.secondary)
+            }
+            ForEach(presentation.actions.filter { $0.emphasis == .quiet }) { action in
+                actionButton(action)
+            }
+            ForEach(presentation.actions.filter { $0.emphasis == .secondary }) { action in
+                actionButton(action)
+            }
+            Spacer(minLength: 12)
+            ForEach(presentation.actions.filter { $0.emphasis == .primary }) { action in
                 actionButton(action)
             }
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 16)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(height: 37)
     }
 
     @ViewBuilder
     private func actionButton(_ action: OnboardingActionPresentation) -> some View {
-        switch action.emphasis {
-        case .primary:
+        if action.emphasis == .primary {
             baseButton(action)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(WorkspaceButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)
-        case .secondary:
+        } else {
             baseButton(action)
-                .buttonStyle(.bordered)
-        case .quiet:
-            baseButton(action)
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+                .buttonStyle(WorkspaceButtonStyle(kind: .quiet))
         }
     }
 
     private func baseButton(_ action: OnboardingActionPresentation) -> some View {
-        Button(LocalizedStringKey(action.title)) {
+        Button(LocalizedStringKey(displayActionTitle(action))) {
             perform(action.id)
         }
         .disabled(!action.isEnabled)
         .focused($focusedAction, equals: action.id)
         .accessibilityHint(action.accessibilityHint)
         .accessibilityIdentifier(action.accessibilityIdentifier)
+    }
+
+    private func displayActionTitle(_ action: OnboardingActionPresentation) -> String {
+        switch action.id {
+        case .continueFromWelcome: "Start Setup"
+        case .setAsDefault: "Set as Default Browser"
+        case .finishLinkHandlingLater: "Set Up Later"
+        case .startTestLink: "Open Test Link"
+        case .retryCompletionSave: action.title
+        default: action.title
+        }
     }
 
     private func perform(_ action: OnboardingActionID) {

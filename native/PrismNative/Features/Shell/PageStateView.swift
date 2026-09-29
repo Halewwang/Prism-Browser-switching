@@ -115,14 +115,15 @@ struct PageStateView: View {
             stateSymbol
 
             Text(LocalizedStringKey(model.title))
-                .font(.title2.weight(.semibold))
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(SettingsPalette.primary)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
 
             if let message = model.message {
                 Text(LocalizedStringKey(message))
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(SettingsPalette.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 440)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).message")
@@ -148,7 +149,7 @@ struct PageStateView: View {
         } else if let iconSystemName = model.iconSystemName {
             Image(systemName: iconSystemName)
                 .font(.system(size: 30, weight: .regular))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SettingsPalette.secondary)
                 .accessibilityHidden(true)
         }
     }
@@ -158,10 +159,10 @@ struct PageStateView: View {
             ForEach(Array(model.actions.enumerated()), id: \.element.id) { index, action in
                 if index == 0 {
                     actionButton(action)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(WorkspaceButtonStyle(kind: .primary))
                 } else {
                     actionButton(action)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
                 }
             }
         }

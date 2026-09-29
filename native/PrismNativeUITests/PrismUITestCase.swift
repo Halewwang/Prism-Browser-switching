@@ -22,15 +22,17 @@ class PrismUITestCase: XCTestCase {
     func launchFixture(
         _ fixture: String,
         appearance: PrismUITestAppearance = .light,
+        language: String = "en",
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> XCUIApplication {
         let application = XCUIApplication()
         application.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
-            "-AppleLanguages", "(en)",
-            "-AppleLocale", "en_US",
+            "-AppleLanguages", "(\(language))",
+            "-AppleLocale", language == "zh-Hans" ? "zh_CN" : "en_US",
             "-AppleInterfaceStyle", appearance.rawValue,
+            "-AppleKeyboardUIMode", "3",
             "--ui-testing", "--app-fixture", fixture,
         ]
         launchedApplications.append(application)
@@ -82,8 +84,8 @@ class PrismUITestCase: XCTestCase {
             file: file,
             line: line
         )
-        XCTAssertGreaterThanOrEqual(window.frame.width, 760, file: file, line: line)
-        XCTAssertGreaterThanOrEqual(window.frame.height, 520, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(window.frame.width, 668, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(window.frame.height, 554, file: file, line: line)
         return window
     }
 
@@ -127,6 +129,10 @@ class PrismUITestCase: XCTestCase {
         }
         XCTAssertEqual(query.count, 1, "Button identifier \(identifier) is not unique", file: file, line: line)
         XCTAssertTrue(button.isEnabled, "Button \(identifier) is disabled", file: file, line: line)
+        if !button.isHittable {
+            application.activate()
+            _ = waitUntil(timeout: 2, file: file, line: line) { button.isHittable }
+        }
         XCTAssertTrue(button.isHittable, "Button \(identifier) is not visible or hittable", file: file, line: line)
         return button
     }
@@ -180,7 +186,16 @@ class PrismUITestCase: XCTestCase {
         verifiesAppearance: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) throws -> XCUIScreenshot {
+    ) throws -> XCUIScreenshot? {
+        if ProcessInfo.processInfo.environment["PRISM_UI_CAPTURE_MODE"] == "accessibility" {
+            _ = requireMainWindow(in: application, file: file, line: line)
+            attachAXHierarchy(of: application, name: "ax-\(appearance.attachmentSlug)-\(name)")
+            print("MANUAL_CAPTURE_CHECKPOINT \(appearance.attachmentSlug)-\(name)")
+            if let pause = Double(ProcessInfo.processInfo.environment["PRISM_UI_CAPTURE_PAUSE"] ?? "0"), pause > 0 {
+                RunLoop.current.run(until: Date().addingTimeInterval(min(pause, 45)))
+            }
+            return nil
+        }
         let screenshot = requireMainWindow(in: application, file: file, line: line).screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = "\(appearance.attachmentSlug)-\(name)"
