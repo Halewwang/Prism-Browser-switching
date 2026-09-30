@@ -367,7 +367,7 @@ final class ProductionAppComposition {
         let environment = AppEnvironment(
             route: .history,
             unmatchedBehavior: .alwaysAsk,
-            updateChecker: SparkleUpdateChecker.makeIfConfigured(),
+            updateChecker: UpdateCheckerFactory.makeIfConfigured(),
             ruleRepository: repositories.rules,
             historyRepository: repositories.history,
             browserPreferenceRepository: repositories.browsers,
