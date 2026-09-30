@@ -368,6 +368,19 @@ import Testing
     #expect(manifest.eligibleBundleIDs(for: OperatingSystemVersion(majorVersion: 14, minorVersion: 9, patchVersion: 9)).isEmpty)
 }
 
+@Test func sourceVerificationStatusUsesOnlyManifestEvidenceForCurrentOS() throws {
+    let manifest = try SourceSupportManifest.decode(manifestData(sources: [validatedSource()]))
+    let inRange = OperatingSystemVersion(majorVersion: 15, minorVersion: 1, patchVersion: 0)
+    let outOfRange = OperatingSystemVersion(majorVersion: 16, minorVersion: 0, patchVersion: 0)
+
+    #expect(manifest.supportStatus(for: "com.tinyspeck.slackmacgap", on: inRange) == .verified)
+    #expect(manifest.supportStatus(for: "com.tinyspeck.slackmacgap", on: outOfRange) == .pendingVerification)
+    #expect(manifest.supportStatus(for: "com.example.unlisted", on: inRange) == .pendingVerification)
+    #expect(SourceSupportManifest.disabled.supportStatus(for: "com.tinyspeck.slackmacgap", on: inRange) == .pendingVerification)
+    #expect(SourceSupportManifest.loadBundled(resourceData: Data("invalid".utf8))
+        .supportStatus(for: "com.tinyspeck.slackmacgap", on: inRange) == .pendingVerification)
+}
+
 private func expectManifestRejection(_ data: Data, sourceLocation: SourceLocation = #_sourceLocation) {
     do {
         _ = try SourceSupportManifest.decode(data)
@@ -376,6 +389,108 @@ private func expectManifestRejection(_ data: Data, sourceLocation: SourceLocatio
         // Rejection is the expected fail-closed result.
     }
 }
+
+#if DEBUG
+@Suite("Source probe evidence")
+@MainActor
+struct SourceProbeEvidenceTests {
+    @Test func chineseDisplayNamePassesUsingIndependentExpectedBundle() throws {
+        let fixture = ProbeFixture()
+        defer { fixture.cleanup() }
+        fixture.recorder.record(fixture.capture(displayName: "飞书", bundleIdentifier: "com.electron.lark"))
+        try fixture.append(expectedBundleIdentifier: "com.electron.lark")
+
+        let row = try #require(fixture.rows().first)
+        #expect(row["passed"] as? Bool == true)
+        #expect(row["appName"] as? String == "飞书")
+    }
+
+    @Test func englishDisplayNameCannotHideWrongExpectedBundle() throws {
+        let fixture = ProbeFixture()
+        defer { fixture.cleanup() }
+        fixture.recorder.record(fixture.capture(displayName: "Lark", bundleIdentifier: "com.example.wrong"))
+        try fixture.append(expectedBundleIdentifier: "com.electron.lark")
+        #expect(try fixture.rows().first?["passed"] as? Bool == false)
+    }
+
+    @Test func distinctCapturesWithinOneSecondHaveDistinctIDsAndRepeatedSaveKeepsID() throws {
+        let fixture = ProbeFixture()
+        defer { fixture.cleanup() }
+        let timestamp = Date(timeIntervalSince1970: 100.123)
+        fixture.recorder.record(fixture.capture(timestamp: timestamp))
+        try fixture.append()
+        try fixture.append()
+        fixture.recorder.record(fixture.capture(timestamp: timestamp.addingTimeInterval(0.001)))
+        try fixture.append()
+
+        let rows = try fixture.rows()
+        let firstID = try #require(rows[0]["captureID"] as? String)
+        let repeatedID = try #require(rows[1]["captureID"] as? String)
+        let nextID = try #require(rows[2]["captureID"] as? String)
+        #expect(UUID(uuidString: firstID) != nil)
+        #expect(firstID == repeatedID)
+        #expect(firstID != nextID)
+        #expect(rows[0]["timestamp"] as? String != rows[2]["timestamp"] as? String)
+        #expect(Set(rows[0].keys) == ["captureID", "timestamp", "appName", "bundleIdentifier", "senderPIDPresent", "confidence", "expectedSource", "runState", "passed"])
+    }
+
+    @Test func blankOrInvalidExpectedBundleDoesNotWriteEvidence() throws {
+        let fixture = ProbeFixture()
+        defer { fixture.cleanup() }
+        fixture.recorder.record(fixture.capture())
+        for expected in ["", "https://private.invalid/test", "free text"] {
+            #expect(throws: SourceProbeRecorderError.self) {
+                try fixture.append(expectedBundleIdentifier: expected)
+            }
+        }
+        #expect(!FileManager.default.fileExists(atPath: fixture.fileURL.path))
+    }
+
+    @Test func confirmedCaptureWithoutSenderPIDCannotPass() throws {
+        let fixture = ProbeFixture()
+        defer { fixture.cleanup() }
+        fixture.recorder.record(fixture.capture(senderPIDPresent: false))
+        try fixture.append()
+        #expect(try fixture.rows().first?["passed"] as? Bool == false)
+    }
+}
+
+@MainActor
+private struct ProbeFixture {
+    let directory: URL
+    let fileURL: URL
+    let recorder: SourceProbeRecorder
+
+    init() {
+        directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        fileURL = directory.appending(path: "synthetic-probe.jsonl")
+        recorder = SourceProbeRecorder(fileURL: fileURL)
+    }
+
+    func capture(
+        timestamp: Date = Date(timeIntervalSince1970: 100),
+        displayName: String = "Lark",
+        bundleIdentifier: String = "com.electron.lark",
+        senderPIDPresent: Bool = true
+    ) -> LinkCaptureDiagnostic {
+        LinkCaptureDiagnostic(timestamp: timestamp, sourceDisplayName: displayName, sourceBundleIdentifier: bundleIdentifier, senderPIDPresent: senderPIDPresent, confidence: .confirmed)
+    }
+
+    func append(expectedBundleIdentifier: String = "com.electron.lark") throws {
+        try recorder.appendEvidence(expectedSource: "Lark", expectedBundleIdentifier: expectedBundleIdentifier, runState: .cold, passed: true)
+    }
+
+    func rows() throws -> [[String: Any]] {
+        try String(contentsOf: fileURL, encoding: .utf8).split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+    }
+
+    func cleanup() {
+        try? FileManager.default.removeItem(at: directory)
+    }
+}
+#endif
 
 private func manifestData(schemaVersion: Int = 1, sources: [[String: Any]]) -> Data {
     try! JSONSerialization.data(withJSONObject: ["schemaVersion": schemaVersion, "sources": sources], options: [.sortedKeys])

@@ -19,9 +19,14 @@ protocol BrowserLaunching: AnyObject {
 @MainActor
 final class BrowserLauncherService: BrowserLaunching {
     private let workspace: any WorkspaceClient
+    private let profileDiscovery: ChromiumProfileDiscovery
 
-    init(workspace: any WorkspaceClient = SystemWorkspaceClient()) {
+    init(
+        workspace: any WorkspaceClient = SystemWorkspaceClient(),
+        profileDiscovery: ChromiumProfileDiscovery = ChromiumProfileDiscovery()
+    ) {
         self.workspace = workspace
+        self.profileDiscovery = profileDiscovery
     }
 
     func open(_ url: URL, with browser: BrowserDescriptor) async throws -> BrowserLaunchResult {
@@ -33,8 +38,21 @@ final class BrowserLauncherService: BrowserLaunching {
         }
 
         do {
-            try await workspace.open(url, with: browser.applicationURL)
+            if let profile = browser.profile {
+                guard browser.id == profile.browserID(bundleIdentifier: browser.bundleIdentifier),
+                      profileDiscovery.isAvailable(profile, bundleIdentifier: browser.bundleIdentifier) else {
+                    throw BrowserLaunchError.applicationUnavailable
+                }
+                try await workspace.openApplication(
+                    at: browser.applicationURL,
+                    arguments: ["--profile-directory=\(profile.directoryName)", url.absoluteString]
+                )
+            } else {
+                try await workspace.open(url, with: browser.applicationURL)
+            }
             return .handoffSucceeded
+        } catch let error as BrowserLaunchError {
+            throw error
         } catch WorkspaceClientError.applicationUnavailable {
             throw BrowserLaunchError.applicationUnavailable
         } catch WorkspaceClientError.rejected {

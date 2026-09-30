@@ -65,11 +65,24 @@ final class BrowserOrderRecord {
     }
 
     func replace(with ids: [BrowserID]) throws {
-        orderedIDsPayload = try JSONEncoder().encode(VersionedBrowserOrder(version: 1, ids: ids.map(\.rawValue)))
+        let hidden = try hiddenBrowserIDs()
+        orderedIDsPayload = try JSONEncoder().encode(VersionedBrowserOrder(version: 1, ids: ids.map(\.rawValue), hiddenIDs: hidden.map(\.rawValue)))
+    }
+
+    func hiddenBrowserIDs() throws -> [BrowserID] {
+        let payload = try JSONDecoder().decode(VersionedBrowserOrder.self, from: orderedIDsPayload)
+        guard payload.version == 1 else { throw PersistenceRecordError.invalidPayload }
+        return (payload.hiddenIDs ?? []).map(BrowserID.init(rawValue:))
+    }
+
+    func replaceHiddenBrowserIDs(with ids: [BrowserID]) throws {
+        let order = try browserIDs()
+        orderedIDsPayload = try JSONEncoder().encode(VersionedBrowserOrder(version: 1, ids: order.map(\.rawValue), hiddenIDs: ids.map(\.rawValue)))
     }
 }
 
 private struct VersionedBrowserOrder: Codable {
     let version: Int
     let ids: [String]
+    var hiddenIDs: [String]? = nil
 }

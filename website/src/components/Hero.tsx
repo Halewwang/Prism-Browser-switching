@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { Command } from 'lucide-react';
+import { Command, Download } from 'lucide-react';
+import { release } from '../release';
 
 export const Hero = () => {
   return (
@@ -19,26 +20,36 @@ export const Hero = () => {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 text-neutral-800 text-xs font-semibold mb-6 border border-neutral-200">
             <span className="flex h-2 w-2 rounded-full bg-black"></span>
-            v1.10.19 Now Available
+            v{release.version} · {release.channel}
           </div>
-          
+
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-neutral-900 mb-6 leading-tight">
             Master Your Links <br className="hidden sm:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-neutral-900 to-neutral-600">
               on macOS
             </span>
           </h1>
-          
+
           <p className="text-lg md:text-xl text-neutral-600 max-w-2xl mx-auto mb-10 leading-relaxed px-4">
-            The intelligent browser router for power users. Automatically open links in the right browser based on rules, source apps, and your habits.
+            A native browser router for macOS. Open links with URL rules, route confirmed source apps, or choose a browser yourself.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 md:mb-16">
-            <div className="flex items-center gap-4 text-neutral-500 text-sm font-medium bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-neutral-100">
+          <div className="flex flex-col items-center justify-center gap-4 mb-12 md:mb-16">
+            <a href={release.downloadUrl} className="inline-flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-full font-medium hover:bg-neutral-800 transition-colors shadow-lg">
+              <Download size={18} /> Download Native Public Test
+            </a>
+            <div className="flex flex-wrap justify-center items-center gap-3 text-neutral-500 text-sm font-medium bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-neutral-100">
                <span className="flex items-center gap-1"><Command size={14}/> Open Source</span>
                <span className="text-neutral-300">•</span>
-               <span>macOS 11.0+</span>
+               <span>{release.minimumSystem}</span>
+               <span className="text-neutral-300">•</span>
+               <span>{release.architecture}</span>
             </div>
+            <p className="text-sm text-neutral-500 max-w-xl leading-relaxed">
+              Build {release.build}. This test build uses ad hoc signing, without Developer ID signing or Apple notarization.
+              See the first-open steps below.{' '}
+              <a href="#public-test" className="underline underline-offset-4 hover:text-neutral-900">Installation &amp; test limits</a>
+            </p>
           </div>
         </motion.div>
 
@@ -52,27 +63,28 @@ export const Hero = () => {
           <div className="relative">
              <div className="rounded-lg md:rounded-2xl overflow-hidden shadow-2xl border border-neutral-200/60 bg-white flex items-center justify-center relative group">
                 {/* Image 1: Main App Window */}
-                <img 
-                  src="/app-screenshot-main.png" 
-                  alt="Prism App Main Window" 
-                  className="w-full h-auto object-cover transform group-hover:scale-[1.01] transition-transform duration-700" 
+                <img
+                  src="/app-screenshot-main.png"
+                  alt="Native Prism rules window with URL and source application groups"
+                  className="w-full h-auto object-cover transform group-hover:scale-[1.01] transition-transform duration-700"
                 />
              </div>
-             
+
              {/* Image 2: Floating Selector Popup (Overlay) */}
-             <motion.div 
+             <motion.div
                 initial={{ opacity: 0, y: 20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: 0.6, delay: 0.8 }}
                 className="absolute bottom-[5%] right-[-5%] w-[45%] md:w-[40%] rounded-xl md:rounded-2xl overflow-hidden shadow-2xl border border-neutral-200/60 bg-white"
              >
-                <img 
-                  src="/app-screenshot-popup.png" 
-                  alt="Prism Browser Selector" 
-                  className="w-full h-auto object-cover" 
+                <img
+                  src="/app-screenshot-popup.png"
+                  alt="Native Prism browser selector with numbered browser choices"
+                  className="w-full h-auto object-cover"
                 />
              </motion.div>
           </div>
+          <p className="mt-6 text-xs md:text-sm text-neutral-500">Screenshots show v1.13.1 as an interface illustration; v1.14.0 may differ.</p>
         </motion.div>
       </div>
     </section>

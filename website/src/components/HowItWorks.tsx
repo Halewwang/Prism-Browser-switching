@@ -4,19 +4,19 @@ const steps = [
   {
     icon: <MousePointerClick className="w-8 h-8 text-white z-10" />,
     title: "Click a Link",
-    description: "Click any link in any application like Slack, Discord, or Mail.",
+    description: "Set Prism as your default browser, then open an HTTP or HTTPS link from an application.",
     color: "bg-neutral-800"
   },
   {
     icon: <Settings className="w-8 h-8 text-white z-10" />,
     title: "Prism Activates",
-    description: "Prism intercepts the request and checks your predefined rules.",
+    description: "Prism checks URL rules first. Source-app rules apply only when the sender is confirmed; source detection varies by application.",
     color: "bg-neutral-700"
   },
   {
     icon: <ExternalLink className="w-8 h-8 text-white z-10" />,
     title: "Browser Opens",
-    description: "The correct browser opens automatically. If no rule matches, you choose.",
+    description: "A matching rule opens its browser. Otherwise, Prism uses your fallback setting or lets you choose.",
     color: "bg-neutral-600"
   }
 ];

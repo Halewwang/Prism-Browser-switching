@@ -6,6 +6,7 @@ import Foundation
 protocol WorkspaceClient {
     func applicationURLs(toOpen url: URL) -> [URL]
     func open(_ url: URL, with applicationURL: URL) async throws
+    func openApplication(at applicationURL: URL, arguments: [String]) async throws
     func icon(for applicationURL: URL) -> NSImage
 }
 
@@ -156,5 +157,23 @@ final class SystemWorkspaceClient: WorkspaceClient {
 
     func icon(for applicationURL: URL) -> NSImage {
         NSWorkspace.shared.icon(forFile: applicationURL.path)
+    }
+
+    func openApplication(at applicationURL: URL, arguments: [String]) async throws {
+        guard FileManager.default.fileExists(atPath: applicationURL.path) else {
+            throw WorkspaceClientError.applicationUnavailable
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = arguments
+        configuration.createsNewApplicationInstance = true
+        let completionAdapter = completionAdapter
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            NSWorkspace.shared.openApplication(at: applicationURL, configuration: configuration) { application, error in
+                switch completionAdapter.resolve(didLaunchApplication: application != nil, error: error as NSError?) {
+                case .accepted: continuation.resume()
+                case let .failure(error): continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }

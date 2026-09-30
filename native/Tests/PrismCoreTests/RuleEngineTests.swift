@@ -322,3 +322,18 @@ private func rule(
         updatedAt: Date(timeIntervalSince1970: 2)
     )
 }
+
+@Test func rulePreviewFindsTheSameCandidateEvenWhenItsTargetIsUnavailable() {
+    let request = LinkRequest.fixture(url: "https://github.com/path", sourceBundleID: "com.example.source", confidence: .low)
+    let sourceRule = rule(id: .test(60), matcher: .sourceBundleIdentifier("com.example.source"), browser: "source", priority: 0)
+    var urlRule = rule(id: .test(61), matcher: .exactHost("github.com"), browser: "unavailable", priority: 9)
+    let engine = RuleEngine()
+    #expect(engine.matchingRule(request: request, rules: [sourceRule, urlRule], settings: .defaults) == urlRule)
+    #expect(engine.decide(request: request, rules: [sourceRule, urlRule], availableBrowserIDs: [], eligibleSourceBundleIDs: [], settings: .defaults) == .ask(reason: .targetUnavailable("unavailable")))
+    urlRule.isEnabled = false
+    #expect(engine.matchingRule(request: request, rules: [sourceRule, urlRule], settings: .defaults) == sourceRule)
+    #expect(engine.decide(request: request, rules: [sourceRule, urlRule], availableBrowserIDs: ["source"], eligibleSourceBundleIDs: [], settings: .defaults) == .ask(reason: .sourceNotConfirmed))
+    var paused = AppSettings.defaults
+    paused.automaticRulesEnabled = false
+    #expect(engine.matchingRule(request: request, rules: [sourceRule], settings: paused) == nil)
+}

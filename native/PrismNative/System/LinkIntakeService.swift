@@ -111,7 +111,7 @@ final class BootstrapLinkBuffer {
         return true
     }
 
-    static func accepts(_ url: URL) -> Bool {
+    nonisolated static func accepts(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http" || scheme == "https"
     }

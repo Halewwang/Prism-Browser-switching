@@ -4,6 +4,11 @@ import PrismCore
 @MainActor
 protocol BrowserCataloging: AnyObject {
     func scan() async throws -> [BrowserDescriptor]
+    func scanForSelector() async throws -> [BrowserDescriptor]
+}
+
+extension BrowserCataloging {
+    func scanForSelector() async throws -> [BrowserDescriptor] { try await scan() }
 }
 
 enum BrowserCatalogError: Error, Equatable {
@@ -22,19 +27,22 @@ final class BrowserCatalogService: BrowserCataloging {
     private let configuredSelectorOrder: [BrowserID]
     private let browserPreferences: (any BrowserPreferenceRepository)?
     private let prismBundleIdentifier: String
+    private let profileDiscovery: ChromiumProfileDiscovery
 
     init(
         workspace: any WorkspaceClient = SystemWorkspaceClient(),
         customBrowsers: [BrowserDescriptor] = [],
         savedSelectorOrder: [BrowserID] = [],
         browserPreferences: (any BrowserPreferenceRepository)? = nil,
-        prismBundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.prism.app"
+        prismBundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.prism.app",
+        profileDiscovery: ChromiumProfileDiscovery = ChromiumProfileDiscovery()
     ) {
         self.workspace = workspace
         configuredCustomBrowsers = customBrowsers
         configuredSelectorOrder = savedSelectorOrder
         self.browserPreferences = browserPreferences
         self.prismBundleIdentifier = prismBundleIdentifier
+        self.profileDiscovery = profileDiscovery
     }
 
     func scan() async throws -> [BrowserDescriptor] {
@@ -67,9 +75,28 @@ final class BrowserCatalogService: BrowserCataloging {
         }
 
         return ordered(
-            identifiersInDiscoveryOrder.compactMap { byBundleIdentifier[$0] },
+            identifiersInDiscoveryOrder.compactMap { byBundleIdentifier[$0] }.flatMap { browser in
+                [browser] + profileDiscovery.profiles(for: browser.bundleIdentifier).map { profile in
+                    BrowserDescriptor(
+                        id: profile.browserID(bundleIdentifier: browser.bundleIdentifier),
+                        bundleIdentifier: browser.bundleIdentifier,
+                        displayName: "\(browser.displayName) · \(profile.displayName)",
+                        applicationURL: browser.applicationURL,
+                        securityScopedBookmark: browser.securityScopedBookmark,
+                        origin: browser.origin,
+                        availability: .available,
+                        selectorOrder: 0,
+                        profile: profile
+                    )
+                }
+            },
             savedSelectorOrder: savedSelectorOrder
         )
+    }
+
+    func scanForSelector() async throws -> [BrowserDescriptor] {
+        let hidden = Set(try browserPreferences?.hiddenBrowserIDs() ?? [])
+        return try await scan().filter { !hidden.contains($0.id) }
     }
 
     func saveCustomBrowser(at applicationURL: URL) throws -> BrowserDescriptor {
@@ -193,7 +220,8 @@ final class BrowserCatalogService: BrowserCataloging {
                 securityScopedBookmark: browser.securityScopedBookmark,
                 origin: browser.origin,
                 availability: browser.availability,
-                selectorOrder: index
+                selectorOrder: index,
+                profile: browser.profile
             )
         }
     }

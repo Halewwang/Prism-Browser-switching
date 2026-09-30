@@ -86,7 +86,7 @@ struct RuleEditorDraft: Identifiable {
             matchValue = bundleIdentifier
             label = displayName
             targetBrowserID = browserID
-        case nil:
+        case .savedRule, nil:
             matchKind = .domainAndSubdomains
             matchValue = ""
         }
@@ -94,6 +94,14 @@ struct RuleEditorDraft: Identifiable {
 
     var canSave: Bool {
         matcher != nil && targetBrowserID != nil
+    }
+
+    func sourceSupportStatus(
+        manifest: SourceSupportManifest,
+        operatingSystemVersion: OperatingSystemVersion
+    ) -> SourceRuleSupportStatus? {
+        guard case let .sourceBundleIdentifier(bundleIdentifier) = matcher else { return nil }
+        return manifest.supportStatus(for: bundleIdentifier, on: operatingSystemVersion)
     }
 
     var matcher: RuleMatcher? {
@@ -111,6 +119,20 @@ struct RuleEditorDraft: Identifiable {
             return .urlContains(value)
         case .sourceApplication:
             return .sourceBundleIdentifier(value)
+        }
+    }
+
+    var scopeDescription: String {
+        guard let matcher else { return String(localized: "rules.scope.empty", defaultValue: "Enter a condition to preview its scope.") }
+        switch matcher {
+        case let .exactHost(host):
+            return String(format: String(localized: "rules.scope.exact", defaultValue: "Only the domain %@; subdomains are excluded."), host)
+        case let .hostAndSubdomains(host):
+            return String(format: String(localized: "rules.scope.subdomains", defaultValue: "%@ and all of its subdomains."), host)
+        case let .urlContains(value):
+            return String(format: String(localized: "rules.scope.contains", defaultValue: "Any URL containing %@."), value)
+        case let .sourceBundleIdentifier(bundleIdentifier):
+            return String(format: String(localized: "rules.scope.source", defaultValue: "Links with a confirmed sender matching %@."), bundleIdentifier)
         }
     }
 

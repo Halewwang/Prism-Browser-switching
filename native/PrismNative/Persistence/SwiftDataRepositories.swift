@@ -38,6 +38,8 @@ protocol HistoryRepository {
 protocol BrowserPreferenceRepository {
     func orderedBrowserIDs() throws -> [BrowserID]
     func saveOrder(_ ids: [BrowserID]) throws
+    func hiddenBrowserIDs() throws -> [BrowserID]
+    func saveHiddenBrowserIDs(_ ids: [BrowserID]) throws
     func customBrowsers() throws -> [BrowserDescriptor]
     func upsertCustomBrowser(_ browser: BrowserDescriptor) throws
     func deleteCustomBrowser(id: BrowserID) throws
@@ -52,9 +54,11 @@ protocol SettingsRepository {
 @MainActor
 final class SwiftDataRuleRepository: RuleRepository {
     private let context: ModelContext
+    private let commit: (ModelContext) throws -> Void
 
-    init(container: ModelContainer) {
+    init(container: ModelContainer, commit: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         context = ModelContext(container)
+        self.commit = commit
     }
 
     func all() throws -> [RoutingRule] {
@@ -64,12 +68,17 @@ final class SwiftDataRuleRepository: RuleRepository {
     }
 
     func upsert(_ rule: RoutingRule) throws {
-        if let record = try context.fetch(FetchDescriptor<RuleRecord>()).first(where: { $0.id == rule.id }) {
-            try record.replace(with: rule)
-        } else {
-            context.insert(try RuleRecord(rule: rule))
+        do {
+            if let record = try context.fetch(FetchDescriptor<RuleRecord>()).first(where: { $0.id == rule.id }) {
+                try record.replace(with: rule)
+            } else {
+                context.insert(try RuleRecord(rule: rule))
+            }
+            try commit(context)
+        } catch {
+            context.rollback()
+            throw error
         }
-        try context.save()
     }
 
     func updatePriorities(_ rules: [RoutingRule]) throws {
@@ -81,7 +90,7 @@ final class SwiftDataRuleRepository: RuleRepository {
                 }
                 try record.replace(with: rule)
             }
-            try context.save()
+            try commit(context)
         } catch {
             context.rollback()
             throw error
@@ -89,9 +98,14 @@ final class SwiftDataRuleRepository: RuleRepository {
     }
 
     func delete(id: UUID) throws {
-        if let record = try context.fetch(FetchDescriptor<RuleRecord>()).first(where: { $0.id == id }) {
-            context.delete(record)
-            try context.save()
+        do {
+            if let record = try context.fetch(FetchDescriptor<RuleRecord>()).first(where: { $0.id == id }) {
+                context.delete(record)
+                try commit(context)
+            }
+        } catch {
+            context.rollback()
+            throw error
         }
     }
 
@@ -290,12 +304,38 @@ final class SwiftDataBrowserPreferenceRepository: BrowserPreferenceRepository {
     }
 
     func saveOrder(_ ids: [BrowserID]) throws {
-        if let record = try context.fetch(FetchDescriptor<BrowserOrderRecord>()).first(where: { $0.key == "primary" }) {
-            try record.replace(with: ids)
-        } else {
-            context.insert(try BrowserOrderRecord(ids: ids))
+        do {
+            if let record = try context.fetch(FetchDescriptor<BrowserOrderRecord>()).first(where: { $0.key == "primary" }) {
+                try record.replace(with: ids)
+            } else {
+                context.insert(try BrowserOrderRecord(ids: ids))
+            }
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
-        try context.save()
+    }
+
+    func hiddenBrowserIDs() throws -> [BrowserID] {
+        try context.fetch(FetchDescriptor<BrowserOrderRecord>()).first(where: { $0.key == "primary" })?.hiddenBrowserIDs() ?? []
+    }
+
+    func saveHiddenBrowserIDs(_ ids: [BrowserID]) throws {
+        do {
+            let record: BrowserOrderRecord
+            if let existing = try context.fetch(FetchDescriptor<BrowserOrderRecord>()).first(where: { $0.key == "primary" }) {
+                record = existing
+            } else {
+                record = try BrowserOrderRecord(ids: [])
+                context.insert(record)
+            }
+            try record.replaceHiddenBrowserIDs(with: ids)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
     }
 
     func customBrowsers() throws -> [BrowserDescriptor] {
@@ -451,6 +491,7 @@ private extension HistoryEntry {
 @MainActor
 final class InMemoryBrowserPreferenceRepository: BrowserPreferenceRepository {
     private var orderedIDs: [BrowserID] = []
+    private var hiddenIDs: [BrowserID] = []
     private var browsers: [BrowserID: BrowserDescriptor] = [:]
 
     func orderedBrowserIDs() throws -> [BrowserID] {
@@ -460,6 +501,10 @@ final class InMemoryBrowserPreferenceRepository: BrowserPreferenceRepository {
     func saveOrder(_ ids: [BrowserID]) throws {
         orderedIDs = ids
     }
+
+    func hiddenBrowserIDs() throws -> [BrowserID] { hiddenIDs }
+
+    func saveHiddenBrowserIDs(_ ids: [BrowserID]) throws { hiddenIDs = ids }
 
     func customBrowsers() throws -> [BrowserDescriptor] {
         browsers.values.sorted { $0.selectorOrder < $1.selectorOrder }

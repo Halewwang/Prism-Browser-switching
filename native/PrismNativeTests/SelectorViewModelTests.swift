@@ -356,7 +356,21 @@ struct SelectorViewModelTests {
         #expect(fixture.model.canRescan)
     }
 
-    @Test func ruleIntentsUseExactHostAndGateSourceByConfidenceAndEligibility() {
+    @Test(arguments: [SelectorReason.noMatchingRule, .rulesPaused, .sourceNotConfirmed])
+    func normalSelectorReasonsAreInformational(_ reason: SelectorReason) {
+        let fixture = SelectorFixture(browserCount: 1, context: .ruleSkipped(reason))
+        #expect(fixture.model.accessibleFailureMessage != nil)
+        #expect(!fixture.model.isFailurePresentation)
+    }
+
+    @Test func actualLaunchAndUnavailableTargetRemainWarnings() {
+        let failed = SelectorFixture(browserCount: 1, context: .launchFailed(browserID: "browser-0", message: "Failed"))
+        let unavailable = SelectorFixture(browserCount: 1, context: .ruleSkipped(.targetUnavailable("missing")))
+        #expect(failed.model.isFailurePresentation)
+        #expect(unavailable.model.isFailurePresentation)
+    }
+
+    @Test func ruleIntentsUseExactHostAndGateSourceByConfidence() {
         let confirmed = SourceApplication(
             bundleIdentifier: "com.example.eligible",
             displayName: "Eligible Source",
@@ -382,6 +396,41 @@ struct SelectorViewModelTests {
         #expect(fixture.routing.calls.isEmpty)
     }
 
+    @Test func confirmedUnverifiedSourceCanOpenPrefilledEditorWithoutRouting() {
+        let source = SourceApplication(
+            bundleIdentifier: "com.example.unverified",
+            displayName: "Unverified Source",
+            confidence: .confirmed
+        )
+        let fixture = SelectorFixture(browserCount: 1, source: source)
+
+        #expect(fixture.model.canCreateSourceRule)
+        #expect(fixture.model.sourceRuleSupportStatus == .pendingVerification)
+        #expect(fixture.model.sourceRuleSupportMessage == SourceRuleSupportStatus.pendingVerification.message)
+        fixture.model.openSourceRule(browserID: fixture.browsers[0].id)
+        #expect(fixture.navigation.rulePrefills == [.source(
+            bundleIdentifier: "com.example.unverified",
+            displayName: "Unverified Source",
+            browserID: fixture.browsers[0].id
+        )])
+        #expect(fixture.routing.calls.isEmpty)
+    }
+
+    @Test func confirmedVerifiedSourceShowsVerificationWithoutChangingDraftIntent() {
+        let source = SourceApplication(bundleIdentifier: "com.example.verified", displayName: "Verified Source", confidence: .confirmed)
+        let fixture = SelectorFixture(browserCount: 1, source: source, eligibleSourceBundleIDs: ["com.example.verified"])
+        #expect(fixture.model.canCreateSourceRule)
+        #expect(fixture.model.sourceRuleSupportStatus == .verified)
+    }
+
+    @Test func confirmedBlankSourceCannotCreateRule() {
+        let source = SourceApplication(bundleIdentifier: " \n", displayName: "Source", confidence: .confirmed)
+        let fixture = SelectorFixture(browserCount: 1, source: source)
+        #expect(!fixture.model.canCreateSourceRule)
+        fixture.model.openSourceRule(browserID: fixture.browsers[0].id)
+        #expect(fixture.navigation.rulePrefills.isEmpty)
+    }
+
     @Test(arguments: [SourceConfidence.low, .unknown])
     func unconfirmedSourceNeverOffersSourceRule(confidence: SourceConfidence) {
         let source = SourceApplication(
@@ -396,6 +445,8 @@ struct SelectorViewModelTests {
         )
 
         #expect(fixture.model.canCreateSourceRule == false)
+        #expect(fixture.model.sourceRuleSupportStatus == nil)
+        #expect(fixture.model.sourceRuleSupportMessage == nil)
         fixture.model.openSourceRule(browserID: fixture.browsers[0].id)
         #expect(fixture.navigation.rulePrefills.isEmpty)
     }

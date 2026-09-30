@@ -481,6 +481,8 @@ private final class UnavailableRepositories:
 
     func orderedBrowserIDs() throws -> [BrowserID] { throw RepositoryError.unavailable }
     func saveOrder(_: [BrowserID]) throws { throw RepositoryError.unavailable }
+    func hiddenBrowserIDs() throws -> [BrowserID] { throw RepositoryError.unavailable }
+    func saveHiddenBrowserIDs(_: [BrowserID]) throws { throw RepositoryError.unavailable }
     func customBrowsers() throws -> [BrowserDescriptor] { throw RepositoryError.unavailable }
     func upsertCustomBrowser(_: BrowserDescriptor) throws { throw RepositoryError.unavailable }
     func deleteCustomBrowser(id _: BrowserID) throws { throw RepositoryError.unavailable }

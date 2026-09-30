@@ -3,6 +3,7 @@ import { Hero } from './components/Hero';
 import { Features } from './components/Features';
 import { HowItWorks } from './components/HowItWorks';
 import { NewFeatures } from './components/NewFeatures';
+import { PublicTest } from './components/PublicTest';
 import { Footer } from './components/Footer';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
       <Header />
       <main>
         <Hero />
+        <PublicTest />
         <Features />
         <HowItWorks />
         <NewFeatures />

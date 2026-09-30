@@ -13,7 +13,8 @@ final class AppSelectorNavigationHandler: SelectorNavigationHandling {
     }
 
     func openBrowserManagement() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications", isDirectory: true))
+        environment?.stageBrowserManagement()
+        mainWindowOpening.open(route: .settings)
     }
 
     func openRuleEditor(prefill: SelectorRulePrefill) {

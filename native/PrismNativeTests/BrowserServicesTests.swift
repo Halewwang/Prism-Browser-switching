@@ -15,7 +15,7 @@ import XCTest
     defer { fixtures.remove() }
 
     let workspace = StubWorkspaceClient(applicationURLs: fixtures.urls)
-    let catalog = BrowserCatalogService(workspace: workspace, customBrowsers: [])
+    let catalog = BrowserCatalogService(workspace: workspace, customBrowsers: [], profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:]))
 
     let browsers = try await catalog.scan()
 
@@ -50,7 +50,8 @@ import XCTest
     let catalog = BrowserCatalogService(
         workspace: workspace,
         customBrowsers: [],
-        prismBundleIdentifier: "com.prism.app"
+        prismBundleIdentifier: "com.prism.app",
+        profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:])
     )
 
     let browsers = try await catalog.scan()
@@ -85,7 +86,8 @@ import XCTest
     let catalog = BrowserCatalogService(
         workspace: workspace,
         customBrowsers: [custom, invalidCustom],
-        savedSelectorOrder: ["com.example.custom", "com.google.Chrome", "com.apple.Safari"]
+        savedSelectorOrder: ["com.example.custom", "com.google.Chrome", "com.apple.Safari"],
+        profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:])
     )
 
     let browsers = try await catalog.scan()
@@ -109,7 +111,7 @@ import XCTest
             "https": [fixtures.urls[0]]
         ]
     )
-    let catalog = BrowserCatalogService(workspace: workspace, browserPreferences: repository)
+    let catalog = BrowserCatalogService(workspace: workspace, browserPreferences: repository, profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:]))
 
     let saved = try catalog.saveCustomBrowser(at: customAlias)
 
@@ -133,7 +135,7 @@ import XCTest
             "https": []
         ]
     )
-    let catalog = BrowserCatalogService(workspace: workspace, browserPreferences: repository)
+    let catalog = BrowserCatalogService(workspace: workspace, browserPreferences: repository, profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:]))
 
     #expect(throws: BrowserCatalogError.cannotOpenWebLinks) {
         try catalog.saveCustomBrowser(at: fixtures.urls[0])
@@ -490,7 +492,7 @@ final class BrowserServiceContractTests: XCTestCase {
             let workspace = StubWorkspaceClient(
                 applicationURLs: [fixtures.urls[0], unreadableRoot, nonDirectory, remoteURL]
             )
-            let catalog = BrowserCatalogService(workspace: workspace, customBrowsers: [])
+            let catalog = BrowserCatalogService(workspace: workspace, customBrowsers: [], profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: [:]))
 
             let browsers = try await catalog.scan()
 
@@ -504,6 +506,8 @@ private final class StubWorkspaceClient: WorkspaceClient {
     private let applicationURLsByScheme: [String: [URL]]
     private let openError: Error?
     private let applicationIcon: NSImage
+    private(set) var openedURLs: [URL] = []
+    private(set) var profileLaunches: [(URL, [String])] = []
 
     init(
         applicationURLs: [URL],
@@ -529,10 +533,16 @@ private final class StubWorkspaceClient: WorkspaceClient {
         applicationURLsByScheme[url.scheme ?? ""] ?? []
     }
 
-    func open(_: URL, with _: URL) async throws {
+    func open(_ url: URL, with _: URL) async throws {
+        openedURLs.append(url)
         if let openError {
             throw openError
         }
+    }
+
+    func openApplication(at applicationURL: URL, arguments: [String]) async throws {
+        profileLaunches.append((applicationURL, arguments))
+        if let openError { throw openError }
     }
 
     func icon(for _: URL) -> NSImage {
@@ -558,6 +568,10 @@ private final class DeferredWorkspaceClient: WorkspaceClient {
 
     func icon(for _: URL) -> NSImage {
         NSImage(size: NSSize(width: 32, height: 32))
+    }
+
+    func openApplication(at _: URL, arguments _: [String]) async throws {
+        try await open(URL(string: "https://example.com")!, with: URL(fileURLWithPath: "/test.app"))
     }
 
     func succeed() {
@@ -731,4 +745,147 @@ private func browserDescriptor(
     #expect(customRow.id == systemRow.id)
     #expect(customRow.origin == .custom)
     #expect(customRow.availability == .unavailable)
+}
+
+@Test @MainActor func catalogAddsStableProfilesWhileKeepingLegacyBrowserTargets() async throws {
+    let apps = try TemporaryApplicationBundles([("Chrome.app", "com.google.Chrome"), ("Edge.app", "com.microsoft.edgemac")])
+    defer { apps.remove() }
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人", "Profile 1": "工作"])
+    defer { profiles.remove() }
+    let discovery = ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root, "com.microsoft.edgemac": profiles.root])
+    let catalog = BrowserCatalogService(workspace: StubWorkspaceClient(applicationURLs: apps.urls), profileDiscovery: discovery)
+    let first = try await catalog.scan()
+    #expect(first.count == 6)
+    #expect(first.filter { $0.profile == nil }.map(\.id) == ["com.google.Chrome", "com.microsoft.edgemac"])
+    #expect(first.map(\.selectorOrder) == Array(0..<6))
+    let work = try #require(first.first { $0.bundleIdentifier == "com.google.Chrome" && $0.profile?.directoryName == "Profile 1" })
+    #expect(work.displayName == "Chrome · 工作")
+    try profiles.writeMetadata(["Default": "个人", "Profile 1": "重命名"])
+    let renamed = try await catalog.scan()
+    #expect(renamed.first { $0.id == work.id }?.displayName == "Chrome · 重命名")
+    let ordered = BrowserCatalogService(workspace: StubWorkspaceClient(applicationURLs: apps.urls), savedSelectorOrder: [work.id, "com.google.Chrome"], profileDiscovery: discovery)
+    #expect(try await ordered.scan().prefix(2).map(\.id) == [work.id, "com.google.Chrome"])
+}
+
+@Test func profileDiscoveryRejectsMissingUnsafeAndEscapingDirectories() throws {
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人"])
+    defer { profiles.remove() }
+    let outside = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: outside) }
+    try FileManager.default.createSymbolicLink(at: profiles.root.appending(path: "Escape"), withDestinationURL: outside)
+    try profiles.writeMetadata(["Default": "个人", "Escape": "Escape", "Missing": "Missing", "../Outside": "Bad", "/tmp": "Bad", ".": "Bad", "..": "Bad", "Profile\\1": "Bad", "Bad\u{0}": "Bad"])
+    let discovery = ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root])
+    #expect(discovery.profiles(for: "com.google.Chrome").map(\.directoryName) == ["Default"])
+    #expect(discovery.profiles(for: "com.example.unsupported").isEmpty)
+    try Data("broken JSON".utf8).write(to: profiles.root.appending(path: "Local State"))
+    #expect(discovery.profiles(for: "com.google.Chrome").isEmpty)
+}
+
+@Test func profileDiscoveryDoesNotFollowLocalStateOutsideTheRoot() throws {
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人"])
+    defer { profiles.remove() }
+    let other = try TemporaryChromiumProfiles(names: ["Default": "Other"])
+    defer { other.remove() }
+    let state = profiles.root.appending(path: "Local State")
+    try FileManager.default.removeItem(at: state)
+    try FileManager.default.createSymbolicLink(at: state, withDestinationURL: other.root.appending(path: "Local State"))
+    #expect(ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root]).profiles(for: "com.google.Chrome").isEmpty)
+}
+
+@Test @MainActor func launcherPassesProfileAndURLAsArgumentsWithoutAnOrdinaryURLHandoff() async throws {
+    let apps = try TemporaryApplicationBundles([("Chrome.app", "com.google.Chrome")])
+    defer { apps.remove() }
+    let profiles = try TemporaryChromiumProfiles(names: ["Profile 1": "工作"])
+    defer { profiles.remove() }
+    let workspace = StubWorkspaceClient(applicationURLs: apps.urls)
+    let discovery = ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root])
+    let catalog = BrowserCatalogService(workspace: workspace, profileDiscovery: discovery)
+    let browser = try #require(try await catalog.scan().first { $0.profile != nil })
+    let url = URL(string: "https://example.com/work?a=1&b=中文")!
+    #expect(try await BrowserLauncherService(workspace: workspace, profileDiscovery: discovery).open(url, with: browser) == .handoffSucceeded)
+    #expect(workspace.openedURLs.isEmpty)
+    #expect(workspace.profileLaunches.count == 1)
+    #expect(workspace.profileLaunches.first?.0 == apps.urls[0].standardizedFileURL)
+    #expect(workspace.profileLaunches.first?.1 == ["--profile-directory=Profile 1", url.absoluteString])
+}
+
+@Test @MainActor func launcherRejectsDeletedProfileWithoutFallbackOrRecreation() async throws {
+    let apps = try TemporaryApplicationBundles([("Chrome.app", "com.google.Chrome")])
+    defer { apps.remove() }
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人"])
+    defer { profiles.remove() }
+    let workspace = StubWorkspaceClient(applicationURLs: apps.urls)
+    let discovery = ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root])
+    let catalog = BrowserCatalogService(workspace: workspace, profileDiscovery: discovery)
+    let browser = try #require(try await catalog.scan().first { $0.profile != nil })
+    try FileManager.default.removeItem(at: profiles.root.appending(path: "Default"))
+    do {
+        _ = try await BrowserLauncherService(workspace: workspace, profileDiscovery: discovery).open(URL(string: "https://example.com")!, with: browser)
+        Issue.record("Expected unavailable profile")
+    } catch let error as BrowserLaunchError {
+        guard case .applicationUnavailable = error else { Issue.record("Expected unavailable profile"); return }
+    }
+    #expect(workspace.openedURLs.isEmpty)
+    #expect(workspace.profileLaunches.isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: profiles.root.appending(path: "Default").path))
+}
+
+private final class TemporaryChromiumProfiles {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    init(names: [String: String]) throws {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for directory in names.keys {
+            try FileManager.default.createDirectory(at: root.appending(path: directory), withIntermediateDirectories: true)
+        }
+        try writeMetadata(names)
+    }
+    func writeMetadata(_ names: [String: String]) throws {
+        let cache = names.mapValues { ["name": $0, "user_name": "must-not-display@example.com"] }
+        try JSONSerialization.data(withJSONObject: ["profile": ["info_cache": cache], "ignored_private_key": "ignored"])
+            .write(to: root.appending(path: "Local State"))
+    }
+    func remove() { try? FileManager.default.removeItem(at: root) }
+}
+
+@Test @MainActor func catalogKeepsOrdinaryBrowserWhenProfileMetadataIsUnavailable() async throws {
+    let apps = try TemporaryApplicationBundles([("Chrome.app", "com.google.Chrome")])
+    defer { apps.remove() }
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人"])
+    defer { profiles.remove() }
+    try Data("broken JSON".utf8).write(to: profiles.root.appending(path: "Local State"))
+    let catalog = BrowserCatalogService(workspace: StubWorkspaceClient(applicationURLs: apps.urls), profileDiscovery: ChromiumProfileDiscovery(userDataDirectories: ["com.google.Chrome": profiles.root]))
+    let browsers = try await catalog.scan()
+    #expect(browsers.map(\.id) == ["com.google.Chrome"])
+    #expect(browsers.first?.profile == nil)
+}
+
+@Test @MainActor func launcherRejectsRemovedMetadataEvenWhenTheDirectoryRemains() async throws {
+    let apps = try TemporaryApplicationBundles([("Edge.app", "com.microsoft.edgemac")])
+    defer { apps.remove() }
+    let profiles = try TemporaryChromiumProfiles(names: ["Default": "个人"])
+    defer { profiles.remove() }
+    let workspace = StubWorkspaceClient(applicationURLs: apps.urls)
+    let discovery = ChromiumProfileDiscovery(userDataDirectories: ["com.microsoft.edgemac": profiles.root])
+    let browser = try #require(try await BrowserCatalogService(workspace: workspace, profileDiscovery: discovery).scan().first { $0.profile != nil })
+    try profiles.writeMetadata([:])
+    do {
+        _ = try await BrowserLauncherService(workspace: workspace, profileDiscovery: discovery).open(URL(string: "https://example.com")!, with: browser)
+        Issue.record("Expected unavailable profile")
+    } catch let error as BrowserLaunchError {
+        guard case .applicationUnavailable = error else { Issue.record("Expected unavailable profile"); return }
+    }
+    #expect(workspace.openedURLs.isEmpty)
+    #expect(workspace.profileLaunches.isEmpty)
+}
+
+@Test @MainActor func launcherKeepsOrdinaryBrowserHandoffWithoutProfileArguments() async throws {
+    let apps = try TemporaryApplicationBundles([("Chrome.app", "com.google.Chrome")])
+    defer { apps.remove() }
+    let workspace = StubWorkspaceClient(applicationURLs: apps.urls)
+    let browser = browserDescriptor(bundleIdentifier: "com.google.Chrome", applicationURL: apps.urls[0])
+    let url = URL(string: "https://example.com")!
+    #expect(try await BrowserLauncherService(workspace: workspace).open(url, with: browser) == .handoffSucceeded)
+    #expect(workspace.openedURLs == [url])
+    #expect(workspace.profileLaunches.isEmpty)
 }

@@ -40,6 +40,7 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
 
     private(set) var route: AppRoute
     private(set) var pendingSelectorRulePrefill: SelectorRulePrefill?
+    private(set) var pendingBrowserManagement = false
     private(set) var unmatchedBehavior: UnmatchedBehavior
     private(set) var settings: AppSettings
     private(set) var startupPhase: AppStartupPhase
@@ -216,6 +217,16 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
     func consumeSelectorRulePrefill() -> SelectorRulePrefill? {
         defer { pendingSelectorRulePrefill = nil }
         return pendingSelectorRulePrefill
+    }
+
+    func stageBrowserManagement() {
+        pendingBrowserManagement = true
+        route = .settings
+    }
+
+    func consumeBrowserManagement() -> Bool {
+        defer { pendingBrowserManagement = false }
+        return pendingBrowserManagement
     }
 
     func present(_ warning: PersistenceWarning) {

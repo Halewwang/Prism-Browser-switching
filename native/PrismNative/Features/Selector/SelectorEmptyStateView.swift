@@ -14,7 +14,7 @@ struct SelectorEmptyStateView: View {
                 .accessibilityHidden(true)
             Text(failureMessage ?? String(
                 localized: "selector.empty.title",
-                defaultValue: "No browser is available"
+                defaultValue: "No visible browser choices. Rescan or manage browsers."
             ))
             .font(.callout)
             .multilineTextAlignment(.center)

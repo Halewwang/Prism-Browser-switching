@@ -7,6 +7,8 @@ struct RulesManagementView: View {
 
     let browserCatalog: any BrowserCataloging
     var onOpenSettings: (() -> Void)? = nil
+    var sourceManifest: SourceSupportManifest = .bundled()
+    var operatingSystemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
 
     @State private var rules: [RoutingRule] = []
     @State private var browsers: [BrowserDescriptor] = []
@@ -17,6 +19,9 @@ struct RulesManagementView: View {
     @State private var errorMessage: String?
     @State private var pendingRefreshNotice: String?
     @State private var isLoading = true
+    @State private var saveUndo = RuleSaveUndo()
+    @State private var editorIntents = RuleEditorIntentCoordinator()
+    @State private var editorHostVisible = false
 
     var body: some View {
         PageColumn {
@@ -26,6 +31,22 @@ struct RulesManagementView: View {
                 accessibilityIdentifier: "appShell.page.rules.heading"
             )
             searchRow
+            if let savedRule = saveUndo.savedRule {
+                HStack(spacing: 12) {
+                    Label(String(localized: "rules.undo.saved", defaultValue: "New rule saved."), systemImage: "checkmark.circle")
+                        .font(.system(size: 13))
+                    Text(savedRule.label ?? RuleEditorDraft(rule: savedRule, browsers: browsers).matchValue)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Button(String(localized: "rules.undo.action", defaultValue: "Undo")) { undoNewRule() }
+                        .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                        .accessibilityIdentifier("rules.undo")
+                }
+                .padding(12)
+                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityIdentifier("rules.savedNotice")
+            }
             HStack(spacing: 9) {
                 Image(systemName: "info.circle")
                 Text("URL rules are matched first, followed by source applications. Rules in each group run in order.")
@@ -50,20 +71,46 @@ struct RulesManagementView: View {
                 ruleGroup(title: "URL Rules", groupPriority: "01", rules: filteredURLRules, orderedRules: urlRules)
                 ruleGroup(title: "Source Application Rules", groupPriority: "02", rules: filteredSourceRules, orderedRules: sourceRules)
             }
+            RuleRoutingPreviewView(rules: rules, browsers: browsers, applications: installedApplications, settings: environment.settings) { rule in
+                beginEditingRule(rule)
+            }
             unmatchedBehaviorCard
         }
         .task { await reload() }
-        .onChange(of: environment.pendingSelectorRulePrefill) { _, prefill in
-            guard draft == nil, prefill != nil else { return }
-            beginCreatingRule()
+        .onAppear { editorHostVisible = true }
+        .onDisappear { editorHostVisible = false }
+        .onChange(of: environment.pendingSelectorRulePrefill) { _, _ in
+            resumePendingEditorIntent()
+        }
+        .onChange(of: errorMessage) { _, message in
+            guard message == nil else { return }
+            Task { @MainActor in
+                await Task.yield()
+                resumePendingEditorIntent()
+            }
         }
         .sheet(item: $draft, onDismiss: {
             if let pendingRefreshNotice {
                 errorMessage = pendingRefreshNotice
                 self.pendingRefreshNotice = nil
             }
+            let dismissedID = editorIntents.activePresentationID
+            Task { @MainActor in
+                // Let SwiftUI complete the old sheet transition before presenting another.
+                await Task.yield()
+                if let dismissedID {
+                    guard editorIntents.finishDismissal(id: dismissedID) else { return }
+                }
+                resumePendingEditorIntent()
+            }
         }) { draft in
-            RuleEditorSheet(draft: draft, browsers: browsers, applications: installedApplications) { updatedRule in
+            RuleEditorSheet(
+                draft: draft,
+                browsers: browsers,
+                applications: installedApplications,
+                sourceManifest: sourceManifest,
+                operatingSystemVersion: operatingSystemVersion
+            ) { updatedRule in
                 save(updatedRule, reportsError: false)
             }
         }
@@ -247,6 +294,13 @@ struct RulesManagementView: View {
                     .foregroundStyle(SettingsPalette.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher {
+                    Text(sourceManifest.supportStatus(for: bundleIdentifier, on: operatingSystemVersion).message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsPalette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).sourceSupport")
+                }
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 7) {
@@ -274,9 +328,7 @@ struct RulesManagementView: View {
                     .accessibilityLabel("Decrease priority for \(rule.displayName)")
                     .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).moveDown")
                 Divider()
-                Button("Edit", systemImage: "pencil") {
-                    draft = RuleEditorDraft(rule: rule, browsers: browsers)
-                }
+                Button("Edit", systemImage: "pencil") { beginEditingRule(rule) }
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     rulePendingDeletion = rule
                 }
@@ -300,11 +352,39 @@ struct RulesManagementView: View {
         .frame(minHeight: 72)
     }
 
+    private func resumePendingEditorIntent() {
+        guard editorHostVisible, draft == nil, errorMessage == nil,
+              environment.pendingSelectorRulePrefill != nil
+        else { return }
+        beginCreatingRule()
+    }
+
+    private func beginEditingRule(_ rule: RoutingRule) {
+        guard draft == nil, errorMessage == nil,
+              editorIntents.beginPresentation(takePending: { nil }) != nil
+        else { return }
+        draft = RuleEditorDraft(rule: rule, browsers: browsers)
+    }
+
     private func beginCreatingRule() {
-        draft = RuleEditorDraft(
-            prefill: environment.consumeSelectorRulePrefill(),
-            browsers: browsers
-        )
+        guard draft == nil, errorMessage == nil,
+              let intent = editorIntents.beginPresentation(takePending: environment.consumeSelectorRulePrefill)
+        else { return }
+        if case let .savedRule(id) = intent.prefill {
+            do {
+                guard let rule = try environment.ruleRepository.all().first(where: { $0.id == id }) else {
+                    errorMessage = "The recorded rule no longer exists. Create a new rule instead."
+                    editorIntents.finishDismissal(id: intent.id)
+                    return
+                }
+                draft = RuleEditorDraft(rule: rule, browsers: browsers)
+            } catch {
+                errorMessage = "Prism could not load the recorded rule. Try again."
+                editorIntents.finishDismissal(id: intent.id)
+            }
+        } else {
+            draft = RuleEditorDraft(prefill: intent.prefill, browsers: browsers)
+        }
     }
 
     private func reload() async {
@@ -329,7 +409,7 @@ struct RulesManagementView: View {
             updatedRule.priority = nextPriority(for: rule)
         }
         do {
-            try environment.ruleRepository.upsert(updatedRule)
+            try saveUndo.save(updatedRule, repository: environment.ruleRepository)
         } catch {
             if reportsError { errorMessage = "Prism could not save this rule." }
             return false
@@ -347,6 +427,22 @@ struct RulesManagementView: View {
             }
         }
         return true
+    }
+
+    private func undoNewRule() {
+        let savedID = saveUndo.savedRule?.id
+        do {
+            switch try saveUndo.undo(repository: environment.ruleRepository) {
+            case .removed, .alreadyRemoved:
+                rules.removeAll { $0.id == savedID }
+                do { rules = try environment.ruleRepository.all() }
+                catch { errorMessage = "The rule was removed, but the list could not be refreshed." }
+            case .changed:
+                errorMessage = "This rule has changed since it was saved. Undo did not remove it."
+            }
+        } catch {
+            errorMessage = "Prism could not undo the new rule. Nothing was removed; try again."
+        }
     }
 
     private func toggle(_ rule: RoutingRule) {
@@ -454,17 +550,23 @@ private struct RuleEditorSheet: View {
 
     let browsers: [BrowserDescriptor]
     let applications: [InstalledApplication]
+    let sourceManifest: SourceSupportManifest
+    let operatingSystemVersion: OperatingSystemVersion
     let save: (RoutingRule) -> Bool
 
     init(
         draft: RuleEditorDraft,
         browsers: [BrowserDescriptor],
         applications: [InstalledApplication],
+        sourceManifest: SourceSupportManifest,
+        operatingSystemVersion: OperatingSystemVersion,
         save: @escaping (RoutingRule) -> Bool
     ) {
         _draft = State(initialValue: draft)
         self.browsers = browsers
         self.applications = applications
+        self.sourceManifest = sourceManifest
+        self.operatingSystemVersion = operatingSystemVersion
         self.save = save
     }
 
@@ -550,6 +652,16 @@ private struct RuleEditorSheet: View {
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsPalette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let supportStatus = draft.sourceSupportStatus(
+                        manifest: sourceManifest,
+                        operatingSystemVersion: operatingSystemVersion
+                    ) {
+                        Text(supportStatus.message)
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsPalette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("rules.editor.sourceSupport")
+                    }
                 }
                 editorField("Open in") {
                     WorkspacePicker(
@@ -559,6 +671,19 @@ private struct RuleEditorSheet: View {
                     )
                     .accessibilityIdentifier("rules.editor.browser")
                 }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(String(localized: "rules.scope.title", defaultValue: "Review this rule's scope"))
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(draft.scopeDescription)
+                        .font(.system(size: 13))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label(selectedTargetDescription, systemImage: "arrow.right")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityIdentifier("rules.editor.scopePreview")
                 editorField("Rule name (optional)") {
                     WorkspaceInputField(placeholder: "Optional label", text: $draft.label)
                         .accessibilityIdentifier("rules.editor.label")
@@ -576,6 +701,13 @@ private struct RuleEditorSheet: View {
                     .foregroundStyle(SettingsPalette.secondary)
             }
         }
+    }
+
+    private var selectedTargetDescription: String {
+        guard let id = draft.targetBrowserID, let browser = browsers.first(where: { $0.id == id }) else {
+            return String(localized: "Choose a browser")
+        }
+        return String(format: String(localized: "rules.scope.target", defaultValue: "Open in %@"), browser.displayName)
     }
 
     private var applicationOptions: [WorkspacePickerOption<String>] {
@@ -645,5 +777,135 @@ private extension RoutingRule {
         case .sourceBundleIdentifier: "app.badge"
         case .exactHost, .hostAndSubdomains, .urlContains: "globe"
         }
+    }
+}
+
+private struct RuleRoutingPreviewView: View {
+    let rules: [RoutingRule]
+    let browsers: [BrowserDescriptor]
+    let applications: [InstalledApplication]
+    let settings: AppSettings
+    let editRule: (RoutingRule) -> Void
+
+    @State private var urlText = ""
+    @State private var sourceBundleID = ""
+    @State private var result: RulePreviewResult?
+    @State private var invalidInput = false
+
+    var body: some View {
+        DisclosureGroup(String(localized: "rules.preview.title", defaultValue: "Test routing rules")) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(String(localized: "rules.preview.description", defaultValue: "Preview the current rules and fallback settings without opening a browser. A selected source is simulated as confirmed."))
+                    .font(.system(size: 12))
+                    .foregroundStyle(SettingsPalette.secondary)
+                WorkspaceInputField(placeholder: "https://example.com/path", text: $urlText)
+                    .accessibilityLabel(String(localized: "rules.preview.url", defaultValue: "URL to preview"))
+                    .accessibilityIdentifier("rules.preview.url")
+                WorkspacePicker(
+                    title: String(localized: "rules.preview.source", defaultValue: "Source (optional, confirmed)"),
+                    selection: $sourceBundleID,
+                    options: [WorkspacePickerOption(value: "", title: String(localized: "selector.source.unknown", defaultValue: "Unknown source"))]
+                        + applications.map { WorkspacePickerOption(value: $0.bundleIdentifier, title: $0.displayName) }
+                )
+                .accessibilityIdentifier("rules.preview.source")
+                Button(String(localized: "rules.preview.action", defaultValue: "Preview routing")) { preview() }
+                    .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                    .accessibilityIdentifier("rules.preview.run")
+                if invalidInput {
+                    Text(String(localized: "rules.preview.invalid", defaultValue: "Enter a complete HTTP or HTTPS URL with a host."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsPalette.secondary)
+                }
+                if let result { resultView(result) }
+            }
+            .padding(.top, 12)
+        }
+        .padding(16)
+        .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("rules.preview")
+        .onChange(of: rules) { _, _ in result = nil }
+        .onChange(of: browsers) { _, _ in result = nil }
+        .onChange(of: settings) { _, _ in result = nil }
+        .onChange(of: urlText) { _, _ in result = nil; invalidInput = false }
+        .onChange(of: sourceBundleID) { _, _ in result = nil }
+    }
+
+    private func preview() {
+        let source: SourceApplication
+        if let application = applications.first(where: { $0.bundleIdentifier == sourceBundleID }) {
+            source = SourceApplication(bundleIdentifier: application.bundleIdentifier, displayName: application.displayName, confidence: .confirmed)
+        } else {
+            source = .unknown
+        }
+        do {
+            result = try RulePreview.evaluate(
+                urlText: urlText,
+                source: source,
+                rules: rules,
+                availableBrowserIDs: Set(browsers.filter { $0.availability == .available }.map(\.id)),
+                settings: settings
+            )
+            invalidInput = false
+        } catch {
+            result = nil
+            invalidInput = true
+        }
+    }
+
+    private func resultView(_ result: RulePreviewResult) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(result.source == .unknown ? String(localized: "selector.source.unknown", defaultValue: "Unknown source") : result.source.displayName)
+                .font(.system(size: 13, weight: .medium))
+            if let rule = result.matchingRule {
+                let name = rule.label ?? RuleEditorDraft(rule: rule, browsers: browsers).matchValue
+                Text(String(format: String(localized: "rules.preview.matched", defaultValue: "Matched condition: %@"), name))
+                Text(RuleEditorDraft(rule: rule, browsers: browsers).scopeDescription)
+                Text(String(format: String(localized: "rules.preview.target", defaultValue: "Rule target: %@"), browsers.first { $0.id == rule.targetBrowserID }?.displayName ?? rule.targetBrowserID.rawValue))
+                Button(String(localized: "rules.preview.edit", defaultValue: "Edit this rule")) { editRule(rule) }
+                    .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                    .accessibilityIdentifier("rules.preview.edit")
+            }
+            switch result.decision {
+            case let .open(browserID, method, _):
+                if result.matchingRule == nil {
+                    Text(method == .preferredBrowser ? String(localized: "Open with the preferred browser") : String(localized: "Open with the last used browser"))
+                }
+                Label(browsers.first { $0.id == browserID }?.displayName ?? String(localized: "Unavailable browser"), systemImage: "arrow.down.right")
+            case let .ask(reason):
+                Label(String(localized: "rules.preview.selector", defaultValue: "Show browser selector"), systemImage: "arrow.down.right")
+                Text(SelectorReasonCopy.message(reason))
+            }
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(SettingsPalette.secondary)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("rules.preview.result")
+    }
+}
+
+struct RuleEditorPresentationIntent: Equatable {
+    let id: UUID
+    let prefill: SelectorRulePrefill?
+}
+
+@MainActor
+final class RuleEditorIntentCoordinator {
+    private(set) var activePresentationID: UUID?
+
+    func beginPresentation(takePending: () -> SelectorRulePrefill?) -> RuleEditorPresentationIntent? {
+        guard activePresentationID == nil else { return nil }
+        let id = UUID()
+        activePresentationID = id
+        return RuleEditorPresentationIntent(id: id, prefill: takePending())
+    }
+
+    @discardableResult
+    func finishDismissal(id: UUID) -> Bool {
+        guard activePresentationID == id else { return false }
+        activePresentationID = nil
+        return true
     }
 }

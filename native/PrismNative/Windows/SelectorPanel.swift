@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 final class SelectorPanel: NSPanel {
-    static let contentSize = CGSize(width: 425, height: 200)
+    static let contentSize = SelectorMetrics.panelSize
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }

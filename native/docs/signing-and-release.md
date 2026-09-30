@@ -47,4 +47,13 @@ cd native
 zsh scripts/package-public-test.sh 1.13.1 4
 ```
 
-脚本生成 Universal DMG 和 SHA256SUMS.txt，并检查版本、双架构、签名、硬化运行时、无 Sparkle 动态依赖、DMG 完整性及实际启动。发布前还应在 `/Applications` 安装位置实际启动一次，并从 GitHub 草稿重新下载文件核对哈希。不能只凭 `codesign --verify` 判断能否启动；v1.13.0 的嵌入式 Sparkle 曾通过静态签名检查，却被 macOS 运行时库校验拒绝。
+脚本生成 Universal DMG 和 SHA256SUMS.txt，并检查版本、双架构、签名、硬化运行时、无 Sparkle 动态依赖、DMG 完整性及隔离后的 5 秒进程启动。启动检查通过 `/usr/bin/sandbox-exec` 禁止子进程读取或写入当前账号的 `~/Library/Application Support/Prism` 整个目录（包括嵌套内容和目录解析后的路径）。该目录覆盖 `ModelContainerFactory` 的 `PrismNative.store` 及其备份、`AtomicPendingRequestStore` 的 `Recovery` 队列及备份，避免启动时恢复私人待处理链接或覆盖生产数据。脚本使用系统账号的真实主目录，不以临时 `HOME` 假装隔离；缺少可执行的 sandbox 工具时直接失败，绝不回退到普通启动。
+
+这项 smoke 只检查动态依赖加载和进程能否保持运行，不证明生产持久化、来源识别、Profile 路由或完整实机操作。被 sandbox 拒绝的数据访问可能触发应用的临时存储降级；持久化和真实路由验收须在专用测试账号中另行完成。合成测试仅访问临时目录并验证隔离规则，不读取用户数据或启动 Prism：
+
+```zsh
+python3 scripts/test_smoke_public_test_launch.py
+python3 scripts/smoke-public-test-launch.py /Applications/Prism.app
+```
+
+发布前还应在 `/Applications` 安装位置运行上述隔离启动检查，并从 GitHub 草稿重新下载文件核对哈希。不能只凭 `codesign --verify` 判断能否启动；v1.13.0 的嵌入式 Sparkle 曾通过静态签名检查，却被 macOS 运行时库校验拒绝。

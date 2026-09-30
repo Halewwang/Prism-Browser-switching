@@ -433,6 +433,15 @@ import Testing
     #expect(restored[0].availability == .unavailable)
 }
 
+@Test @MainActor func browserOrderChangesPreserveSelectorVisibilityPayload() throws {
+    let record = try BrowserOrderRecord(ids: ["com.apple.Safari"])
+    record.orderedIDsPayload = Data(#"{"version":1,"ids":["com.apple.Safari"],"hiddenIDs":["com.google.Chrome"]}"#.utf8)
+    try record.replace(with: ["com.google.Chrome", "com.apple.Safari"])
+    let payload = try #require(JSONSerialization.jsonObject(with: record.orderedIDsPayload) as? [String: Any])
+    #expect(payload["hiddenIDs"] as? [String] == ["com.google.Chrome"])
+    #expect(try record.browserIDs() == ["com.google.Chrome", "com.apple.Safari"])
+}
+
 @Test @MainActor func settingsRepositoryUsesVersionOneDefaults() throws {
     let result = try ModelContainerFactory.make(inMemory: true)
     let repository = SwiftDataSettingsRepository(container: result.container)

@@ -245,8 +245,6 @@ final class AppRootCoordinator {
     private let composition: ProductionAppComposition
     private let systemActions: AppRootSystemActions
     private let recoveryController: AppRootRecoveryController
-    private var shellTestLinkSession: OnboardingTestLinkSession?
-    private var shellTestLinkGeneration: UUID?
 
     init(
         composition: ProductionAppComposition,
@@ -369,37 +367,12 @@ final class AppRootCoordinator {
     }
 
     private func startShellTestLink() {
-        guard shellTestLinkGeneration == nil, shellTestLinkSession == nil else { return }
-        let generation = UUID()
-        shellTestLinkGeneration = generation
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let session = await composition.onboardingTestLinkRouter.start(
-                url: URL(string: "https://example.com/prism-test")!,
-                onPrepared: { [weak self] preparedSession in
-                    guard let self, self.shellTestLinkGeneration == generation else { return false }
-                    self.shellTestLinkSession = preparedSession
-                    return true
-                },
-                onOutcome: { [weak self] outcome in
-                    guard let self, self.shellTestLinkSession?.requestID == outcome.requestID else {
-                        return false
-                    }
-                    if outcome.kind.isTerminal {
-                        self.shellTestLinkSession = nil
-                        self.shellTestLinkGeneration = nil
-                        return false
-                    }
-                    return true
-                }
-            )
-            guard self.shellTestLinkGeneration == generation else {
-                if let session { _ = await session.cancel() }
-                return
-            }
-            self.shellTestLinkGeneration = nil
-            self.shellTestLinkSession = session
-        }
+        // After onboarding, exercise the same FIFO intake and routing rules as a real link.
+        // The onboarding router intentionally accepts explicit selection only while routing is paused.
+        composition.linkIntakeService.capture(
+            url: URL(string: "https://example.com/prism-test")!,
+            senderPID: nil
+        )
     }
 
 }

@@ -193,7 +193,9 @@ struct HistoryView: View {
             reopen: { Task { await model.reopen(entry) } },
             copyURL: { model.copyURL(entry) },
             createRule: { model.createRule(entry) },
-            delete: { model.requestDelete(entry) }
+            delete: { model.requestDelete(entry) },
+            currentRules: try? environment.ruleRepository.all(),
+            editRule: { model.editMatchingRule(entry, currentRules: try? environment.ruleRepository.all()) }
         )
     }
 

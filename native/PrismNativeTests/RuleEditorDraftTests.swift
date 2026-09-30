@@ -69,6 +69,20 @@ struct RuleEditorDraftTests {
         #expect(retry.updatedAt == Date(timeIntervalSince1970: 2))
     }
 
+    @Test func sourceDraftIsSaveableWhilePendingVerificationAndURLDraftHasNoSourceStatus() {
+        let os = OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 1)
+        var draft = RuleEditorDraft(
+            prefill: .source(bundleIdentifier: "com.example.source", displayName: "Source", browserID: "com.example.browser"),
+            browsers: []
+        )
+        #expect(draft.canSave)
+        #expect(draft.sourceSupportStatus(manifest: .disabled, operatingSystemVersion: os) == .pendingVerification)
+        #expect(draft.makeRule()?.matcher == .sourceBundleIdentifier("com.example.source"))
+        draft.matchKind = .exactDomain
+        draft.matchValue = "example.com"
+        #expect(draft.sourceSupportStatus(manifest: .disabled, operatingSystemVersion: os) == nil)
+    }
+
     @Test func editingKeepsTheSavedRuleIdentityAndCreationDate() throws {
         let original = RoutingRule(
             id: UUID(),

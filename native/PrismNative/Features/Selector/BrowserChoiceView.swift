@@ -65,7 +65,9 @@ struct BrowserChoiceView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
+        .help(Text(verbatim: browser.displayName))
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("selector.browser.\(browser.id.rawValue)")
     }
