@@ -58,7 +58,7 @@
 
 ## 隐私与更新
 
-链接路由在本机执行，规则和历史不上传到服务器。公开测试版通过 GitHub Releases 检查原生更新；更新检查会连接 GitHub，下载后由你手动替换 Applications 中的应用。自动检查可在设置中关闭。
+链接路由在本机执行，规则和历史不上传到服务器。公开测试版通过 GitHub Releases 检查原生更新，自动检查可在设置中关闭。已发布的 1.14.0 需要手动替换 Applications 中的应用；本分支的 1.14.1 候选支持 App 内下载与校验，确认后替换并重启，启动失败时恢复旧版。首次迁移到 1.14.1 仍需手动安装一次，未公证版本仍受 macOS 安全检查约束。
 
 Developer ID 正式版的 Sparkle 发布流程与公开测试版分开，参见 [原生签名与发布说明](native/docs/signing-and-release.md)。仓库根目录的 Electron 发布脚本和 `latest-release.json` 属于旧版发布流程，原生更新检查不使用该协议。
 

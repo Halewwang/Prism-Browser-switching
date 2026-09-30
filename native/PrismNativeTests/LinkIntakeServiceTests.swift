@@ -1783,6 +1783,7 @@ private final class SpyWarningPresenter: PersistenceWarningPresenting {
 
 @MainActor
 private final class SpyRoutingCoordinator: LinkRoutingCoordinating {
+    var hasInFlightOperations = false
     private(set) var processNextCount = 0
     private(set) var explicitSelectionRequestIDs: [UUID] = []
 
@@ -2202,4 +2203,208 @@ private let testSafariDescriptor = BrowserDescriptor(
 
 private func fixedUUID(_ value: Int) -> UUID {
     UUID(uuidString: "00000000-0000-0000-0000-\(String(format: "%012d", value))")!
+}
+
+
+@Test @MainActor func updateTerminationRejectsUnfinishedStartup() async {
+    let intake = LinkIntakeService(
+        queue: LinkRequestQueue(store: InMemoryPendingRequestStore()),
+        bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }
+    )
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.startupNotReady) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect(!intake.canTerminateForUpdate)
+}
+
+@Test @MainActor func updateTerminationAllowsIdleDurableStateAndCancelResumesIntake() async throws {
+    let coordinator = SpyRoutingCoordinator()
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }, coordinator: coordinator
+    )
+    intake.finishRestorationAndStartDraining()
+    await intake.waitForDrainForTesting()
+    try await intake.beginUpdateTermination()
+    #expect(intake.canTerminateForUpdate)
+    intake.cancelUpdateTermination()
+    #expect(!intake.canTerminateForUpdate)
+    let routingCount = coordinator.processNextCount
+    intake.capture(url: URL(string: "https://after-cancel.example")!, senderPID: nil)
+    await intake.waitForDrainForTesting()
+    #expect(coordinator.processNextCount > routingCount)
+    #expect(await queue.snapshot().map(\.url.host) == ["after-cancel.example"])
+}
+
+@Test @MainActor func updateTerminationFlushesBufferedRequestsBeforeRefusingPendingLinks() async {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: buffer,
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    intake.capture(url: URL(string: "https://must-survive-update.example")!, senderPID: nil)
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.pendingRequests) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect(buffer.snapshot().isEmpty)
+    #expect(await store.currentSnapshot().pendingRequests.map(\.url.host) == ["must-survive-update.example"])
+    #expect(!intake.canTerminateForUpdate)
+}
+
+@Test @MainActor func updateTerminationRejectsUnresolvedSelector() async throws {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let request = LinkRequest.fixture(id: fixedUUID(2491), url: "https://selector.example")
+    try await queue.enqueue(request)
+    try await queue.markPresenting(request.id)
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.pendingRequests) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect((await queue.snapshot()).first?.state == .presenting)
+}
+
+@Test @MainActor func updateTerminationRejectsRoutingWithoutInterruptingLaunchResultPersistence() async {
+    let coordinator = SuspendedRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: LinkRequestQueue(store: InMemoryPendingRequestStore()), bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }, coordinator: coordinator
+    )
+    intake.finishRestorationAndStartDraining()
+    await coordinator.waitUntilSuspended()
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.routingInProgress) {
+        try await intake.beginUpdateTermination()
+    }
+    coordinator.release()
+    await intake.waitForDrainForTesting()
+    #expect(!intake.canTerminateForUpdate)
+}
+
+@Test @MainActor func updateTerminationRejectsPersistenceFailureWithoutDroppingBufferedRequest() async {
+    let store = ScriptedPendingRequestStore()
+    await store.failNextSave()
+    let buffer = BootstrapLinkBuffer()
+    let intake = LinkIntakeService(
+        queue: LinkRequestQueue(store: store), bootstrap: buffer,
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    intake.capture(url: URL(string: "https://retry-before-update.example")!, senderPID: nil)
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.persistenceUnavailable) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect(buffer.snapshot().map(\.url.host) == ["retry-before-update.example"])
+    #expect(intake.recoveryState == .persistenceRetryRequired)
+}
+
+@Test @MainActor func newCaptureAfterUpdatePreparationInvalidatesExitAndRemainsDurable() async throws {
+    let store = ScriptedPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    try await intake.beginUpdateTermination()
+    #expect(intake.canTerminateForUpdate)
+    intake.capture(url: URL(string: "https://arrived-before-terminate.example")!, senderPID: nil)
+    #expect(!intake.canTerminateForUpdate)
+    await intake.waitForPersistenceForTesting()
+    #expect(!intake.canTerminateForUpdate)
+    #expect(await store.currentSnapshot().pendingRequests.map(\.url.host) == ["arrived-before-terminate.example"])
+    intake.cancelUpdateTermination()
+}
+
+@Test @MainActor func updateTerminationRejectsUserActionEvenWithTemporarilyEmptyQueue() async throws {
+    let coordinator = SpyRoutingCoordinator()
+    let intake = LinkIntakeService(
+        queue: LinkRequestQueue(store: InMemoryPendingRequestStore()), bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown),
+        lastActivatedSource: { nil }, coordinator: coordinator
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    coordinator.hasInFlightOperations = true
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.routingInProgress) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect(!intake.canTerminateForUpdate)
+}
+
+@Test @MainActor func updateTerminationRejectsUnreconciledTerminalHistory() async throws {
+    let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+    let request = LinkRequest.fixture(id: fixedUUID(2492), url: "https://unreconciled.example")
+    try await queue.enqueue(request)
+    try await queue.markCancelled(request.id, historyEntry: nil)
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.persistenceUnavailable) {
+        try await intake.beginUpdateTermination()
+    }
+    #expect(await queue.snapshot().isEmpty)
+    #expect(await queue.terminalSnapshot().count == 1)
+}
+
+@Test @MainActor func updateTerminationRejectsExplicitCaptureWhoseSaveHasNotFinished() async throws {
+    let store = SuspendedRetryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    await store.suspendNextSave()
+    let capture = Task { @MainActor in
+        await intake.captureForExplicitSelection(url: URL(string: "https://save-in-flight.example")!, senderPID: nil)
+    }
+    await store.waitUntilSaveSuspended()
+    #expect(await queue.snapshot().isEmpty)
+    await #expect(throws: LinkIntakeService.UpdateTerminationError.routingInProgress) {
+        try await intake.beginUpdateTermination()
+    }
+    await store.releaseSuspendedSave()
+    #expect(await capture.value != nil)
+    #expect(await queue.snapshot().map(\.url.host) == ["save-in-flight.example"])
+}
+
+@Test @MainActor func cancellingUpdatePreparationDuringSaveCannotRearmTerminationCheckpoint() async throws {
+    let store = SuspendedRetryPendingRequestStore()
+    let queue = LinkRequestQueue(store: store)
+    let intake = LinkIntakeService(
+        queue: queue, bootstrap: BootstrapLinkBuffer(),
+        sourceAttributor: StubSourceAttributor(result: .unknown), lastActivatedSource: { nil }
+    )
+    intake.finishRestorationAndStartDraining(routeAfterDraining: false)
+    await intake.waitForDrainForTesting()
+    await store.suspendNextSave()
+    intake.capture(url: URL(string: "https://cancel-during-save.example")!, senderPID: nil)
+    await store.waitUntilSaveSuspended()
+    let preparation = Task { @MainActor in try await intake.beginUpdateTermination() }
+    // Let preparation pause at the existing drain task, then cancel it as an
+    // installation coordinator would if the helper became unavailable.
+    while !intake.isPreparingUpdateTermination { await Task.yield() }
+    intake.cancelUpdateTermination()
+    await store.releaseSuspendedSave()
+    await #expect(throws: CancellationError.self) { try await preparation.value }
+    #expect(!intake.canTerminateForUpdate)
+    #expect(await queue.snapshot().map(\.url.host) == ["cancel-during-save.example"])
 }

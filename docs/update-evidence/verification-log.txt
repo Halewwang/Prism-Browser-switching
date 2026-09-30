@@ -1,0 +1,28 @@
+Prism in-app update validation, 2026-09-30
+Host: macOS 27.2, arm64. Intel and other macOS versions not physically tested.
+Native Swift Testing: 472 tests / 43 suites passed.
+Native XCTest: 7 tests passed.
+PrismCore: 83 tests passed using clean scratch directory.
+Update UI: 2 tests passed (download-ready-install-gate and cancellation).
+Signing CLI: 3 tests passed.
+Public v1.14.0 transport: actual HTTPS GitHub asset, 4,067,588 bytes.
+SHA256: feb8eb896bd7f654048b9384fb331f7f17a5fe1d780de1fcaf06dd557b30b8f0
+Progress: 64 samples, monotonic 0 -> 1. No signed install attempted for this old release.
+Local 1.14.1 candidate: signed raw manifest, archive size/hash passed.
+Readonly mount: app version/minOS/current arch/full codesign passed, detached.
+Universal public-test package: app+helper arm64/x86_64, ad hoc hardened runtime, no Sparkle,
+strict signatures, sandboxed five-second launch, DMG checksum and update signature passed.
+Candidate DMG: 4,606,405 bytes.
+SHA256: 4000f84166720c0276e259c90cbfa0441a7042cf543a3454432fa88135bfb9d1
+CUA update-ready.png shows DEBUG harness UI, not an actual downloaded production release.
+Live isolated helper cancellation: ready -> cancel, old version 1.14.1 running,
+cancelled receipt, target retained, staging/backup removed.
+Live isolated helper Caches launch: macOS AppTranslocation triggered strict target mismatch,
+rolledBack receipt, original 1.14.1 restarted under new PID, no backup/stage left.
+No production app, default URL handler or user rules/history were changed.
+Final helper additionally waits for isFinishedLaunching, remains alive two seconds, and re-attests.
+Actual Universal quarantined ad hoc QA in Applications: new running guest identity verified,
+new application startup did not complete; final stable-start gate rolled back to old 1.14.1.
+Original version window/marker/new PID confirmed. No automatic-restart success claimed.
+Static spctl assessment of this isolated ad hoc candidate: rejected.
+Candidate Build 2 is local and unpublished; quarantine policy awaits user decision.

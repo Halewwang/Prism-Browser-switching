@@ -293,7 +293,11 @@ struct SettingsManagementView: View {
         ) {
             if let publishedInstaller {
                 Button("Download installer") {
-                    NSWorkspace.shared.open(publishedInstaller.downloadURL)
+                    if let checker = environment.updateChecker as? GitHubUpdateChecker {
+                        if GitHubPublishedInstaller.isNewer(publishedInstaller.version, than: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") == true {
+                            checker.showUpdate(publishedInstaller)
+                        } else { checker.checkForUpdates() }
+                    } else { NSWorkspace.shared.open(publishedInstaller.downloadURL) }
                 }
                 .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
                 .accessibilityIdentifier("settings.downloadInstaller")
@@ -325,7 +329,7 @@ struct SettingsManagementView: View {
 
     private var updateCheckDetail: String {
         if environment.updateChecker is GitHubUpdateChecker {
-            return "Checks GitHub for a newer native version and offers its installer."
+            return "Download verified updates in Prism, then install and restart when you choose."
         }
         return environment.updateChecker.canCheckForUpdates
             ? "Sparkle checks the signed appcast and asks before installing."

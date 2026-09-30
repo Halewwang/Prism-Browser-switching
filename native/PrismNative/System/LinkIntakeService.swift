@@ -119,6 +119,21 @@ final class BootstrapLinkBuffer {
 
 @MainActor
 final class LinkIntakeService: LinkRoutingContinuationRequesting {
+    enum UpdateTerminationError: Error, Equatable, LocalizedError {
+        case startupNotReady
+        case persistenceUnavailable
+        case routingInProgress
+        case pendingRequests
+
+        var errorDescription: String? {
+            switch self {
+            case .startupNotReady: "Prism 还在启动或恢复数据，请稍后再安装更新。"
+            case .persistenceUnavailable: "链接或历史记录尚未安全保存，请先处理存储提示。"
+            case .routingInProgress: "正在处理链接，请完成后再安装更新。"
+            case .pendingRequests: "还有待处理的链接，请先打开或取消这些链接。"
+            }
+        }
+    }
     enum RecoveryState: Equatable, Sendable {
         case none
         case persistenceRetryRequired
@@ -148,6 +163,82 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     private var routingKickPending = false
     private var routingKickGeneration: UInt64 = 0
     private var persistenceRetryFlight: PersistenceRetryFlight?
+    private var updateTerminationOriginalRoutingEnabled: Bool?
+    private var updateTerminationGeneration: UUID?
+    private var updateTerminationCheckpointReady = false
+    private var updateTerminationCaptureArrived = false
+    private var explicitCaptureOperationsInFlight = 0
+
+    var isPreparingUpdateTermination: Bool { updateTerminationOriginalRoutingEnabled != nil }
+
+    /// Read synchronously by applicationShouldTerminate, after the asynchronous
+    /// queue check. A new event invalidates the checkpoint even after its save finishes.
+    var canTerminateForUpdate: Bool {
+        updateTerminationOriginalRoutingEnabled != nil
+            && updateTerminationCheckpointReady
+            && !updateTerminationCaptureArrived
+            && bootstrap.first() == nil
+            && drainTask == nil
+            && routingTask == nil
+            && explicitCaptureOperationsInFlight == 0
+            && recoveryState == .none
+            && coordinator?.hasInFlightOperations != true
+    }
+
+    func beginUpdateTermination() async throws {
+        guard restorationFinished else { throw UpdateTerminationError.startupNotReady }
+        guard recoveryState == .none else { throw UpdateTerminationError.persistenceUnavailable }
+        guard updateTerminationOriginalRoutingEnabled == nil,
+              routingTask == nil, explicitCaptureOperationsInFlight == 0,
+              coordinator?.hasInFlightOperations != true
+        else { throw UpdateTerminationError.routingInProgress }
+
+        let generation = UUID()
+        updateTerminationGeneration = generation
+        updateTerminationOriginalRoutingEnabled = routingEnabled
+        updateTerminationCaptureArrived = false
+        routingEnabled = false
+        routingKickPending = false
+        do {
+            // Finish saving captures without starting new browser launches. The
+            // GetURL handler remains registered throughout and keeps accepting events.
+            if bootstrap.first() != nil { startDrainWorkerIfNeeded(routeAfterDraining: false) }
+            while let drainTask { await drainTask.value }
+            guard updateTerminationGeneration == generation else { throw CancellationError() }
+            guard recoveryState == .none else { throw UpdateTerminationError.persistenceUnavailable }
+            guard routingTask == nil, explicitCaptureOperationsInFlight == 0,
+                  coordinator?.hasInFlightOperations != true
+            else { throw UpdateTerminationError.routingInProgress }
+            let pending = await queue.snapshot()
+            let terminal = await queue.terminalSnapshot()
+            guard updateTerminationGeneration == generation else { throw CancellationError() }
+            guard terminal.isEmpty else { throw UpdateTerminationError.persistenceUnavailable }
+            guard pending.isEmpty, bootstrap.first() == nil, drainTask == nil,
+                  !updateTerminationCaptureArrived
+            else { throw UpdateTerminationError.pendingRequests }
+            guard coordinator?.hasInFlightOperations != true,
+                  explicitCaptureOperationsInFlight == 0, recoveryState == .none
+            else { throw UpdateTerminationError.routingInProgress }
+            updateTerminationCheckpointReady = true
+        } catch {
+            if updateTerminationGeneration == generation { cancelUpdateTermination() }
+            throw error
+        }
+    }
+
+    func cancelUpdateTermination() {
+        guard let previousRoutingEnabled = updateTerminationOriginalRoutingEnabled else { return }
+        updateTerminationOriginalRoutingEnabled = nil
+        updateTerminationGeneration = nil
+        updateTerminationCheckpointReady = false
+        updateTerminationCaptureArrived = false
+        routingEnabled = previousRoutingEnabled && !persistencePaused
+        if bootstrap.first() != nil, !persistencePaused {
+            startDrainWorkerIfNeeded(routeAfterDraining: routingEnabled)
+        } else if routingEnabled {
+            requestRoutingIfEnabled()
+        }
+    }
     private(set) var workerStartCount = 0
     private(set) var routingWorkerStartCount = 0
 
@@ -191,6 +282,9 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     @discardableResult
     func captureRequest(url: URL, senderPID: Int32?) -> UUID? {
         let requestID = bootstrap.captureRequest(url, senderPID: senderPID)
+        if requestID != nil, updateTerminationOriginalRoutingEnabled != nil {
+            updateTerminationCaptureArrived = true
+        }
         if requestID != nil, restorationFinished, !persistencePaused {
             startDrainWorkerIfNeeded(routeAfterDraining: routingEnabled)
         }
@@ -198,6 +292,9 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     }
 
     func captureForExplicitSelection(url: URL, senderPID: Int32?) async -> UUID? {
+        guard updateTerminationOriginalRoutingEnabled == nil else { return nil }
+        explicitCaptureOperationsInFlight += 1
+        defer { explicitCaptureOperationsInFlight -= 1 }
         guard restorationFinished, !routingEnabled, !persistencePaused,
               BootstrapLinkBuffer.accepts(url)
         else {
@@ -230,6 +327,9 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
     /// Reopens only the exact safe URL retained by History. It never performs source
     /// attribution and always appends behind existing durable requests.
     func enqueueReopened(url: URL, fromHistoryEntryID: UUID) async -> LinkRequest? {
+        guard updateTerminationOriginalRoutingEnabled == nil else { return nil }
+        explicitCaptureOperationsInFlight += 1
+        defer { explicitCaptureOperationsInFlight -= 1 }
         guard restorationFinished, !persistencePaused,
               BootstrapLinkBuffer.accepts(url),
               URLSanitizer.default.sanitize(url)?.absoluteString == url.absoluteString
@@ -275,7 +375,7 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
 
     @discardableResult
     func resumeRoutingAfterRecoveryUserAction() async -> Bool {
-        guard restorationFinished,
+        guard updateTerminationOriginalRoutingEnabled == nil, restorationFinished,
               !routingEnabled,
               !persistencePaused,
               drainTask == nil,

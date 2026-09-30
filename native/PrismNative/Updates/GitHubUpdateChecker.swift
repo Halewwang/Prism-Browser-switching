@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// Unsigned builds can check releases, but installation remains a user action.
+/// Public-test updates verify an independent update signature before installation.
 @MainActor
 final class GitHubUpdateChecker: UpdateChecking {
     let events: AsyncStream<UpdateEvent>
@@ -9,11 +9,70 @@ final class GitHubUpdateChecker: UpdateChecking {
     private let currentVersion: String
     private let defaults: UserDefaults
     private let loadInstaller: @MainActor () async throws -> GitHubPublishedInstaller
-    private let present: @MainActor (UpdateEvent, GitHubPublishedInstaller?) -> Void
+    private let present: (@MainActor (UpdateEvent, GitHubPublishedInstaller?) -> Void)?
     private let startAutomatically: Bool
     private var schedule: Task<Void, Never>?
     private var check: Task<Void, Never>?
     private var manualCheckRequested = false
+    private var updateWindow: InAppUpdateWindowController?
+    private var preparedHelper: PreparedInstallation?
+    private var prepareInstallationTermination: @MainActor () async throws -> Void = {
+        throw UpdateFailureForPresentation.notReady
+    }
+    private var cancelInstallationTermination: @MainActor () -> Void = {}
+
+    var hasPreparedInstallation: Bool { updateWindow?.session.hasPreparedInstallation == true }
+
+    func setInstallationPreparation(
+        prepare: @escaping @MainActor () async throws -> Void,
+        cancel: @escaping @MainActor () -> Void
+    ) {
+        prepareInstallationTermination = prepare
+        cancelInstallationTermination = cancel
+    }
+
+    func cancelPreparedInstallation(message: String) {
+        updateWindow?.session.cancelPreparedInstallation(message: message)
+    }
+
+    func commitPreparedInstallation() throws {
+        guard let session = updateWindow?.session else { throw UpdateFailureForPresentation.notReady }
+        try session.commitPreparedInstallation()
+    }
+
+    func showUpdate(_ installer: GitHubPublishedInstaller) {
+        if let window = updateWindow, window.window?.isVisible == true {
+            window.present()
+            return
+        }
+        let preparer = GitHubUpdatePackagePreparer()
+        let coordinator = NativeUpdateInstallationCoordinator()
+        let model = InAppUpdateSession(
+            installer: installer,
+            prepare: { installer, progress in try await preparer.prepare(installer, progress: progress) },
+            cleanup: { preparer.cleanup($0) },
+            startInstallation: { [weak self] prepared in
+                let targetURL = try InstallerLaunchValidation.currentInstallationURL()
+                let handle = try await coordinator.prepareInstallation(prepared, targetURL: targetURL, parentPID: ProcessInfo.processInfo.processIdentifier)
+                self?.preparedHelper = handle
+                return { [weak self] in handle.cancel(); self?.preparedHelper = nil }
+            },
+            prepareTermination: { [weak self] in
+                guard let self else { throw UpdateFailureForPresentation.notReady }
+                try await self.prepareInstallationTermination()
+            },
+            cancelTermination: { [weak self] in self?.cancelInstallationTermination() },
+            terminate: { NSApp.terminate(nil) },
+            commitInstallation: { [weak self] in
+                guard let handle = self?.preparedHelper else { throw UpdateFailureForPresentation.notReady }
+                try handle.commit()
+            },
+            onEvent: { [weak self] in self?.continuation.yield($0) }
+        )
+        let window = InAppUpdateWindowController(session: model)
+        updateWindow = window
+        window.present()
+    }
 
     static let lastCheckKey = "PrismGitHubLastUpdateCheck"
     private static let lastNotifiedKey = "PrismGitHubLastNotifiedVersion"
@@ -34,7 +93,7 @@ final class GitHubUpdateChecker: UpdateChecking {
         defaults: UserDefaults = .standard,
         startAutomatically: Bool = true,
         loadInstaller: @escaping @MainActor () async throws -> GitHubPublishedInstaller = { try await GitHubPublishedInstallerLookup.load() },
-        present: @escaping @MainActor (UpdateEvent, GitHubPublishedInstaller?) -> Void = GitHubUpdateChecker.presentResult
+        present: (@MainActor (UpdateEvent, GitHubPublishedInstaller?) -> Void)? = nil
     ) {
         self.currentVersion = currentVersion
         self.defaults = defaults
@@ -107,15 +166,17 @@ final class GitHubUpdateChecker: UpdateChecking {
             if case let .available(version) = result,
                wasManual || (automaticallyChecksForUpdates && defaults.string(forKey: Self.lastNotifiedKey) != version) {
                 defaults.set(version, forKey: Self.lastNotifiedKey)
-                present(result, installer)
+                presentResult(result, installer)
             } else if wasManual {
-                present(result, installer)
+                presentResult(result, installer)
             }
             continuation.yield(result)
         }
     }
 
-    private static func presentResult(_ result: UpdateEvent, _ installer: GitHubPublishedInstaller?) {
+    private func presentResult(_ result: UpdateEvent, _ installer: GitHubPublishedInstaller?) {
+        if let present { present(result, installer); return }
+        if case .available = result, let installer { showUpdate(installer); return }
         let alert = NSAlert()
         switch result {
         case .available:
@@ -144,8 +205,13 @@ final class GitHubUpdateChecker: UpdateChecking {
             return
         }
         NSApp.activate()
-        if alert.runModal() == .alertFirstButtonReturn, case .available = result, let installer {
-            NSWorkspace.shared.open(installer.downloadURL)
-        }
+        alert.runModal()
+    }
+}
+
+private enum UpdateFailureForPresentation: LocalizedError {
+    case notReady
+    var errorDescription: String? {
+        NSLocalizedString("Prism is still starting. Try installing the update again in a moment.", comment: "Update gate")
     }
 }

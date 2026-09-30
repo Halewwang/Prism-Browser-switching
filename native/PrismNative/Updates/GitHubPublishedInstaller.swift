@@ -6,6 +6,9 @@ struct GitHubPublishedInstaller: Equatable, Sendable {
     let downloadURL: URL
     let fileName: String
     var isPrerelease = false
+    var manifestURL: URL? = nil
+    var signatureURL: URL? = nil
+    var fileByteCount: Int64? = nil
 
     // GitHub's /releases/latest excludes the native public-test prereleases.
     static let releasesAPIURL = URL(string: "https://api.github.com/repos/Halewwang/Prism-Browser-switching/releases?per_page=100")!
@@ -50,21 +53,38 @@ enum GitHubPublishedInstallerLookup {
                   GitHubPublishedInstaller.isNewer("1.11.0", than: version) == false
             else { return nil }
             let names = ["Prism-\(version).dmg", "Prism-\(version)-universal-test.dmg"]
-            guard let asset = release.assets.first(where: { names.contains($0.name) }),
+            let dmgAssets = release.assets.filter { names.contains($0.name) }
+            guard dmgAssets.count == 1, let asset = dmgAssets.first,
                   let url = URL(string: asset.browser_download_url),
                   url.scheme?.lowercased() == "https", url.host?.lowercased() == "github.com",
                   url.user == nil, url.password == nil, url.port == nil,
+                  url.query == nil, url.fragment == nil,
                   url.path == "/Halewwang/Prism-Browser-switching/releases/download/\(release.tag_name)/\(asset.name)"
             else { return nil }
             return GitHubPublishedInstaller(
                 version: version, notes: release.body ?? "", downloadURL: url, fileName: asset.name,
-                isPrerelease: release.prerelease ?? false
+                isPrerelease: release.prerelease ?? false,
+                manifestURL: trustedAssetURL("update-manifest.json", release: release),
+                signatureURL: trustedAssetURL("update-manifest.sig", release: release),
+                fileByteCount: asset.size
             )
         }
         guard let newest = installers.max(by: { GitHubPublishedInstaller.isNewer($1.version, than: $0.version) == true }) else {
             throw GitHubPublishedInstallerError.noCompatibleRelease
         }
         return newest
+    }
+
+    private static func trustedAssetURL(_ name: String, release: Release) -> URL? {
+        let assets = release.assets.filter { $0.name == name }
+        guard assets.count == 1, let asset = assets.first,
+              let url = URL(string: asset.browser_download_url),
+              url.scheme == "https", url.host == "github.com",
+              url.user == nil, url.password == nil, url.port == nil,
+              url.query == nil, url.fragment == nil,
+              url.path == "/Halewwang/Prism-Browser-switching/releases/download/\(release.tag_name)/\(name)"
+        else { return nil }
+        return url
     }
 
     private struct Release: Decodable {
@@ -78,6 +98,7 @@ enum GitHubPublishedInstallerLookup {
     private struct Asset: Decodable {
         let name: String
         let browser_download_url: String
+        let size: Int64?
     }
 }
 
