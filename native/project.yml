@@ -13,10 +13,12 @@ targets:
   PrismNative:
     type: application
     platform: macOS
-    sources: [PrismNative]
+    sources: [PrismNative, UpdateInstallerShared]
     resources:
       - path: PrismNative/Resources/SupportedSources.json
     dependencies:
+      - target: PrismUpdateInstaller
+        embed: false
       - package: PrismCore
       - package: Sparkle
         product: Sparkle
@@ -28,8 +30,8 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: 15.0
         SWIFT_VERSION: 6.0
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.14.0
-        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.14.1
+        CURRENT_PROJECT_VERSION: 2
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -49,15 +51,27 @@ targets:
         SUEnableAutomaticChecks: true
         SUAllowsAutomaticUpdates: false
         SUAutomaticallyUpdate: false
+    postBuildScripts:
+      - name: Embed update installer
+        script: |
+          mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          cp "$BUILT_PRODUCTS_DIR/PrismUpdateInstaller" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/PrismUpdateInstaller"
+          if [ "$CODE_SIGNING_ALLOWED" = "YES" ] && [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]; then
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/PrismUpdateInstaller"
+          fi
+        inputFiles: ["$(BUILT_PRODUCTS_DIR)/PrismUpdateInstaller"]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/PrismUpdateInstaller"]
     entitlements:
       path: PrismNative/Resources/PrismNative.entitlements
   PrismNativePublicTest:
     type: application
     platform: macOS
-    sources: [PrismNative]
+    sources: [PrismNative, UpdateInstallerShared]
     resources:
       - path: PrismNative/Resources/SupportedSources.json
     dependencies:
+      - target: PrismUpdateInstaller
+        embed: false
       - package: PrismCore
     settings:
       base:
@@ -68,8 +82,8 @@ targets:
         SWIFT_VERSION: 6.0
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) PRISM_PUBLIC_TEST
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.14.0
-        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.14.1
+        CURRENT_PROJECT_VERSION: 2
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -89,8 +103,29 @@ targets:
         SUEnableAutomaticChecks: true
         SUAllowsAutomaticUpdates: false
         SUAutomaticallyUpdate: false
+    postBuildScripts:
+      - name: Embed update installer
+        script: |
+          mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          cp "$BUILT_PRODUCTS_DIR/PrismUpdateInstaller" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/PrismUpdateInstaller"
+          if [ "$CODE_SIGNING_ALLOWED" = "YES" ] && [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]; then
+            /usr/bin/codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/PrismUpdateInstaller"
+          fi
+        inputFiles: ["$(BUILT_PRODUCTS_DIR)/PrismUpdateInstaller"]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/PrismUpdateInstaller"]
     entitlements:
       path: PrismNative/Resources/PrismNative.entitlements
+  PrismUpdateInstaller:
+    type: tool
+    platform: macOS
+    sources: [PrismUpdateInstaller, UpdateInstallerShared, PrismNative/Updates/PrismUpdateTrust.swift]
+    settings:
+      base:
+        PRODUCT_NAME: PrismUpdateInstaller
+        MACOSX_DEPLOYMENT_TARGET: 15.0
+        SWIFT_VERSION: 6.0
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
   PrismNativeTests:
     type: bundle.unit-test
     platform: macOS

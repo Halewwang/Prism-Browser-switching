@@ -36,6 +36,7 @@ enum HistoryMaintenanceResult: Equatable, Sendable {
 
 @MainActor
 protocol LinkRoutingCoordinating: AnyObject {
+    var hasInFlightOperations: Bool { get }
     @discardableResult
     func processNext(
         while shouldContinue: @escaping @MainActor () -> Bool
@@ -64,6 +65,8 @@ protocol LinkRoutingContinuationRequesting: AnyObject {
 }
 
 extension LinkRoutingCoordinating {
+    var hasInFlightOperations: Bool { false }
+
     @discardableResult
     func processNext() async -> LinkRoutingPassDisposition {
         await processNext(while: { true })
@@ -173,6 +176,13 @@ final class LinkRoutingCoordinator: LinkRoutingCoordinating {
     private var activeUserActionRequestIDs: Set<UUID> = []
     private var historyMaintenanceActionInFlight = false
     private var isProcessing = false
+
+    var hasInFlightOperations: Bool {
+        isProcessing || historyMaintenanceActionInFlight
+            || !attemptingRequestIDs.isEmpty || !activeUserActionRequestIDs.isEmpty
+            || !uncertainAttempts.isEmpty || !failedHandoffPersistence.isEmpty
+            || !storageBlockedRequests.isEmpty
+    }
     weak var continuationRequester: (any LinkRoutingContinuationRequesting)?
 
     init(

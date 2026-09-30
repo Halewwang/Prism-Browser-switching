@@ -13,6 +13,12 @@ export const PublicTest = () => (
         <li>Quit Prism, open the DMG, and drag Prism into Applications. Then try opening Prism.</li>
         <li>If macOS blocks this trusted download because it cannot verify the developer, go to System Settings → Privacy &amp; Security → Open Anyway, then confirm Open. Follow <a href="https://support.apple.com/en-us/102445" className="underline underline-offset-4">Apple’s first-open guidance</a>. Do not use this step for a malware or damaged-app warning.</li>
       </ol>
+      <h3 className="font-semibold mt-7 mb-3">Updating This Public Test</h3>
+      <p className="text-sm md:text-base text-neutral-600 leading-relaxed">
+        If you use v1.14.0, install this version manually once to get in-app update downloads and verification.
+        Installation and restart are experimental: macOS may block an unnotarized update, causing Prism to restore the previous version.
+        You may need to install the update manually. Prism keeps macOS security checks enabled.
+      </p>
       <h3 className="font-semibold mt-7 mb-3">What Still Needs Real-World Testing</h3>
       <ul className="list-disc pl-5 space-y-2 text-sm md:text-base text-neutral-600 leading-relaxed">
         <li>Source-app routing only runs for a confirmed sender. Real-app coverage is still incomplete; not every app or link can be identified.</li>

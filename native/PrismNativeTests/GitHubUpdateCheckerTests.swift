@@ -23,6 +23,23 @@ struct GitHubUpdateCheckerTests {
         #expect(installer.isPrerelease)
     }
 
+    @Test func discoversSignedAssetsOnlyFromTheSameExactRelease() throws {
+        let base = "https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.15.0/"
+        let payload = Data("""
+        [{"tag_name":"v1.15.0","draft":false,"assets":[
+          {"name":"Prism-1.15.0-universal-test.dmg","size":12345,"browser_download_url":"\(base)Prism-1.15.0-universal-test.dmg"},
+          {"name":"update-manifest.json","browser_download_url":"\(base)update-manifest.json"},
+          {"name":"update-manifest.sig","browser_download_url":"\(base)update-manifest.sig"}]}]
+        """.utf8)
+        let installer = try GitHubPublishedInstallerLookup.decode(payload)
+        #expect(installer.manifestURL == URL(string: base + "update-manifest.json"))
+        #expect(installer.signatureURL == URL(string: base + "update-manifest.sig"))
+        #expect(installer.fileByteCount == 12345)
+        let forged = Data(String(decoding: payload, as: UTF8.self)
+            .replacingOccurrences(of: "\(base)update-manifest.sig", with: "https://evil.example/update-manifest.sig").utf8)
+        #expect(try GitHubPublishedInstallerLookup.decode(forged).signatureURL == nil)
+    }
+
     @Test func rejectsLegacyMalformedAndUntrustedDownloads() {
         for (tag, asset, url) in [
             ("v1.10.22", "Prism-1.10.22-universal.dmg", "https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.10.22/Prism-1.10.22-universal.dmg"),

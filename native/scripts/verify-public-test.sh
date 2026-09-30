@@ -34,6 +34,20 @@ verify_app() {
     return 1
   }
 
+  local helper="$candidate/Contents/Helpers/PrismUpdateInstaller"
+  [[ -x "$helper" && ! -L "$helper" ]] || {
+    print -u2 "public test bundle must include its native update installer"
+    return 1
+  }
+  codesign --verify --strict "$helper"
+  local helper_signature
+  helper_signature="$(codesign -d --verbose=4 "$helper" 2>&1)"
+  [[ "$helper_signature" == *"flags="*"runtime"* ]]
+  if otool -L "$helper" | grep -q 'Sparkle.framework'; then
+    print -u2 "update installer must not link Sparkle"
+    return 1
+  fi
+
   local macho count=0
   while IFS= read -r -d '' macho; do
     if file -b "$macho" | grep -q 'Mach-O'; then

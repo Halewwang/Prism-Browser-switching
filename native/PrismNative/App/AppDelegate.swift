@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let debugUITestRecorder: DebugUITestEffectRecorder?
     private var debugSelectorHarness: DebugSelectorHarness?
     private var debugApplicationActivationAnchor: DebugAppFixtureActivationAnchor?
+    private var debugUpdateWindow: InAppUpdateWindowController?
 #endif
 
     var environment: AppEnvironment {
@@ -65,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         makeStatusItemController = Self.makeProductionStatusItemController
         super.init()
         configureMainWindowOpening()
+        configureUpdateInstallation()
 #if DEBUG
         if debugUITestMode == .application || debugUITestMode == .malformedSelector {
             activateDebugApplicationFixture()
@@ -89,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debugUITestRecorder = nil
 #endif
         super.init()
+        configureUpdateInstallation()
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -134,6 +137,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 #if DEBUG
+        if DebugUITestConfiguration.isEnabled, ProcessInfo.processInfo.arguments.contains("--update-harness") {
+            debugUpdateWindow = DebugUpdateHarness.make()
+            debugUpdateWindow?.present()
+            return
+        }
         switch debugUITestMode {
         case .selector:
             presentDebugSelectorHarness()
@@ -181,6 +189,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #endif
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let checker = environment.updateChecker as? GitHubUpdateChecker,
+              checker.hasPreparedInstallation
+        else { return .terminateNow }
+        // This synchronous check closes the await-to-terminate gap. GetURL events
+        // received during preparation stay captured and make this exit fail closed.
+        guard hasSafeUpdatePersistenceState, composition.linkIntakeService.canTerminateForUpdate else {
+            checker.cancelPreparedInstallation(message: "更新前收到新链接或仍有未完成的保存，请处理后重试。")
+            return .terminateCancel
+        }
+        do { try checker.commitPreparedInstallation() }
+        catch {
+            checker.cancelPreparedInstallation(message: error.localizedDescription)
+            return .terminateCancel
+        }
+        return .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         composition.activationTracker.stop()
     }
@@ -201,6 +227,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainWindowOpening: composition.mainWindowOpening,
             environment: composition.environment,
             updateChecker: composition.environment.updateChecker
+        )
+    }
+
+    private var hasSafeUpdatePersistenceState: Bool {
+        environment.startupPhase != .loading
+            && environment.startupPhase != .recovery
+            && environment.runtimeLinkRecoveryState == .none
+            && !environment.hasPendingTerminalHistoryReconciliation
+            && composition.selectorPresentationRelay.activeRequest == nil
+            && !environment.persistenceWarnings.contains { warning in
+                switch warning {
+                case .historyNotSaved, .recoveryStoreUnavailable, .settingsNotSaved: true
+                case .corruptStoreRecovered: false
+                }
+            }
+    }
+
+    private func configureUpdateInstallation() {
+        guard let checker = environment.updateChecker as? GitHubUpdateChecker else { return }
+        checker.setInstallationPreparation(
+            prepare: { [weak self] in
+                guard let self, self.hasSafeUpdatePersistenceState else {
+                    throw LinkIntakeService.UpdateTerminationError.persistenceUnavailable
+                }
+                try await self.composition.linkIntakeService.beginUpdateTermination()
+            },
+            cancel: { [weak self] in
+                self?.composition.linkIntakeService.cancelUpdateTermination()
+            }
         )
     }
 

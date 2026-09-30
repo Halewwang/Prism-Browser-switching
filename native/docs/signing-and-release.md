@@ -1,6 +1,6 @@
 # Prism 原生版签名与发布
 
-此流程只面向 Developer ID 直发版本。带有有效 EdDSA 公钥和 HTTPS appcast 的构建通过 Sparkle 检查并安装签名更新；未配置公钥的构建通过 GitHub Releases 检查原生安装包，用户确认下载后手动替换 Applications 中的 Prism。
+Developer ID 直发版本通过 Sparkle 和 HTTPS appcast 更新。公开测试版从 1.14.1 起使用独立原生更新助手，在 App 内下载、验证 Ed25519 更新签名与 SHA-256，用户确认后替换并重启。更新签名不等同于 Apple Developer ID 签名或公证。
 
 GitHub 检查包含原生公开测试预发布版本，从 `1.11.0` 起仅识别 `Prism-<version>-universal-test.dmg` 与本流程生成的 `Prism-<version>.dmg`，不使用旧 Electron 的 `latest-release.json`。自动检查开关与 Sparkle 共用 `SUEnableAutomaticChecks` 偏好：启动后检查，之后每天检查，同一新版本只自动提示一次；手动检查始终反馈最新、可用更新或错误。
 
@@ -44,10 +44,17 @@ zsh scripts/verify-release.sh /absolute/path/Prism.app 1.0.0 1 /absolute/path/Pr
 
 ```zsh
 cd native
-zsh scripts/package-public-test.sh 1.13.1 4
+PRISM_UPDATE_SIGNING_KEY='/absolute/protected/path/update-ed25519.key' \
+zsh scripts/package-public-test.sh 1.14.1 2
 ```
 
-脚本生成 Universal DMG 和 SHA256SUMS.txt，并检查版本、双架构、签名、硬化运行时、无 Sparkle 动态依赖、DMG 完整性及隔离后的 5 秒进程启动。启动检查通过 `/usr/bin/sandbox-exec` 禁止子进程读取或写入当前账号的 `~/Library/Application Support/Prism` 整个目录（包括嵌套内容和目录解析后的路径）。该目录覆盖 `ModelContainerFactory` 的 `PrismNative.store` 及其备份、`AtomicPendingRequestStore` 的 `Recovery` 队列及备份，避免启动时恢复私人待处理链接或覆盖生产数据。脚本使用系统账号的真实主目录，不以临时 `HOME` 假装隔离；缺少可执行的 sandbox 工具时直接失败，绝不回退到普通启动。
+脚本生成 Universal DMG、SHA256SUMS.txt、update-manifest.json 和 update-manifest.sig。它分别签名内嵌 Universal 安装助手和外层应用，检查版本、双架构、签名、硬化运行时、无 Sparkle 动态依赖、DMG 完整性及隔离后的 5 秒进程启动。启动检查通过 `/usr/bin/sandbox-exec` 禁止子进程读取或写入当前账号的 `~/Library/Application Support/Prism` 整个目录（包括嵌套内容和目录解析后的路径）。该目录覆盖 `ModelContainerFactory` 的 `PrismNative.store` 及其备份、`AtomicPendingRequestStore` 的 `Recovery` 队列及备份，避免启动时恢复私人待处理链接或覆盖生产数据。脚本使用系统账号的真实主目录，不以临时 `HOME` 假装隔离；缺少可执行的 sandbox 工具时直接失败，绝不回退到普通启动。
+
+更新私钥只保存于受保护的本机或 CI 密钥库，文件权限 0600、目录权限 0700，绝不提交到仓库。`scripts/sign-update.swift generate-key <path>` 仅用于首次生成，不覆盖已有密钥；已有客户端固定了 `PrismUpdateTrust` 公钥，后续发布必须沿用同一私钥。发布脚本会拒绝不匹配的密钥。建议独立备份私钥，丢失后已有客户端无法验证新包，需要手动安装迁移。
+
+同一 GitHub Pre-release 必须上传上述四个资产。签名绑定版本、原生文件名、字节数、SHA-256、bundle ID 和最低系统版本。公开前重新下载全部资产，使用 `sign-update.swift verify <public-key> <manifest> <signature>` 验证签名，并核对实际 DMG 哈希。安装助手还会独立重验同一签名和 DMG，不信任此前解出的临时包。
+
+1.14.0 及更早版本不包含安装助手，需要手动安装一次 1.14.1，之后才能使用完整 App 内更新。候选只在用户确认后安装，处理中或未保存的链接会阻止退出。无法写入目标目录或新版启动失败时保留／恢复旧应用。系统 Gatekeeper 检查仍生效：未公证版本可能需要手动允许；不删除 quarantine 或关闭安全检查。隔离安装验收与边界见 [update-installation-qa.md](update-installation-qa.md)。
 
 这项 smoke 只检查动态依赖加载和进程能否保持运行，不证明生产持久化、来源识别、Profile 路由或完整实机操作。被 sandbox 拒绝的数据访问可能触发应用的临时存储降级；持久化和真实路由验收须在专用测试账号中另行完成。合成测试仅访问临时目录并验证隔离规则，不读取用户数据或启动 Prism：
 

@@ -456,3 +456,31 @@
 "The rule was removed, but the list could not be refreshed." = "规则已移除，但列表未能刷新。";
 "This rule has changed since it was saved. Undo did not remove it." = "这条规则在保存后已被修改，撤销没有移除它。";
 "Prism could not undo the new rule. Nothing was removed; try again." = "无法撤销新规则，没有移除任何规则，请重试。";
+
+"Update Prism" = "更新 Prism";
+
+"A newer version of Prism is available." = "Prism 有新版本可供更新。";
+
+"Your rules and history are kept." = "保留你的规则与历史记录。";
+
+"Download and verify the update before installing." = "先下载并校验更新，确认后再安装。";
+
+"Downloading and verifying update…" = "正在下载并校验更新…";
+
+"Update verified. Ready to install." = "更新已校验，可以安装。";
+
+"Preparing to install and restart…" = "正在准备安装并重启…";
+
+"Show downloaded installer" = "查看已下载的安装包";
+
+"Download update" = "下载更新";
+
+"Retry download" = "重新下载";
+
+"Cancel download" = "取消下载";
+
+"Install and restart" = "安装并重启";
+
+"Prism is still starting. Try installing the update again in a moment." = "Prism 还在启动，请稍后再安装更新。";
+
+"Download verified updates in Prism, then install and restart when you choose." = "在 Prism 内下载并校验更新，由你确认安装并重启。";

@@ -391,3 +391,31 @@
 "The rule was removed, but the list could not be refreshed." = "The rule was removed, but the list could not be refreshed.";
 "This rule has changed since it was saved. Undo did not remove it." = "This rule has changed since it was saved. Undo did not remove it.";
 "Prism could not undo the new rule. Nothing was removed; try again." = "Prism could not undo the new rule. Nothing was removed; try again.";
+
+"Update Prism" = "Update Prism";
+
+"A newer version of Prism is available." = "A newer version of Prism is available.";
+
+"Your rules and history are kept." = "Your rules and history are kept.";
+
+"Download and verify the update before installing." = "Download and verify the update before installing.";
+
+"Downloading and verifying update…" = "Downloading and verifying update…";
+
+"Update verified. Ready to install." = "Update verified. Ready to install.";
+
+"Preparing to install and restart…" = "Preparing to install and restart…";
+
+"Show downloaded installer" = "Show downloaded installer";
+
+"Download update" = "Download update";
+
+"Retry download" = "Retry download";
+
+"Cancel download" = "Cancel download";
+
+"Install and restart" = "Install and restart";
+
+"Prism is still starting. Try installing the update again in a moment." = "Prism is still starting. Try installing the update again in a moment.";
+
+"Download verified updates in Prism, then install and restart when you choose." = "Download verified updates in Prism, then install and restart when you choose.";
