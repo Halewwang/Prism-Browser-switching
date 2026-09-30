@@ -15,7 +15,7 @@ macOS 实机验收发现保留 quarantine 时新版可能以 App Translocation �
 - 1.14.1 候选固定公钥验签、实际大小／哈希、只读挂载后版本／系统要求／当前架构／完整签名检查通过。
 - 实际独立 QA ready→cancel：旧版继续运行，cancelled receipt，原包保留，staging／backup 清理。
 - 初版精确路径判断下真实系统转位触发 rolledBack，旧版以新 PID 成功重新启动。这是新增代码身份兼容的实机依据。
-- 修正转位认证后真实新进程通过代码身份验证，但保留 quarantine 的未公证版本没有完成启动，也未记录新版 main-entry。加入启动完成与两秒稳定检查后，助手正确恢复旧版；静态 Gatekeeper 执行评估拒绝该候选。完整自动重启仍未验收通过，正等待用户选择更新包隔离策略。
+- 修正转位认证后真实新进程通过代码身份验证，但保留 quarantine 的未公证版本没有完成启动，也未记录新版 main-entry。加入启动完成与两秒稳定检查后，助手正确恢复旧版；静态 Gatekeeper 执行评估拒绝该候选。完整自动重启仍未验收通过；本次公开测试发布保留 quarantine，必要时使用手动安装。
 - [更新窗口截图](update-evidence/update-ready.png) 为 DEBUG UI harness，展示下载完成后的确认界面，截图中的 1.14.2 为合成测试版本，不是已公开发布版本。
 - 使用独立测试 bundle ID、缓存目录／Applications 子目录，未替换用户安装的 Prism，未更改默认链接处理器或用户规则／历史。
 
@@ -23,10 +23,10 @@ macOS 实机验收发现保留 quarantine 时新版可能以 App Translocation �
 
 ## 交付与迁移
 
-候选为 1.14.1 / Build 2（完整自动重启验收未通过），工件目录 `native/build/release/1.14.1-2/`。DMG、SHA256SUMS.txt、update-manifest.json、update-manifest.sig 需同一版本一起发布。私钥仅在仓库外受保护目录，未进入 Git。
+公开测试版为 1.14.1 / Build 2（完整自动重启验收未通过），工件目录 `native/build/release/1.14.1-2/`。DMG、SHA256SUMS.txt、update-manifest.json、update-manifest.sig 需同一版本一起发布。私钥仅在仓库外受保护目录，未进入 Git。
 
-本轮提供源码与候选，尚未公开发布 1.14.1；官网与 GitHub 原生公测仍为 1.14.0。1.14.0 用户需手动安装一次新版本以获得本能力，后续具备可信更新资产的新版本才可完整 App 内更新。
+1.14.1 通过 GitHub 原生预发布通道交付，官网同步精确版本入口。1.14.0 及更早版本用户需手动安装一次新版本以获得 App 内下载与校验。后续具备可信更新资产的新版本可尝试 App 内安装；未公证包启动失败时回滚并需要手动安装，不承诺无干预的完整自动更新。发布地址见 [1.14.1 公测说明](public-test-release-1.14.1.md)。
 
 公开测试继续 ad hoc 签名与硬化运行时，跳过 Developer ID 签名和 Apple 公证。Ed25519 更新签名不等同于 Apple 身份认证，系统安全策略可能要求用户手动允许启动；具体发布流程见 [原生签名与发布](../native/docs/signing-and-release.md)。
 
-候选 SHA-256：`4000f84166720c0276e259c90cbfa0441a7042cf543a3454432fa88135bfb9d1`，大小 4,606,405 bytes。构建核验与摘要见 [verification-log.txt](update-evidence/verification-log.txt)。
+发布包 SHA-256：`4000f84166720c0276e259c90cbfa0441a7042cf543a3454432fa88135bfb9d1`，大小 4,606,405 bytes。构建核验与摘要见 [verification-log.txt](update-evidence/verification-log.txt)。

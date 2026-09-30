@@ -25,4 +25,4 @@ Actual Universal quarantined ad hoc QA in Applications: new running guest identi
 new application startup did not complete; final stable-start gate rolled back to old 1.14.1.
 Original version window/marker/new PID confirmed. No automatic-restart success claimed.
 Static spctl assessment of this isolated ad hoc candidate: rejected.
-Candidate Build 2 is local and unpublished; quarantine policy awaits user decision.
+Build 2 is the public-test release artifact; quarantine is preserved. See public-test-release-1.14.1.md for publication verification.
