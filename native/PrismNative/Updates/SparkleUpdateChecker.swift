@@ -1,8 +1,9 @@
 import Foundation
+#if !PRISM_PUBLIC_TEST
 import Sparkle
 
 /// Bridges Prism's small update boundary to Sparkle's maintained standard updater UI.
-/// Builds without a real public EdDSA key check GitHub for manual installers.
+/// Developer ID builds without a public EdDSA key check GitHub for manual installers.
 @MainActor
 final class SparkleUpdateChecker: NSObject, UpdateChecking {
     let events: AsyncStream<UpdateEvent>
@@ -37,14 +38,20 @@ final class SparkleUpdateChecker: NSObject, UpdateChecking {
         continuation.yield(.checking)
         controller.checkForUpdates(nil)
     }
+}
+#endif
 
+@MainActor
+enum UpdateCheckerFactory {
     static func makeIfConfigured(bundle: Bundle = .main) -> any UpdateChecking {
-        guard SparkleUpdateConfiguration(bundle: bundle).isReady else {
-            return GitHubUpdateChecker(
-                currentVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-            )
+#if !PRISM_PUBLIC_TEST
+        if SparkleUpdateConfiguration(bundle: bundle).isReady {
+            return SparkleUpdateChecker()
         }
-        return SparkleUpdateChecker()
+#endif
+        return GitHubUpdateChecker(
+            currentVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+        )
     }
 }
 

@@ -37,3 +37,14 @@ zsh scripts/verify-release.sh /absolute/path/Prism.app 1.0.0 1 /absolute/path/Pr
 ```
 
 在 GitHub 发布为公开状态前，应将经过验证的 DMG 与 appcast 作为同一个草稿发布的资产上传，随后重新下载资产复核字节大小、签名和 appcast 签名；确认后再发布草稿。这样失败不会覆盖已公开的更新源。
+
+## 公开测试版
+
+公开测试版使用 `PrismNative-PublicTest` 独立构建目标，仅链接 PrismCore，使用 GitHub Releases 检查更新。正式 `PrismNative-Release` 目标保留 Sparkle。未配置 Developer ID 时，公开测试版保持硬化运行时与 ad hoc 签名，不链接 Sparkle，以免 macOS 在启动时因动态库签名校验拒绝加载。
+
+```zsh
+cd native
+zsh scripts/package-public-test.sh 1.13.1 4
+```
+
+脚本生成 Universal DMG 和 SHA256SUMS.txt，并检查版本、双架构、签名、硬化运行时、无 Sparkle 动态依赖、DMG 完整性及实际启动。发布前还应在 `/Applications` 安装位置实际启动一次，并从 GitHub 草稿重新下载文件核对哈希。不能只凭 `codesign --verify` 判断能否启动；v1.13.0 的嵌入式 Sparkle 曾通过静态签名检查，却被 macOS 运行时库校验拒绝。

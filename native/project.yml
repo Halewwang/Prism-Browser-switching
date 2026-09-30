@@ -28,8 +28,48 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: 15.0
         SWIFT_VERSION: 6.0
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.13.0
-        CURRENT_PROJECT_VERSION: 3
+        MARKETING_VERSION: 1.13.1
+        CURRENT_PROJECT_VERSION: 4
+        SPARKLE_PUBLIC_ED_KEY: ""
+    info:
+      path: PrismNative/Resources/Info.plist
+      properties:
+        CFBundleName: Prism
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.prism.app.http
+            CFBundleURLSchemes: [http]
+          - CFBundleURLName: com.prism.app.https
+            CFBundleURLSchemes: [https]
+        LSMinimumSystemVersion: "15.0"
+        NSPrincipalClass: NSApplication
+        SUFeedURL: https://github.com/Halewwang/Prism-Browser-switching/releases/latest/download/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_ED_KEY)
+        SUEnableAutomaticChecks: true
+        SUAllowsAutomaticUpdates: false
+        SUAutomaticallyUpdate: false
+    entitlements:
+      path: PrismNative/Resources/PrismNative.entitlements
+  PrismNativePublicTest:
+    type: application
+    platform: macOS
+    sources: [PrismNative]
+    resources:
+      - path: PrismNative/Resources/SupportedSources.json
+    dependencies:
+      - package: PrismCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prism.app
+        PRODUCT_NAME: Prism
+        PRODUCT_MODULE_NAME: PrismNative
+        MACOSX_DEPLOYMENT_TARGET: 15.0
+        SWIFT_VERSION: 6.0
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) PRISM_PUBLIC_TEST
+        ENABLE_HARDENED_RUNTIME: YES
+        MARKETING_VERSION: 1.13.1
+        CURRENT_PROJECT_VERSION: 4
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -89,5 +129,11 @@ schemes:
     build:
       targets:
         PrismNative: all
+    archive:
+      config: Release
+  PrismNative-PublicTest:
+    build:
+      targets:
+        PrismNativePublicTest: all
     archive:
       config: Release
