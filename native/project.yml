@@ -28,8 +28,8 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: 15.0
         SWIFT_VERSION: 6.0
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.13.1
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: 1.14.0
+        CURRENT_PROJECT_VERSION: 1
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -68,8 +68,8 @@ targets:
         SWIFT_VERSION: 6.0
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) PRISM_PUBLIC_TEST
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.13.1
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: 1.14.0
+        CURRENT_PROJECT_VERSION: 1
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -101,6 +101,7 @@ targets:
       base:
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Prism.app/Contents/MacOS/Prism
         BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
   PrismNativeUITests:
     type: bundle.ui-testing
     platform: macOS

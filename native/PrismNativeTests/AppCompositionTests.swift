@@ -825,6 +825,7 @@ func repeatedLinkClicksRouteOrPresentEveryTime(hasRule: Bool) async throws {
 
     try recorder.appendEvidence(
         expectedSource: "Safari",
+        expectedBundleIdentifier: "com.apple.Safari",
         runState: .cold,
         passed: true
     )
@@ -853,6 +854,7 @@ func repeatedLinkClicksRouteOrPresentEveryTime(hasRule: Bool) async throws {
 
     try recorder.appendEvidence(
         expectedSource: "Safari",
+        expectedBundleIdentifier: "com.apple.Safari",
         runState: .warm,
         passed: true
     )
@@ -878,6 +880,7 @@ func repeatedLinkClicksRouteOrPresentEveryTime(hasRule: Bool) async throws {
     #expect(throws: SourceProbeRecorderError.self) {
         try recorder.appendEvidence(
             expectedSource: "This could be pasted private text",
+            expectedBundleIdentifier: "com.apple.Safari",
             runState: .warm,
             passed: true
         )
@@ -1032,6 +1035,30 @@ private final class ScriptedRecoveryStoreFactory {
         case let .success(store):
             return store
         }
+    }
+}
+
+@Suite("Shell test link routing")
+@MainActor
+struct ShellTestLinkRoutingTests {
+    @Test func completedOnboardingTestLinkUsesCurrentFallbackAndActuallyRoutes() async throws {
+        let queue = LinkRequestQueue(store: InMemoryPendingRequestStore())
+        let buffer = BootstrapLinkBuffer()
+        let launcher = CountingBrowserLauncher()
+        let graph = TestLaunchGraph(queue: queue, buffer: buffer, automaticBrowserID: "com.apple.Safari", onboardingCompleted: true, browserCatalog: SingleBrowserCatalog(), browserLauncher: launcher)
+        let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+        await composition.finishLaunchingOnce()
+        await graph.intake.waitForDrainForTesting()
+        let root = AppRootCoordinator(composition: composition, systemActions: .inert)
+        root.shellActions.perform(.testLink)
+        await Task.yield()
+        await Task.yield()
+        await graph.intake.waitForDrainForTesting()
+        #expect(launcher.handoffCount == 1)
+        #expect(await queue.snapshot().isEmpty)
+        let history = try graph.environment.historyRepository.recent(limit: 10, newerThan: .distantPast)
+        #expect(history.first?.sanitizedURL?.host == "example.com")
+        #expect(history.first?.method == .preferredBrowser)
     }
 }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Download } from 'lucide-react';
+import { release } from '../release';
 
 export const Header = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -34,11 +35,11 @@ export const Header = () => {
         </nav>
 
         <a 
-          href="https://github.com/Halewwang/Prism-Browser-switching/releases/latest/download/Prism-1.10.19-arm64.dmg"
+          href={release.downloadUrl}
           className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-neutral-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
         >
           <Download size={16} />
-          Download
+          Download Test
         </a>
       </div>
     </header>

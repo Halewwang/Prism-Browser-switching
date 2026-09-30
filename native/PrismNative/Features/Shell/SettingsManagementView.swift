@@ -31,6 +31,10 @@ struct SettingsManagementView: View {
                 settingsCards
         }
         .task { await loadContext() }
+        .onAppear { consumeBrowserManagementRequest() }
+        .onChange(of: environment.pendingBrowserManagement) { _, pending in
+            if pending { consumeBrowserManagementRequest() }
+        }
         .sheet(isPresented: $showBrowserManagement, onDismiss: {
             Task {
                 do { browsers = try await browserCatalog.scan() }
@@ -175,6 +179,10 @@ struct SettingsManagementView: View {
             .padding(.horizontal, 2)
         }
         .tint(SettingsPalette.primary)
+    }
+
+    private func consumeBrowserManagementRequest() {
+        if environment.consumeBrowserManagement() { showBrowserManagement = true }
     }
 
     private func settingsSection<Content: View>(

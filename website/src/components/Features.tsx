@@ -5,32 +5,32 @@ const features = [
   {
     icon: <GitBranch className="w-6 h-6 text-neutral-700" />,
     title: "Smart Routing Rules",
-    description: "Define rules based on URL patterns or source applications. Open Zoom links in Chrome and Jira tickets in Arc automatically."
+    description: "Match an exact domain, a domain and its subdomains, or text in a URL. URL rules run before confirmed source-app rules."
   },
   {
     icon: <Layout className="w-6 h-6 text-neutral-700" />,
     title: "Native macOS UI",
-    description: "Designed to feel right at home on macOS. Features glassmorphism, native rounded corners, and smooth animations."
+    description: "Built with SwiftUI and AppKit. Manage rules, browser choices, and link history in a native macOS interface."
   },
   {
     icon: <Zap className="w-6 h-6 text-neutral-700" />,
-    title: "Blazing Fast",
-    description: "Written in Electron with performance in mind. Instant startup and minimal memory footprint thanks to code splitting."
+    title: "Choose Your Fallback",
+    description: "When no rule matches, show the browser selector, use your preferred browser, or reuse the last browser you chose."
   },
   {
     icon: <Shield className="w-6 h-6 text-neutral-700" />,
     title: "Privacy First",
-    description: "All processing happens locally on your machine. No data is ever sent to the cloud. Your browsing habits stay yours."
+    description: "Routing rules and link history stay on your Mac. Update checks contact GitHub; your browsing history is not uploaded."
   },
   {
     icon: <Globe className="w-6 h-6 text-neutral-700" />,
     title: "Browser Compatibility",
-    description: "Supports all major browsers including Arc, Chrome, Safari, Firefox, Edge, Brave, Vivaldi, and more."
+    description: "Choose from installed browsers such as Safari, Chrome, Arc, Firefox, Edge, and more. You can also add a browser application manually."
   },
   {
     icon: <Cpu className="w-6 h-6 text-neutral-700" />,
-    title: "Apple Silicon Ready",
-    description: "Fully optimized for M1/M2/M3 chips. Runs natively on ARM64 architecture for maximum efficiency."
+    title: "One Universal Download",
+    description: "The native public test includes arm64 and x86_64 in one installer for Apple Silicon and Intel Macs running macOS 15 or later."
   }
 ];
 

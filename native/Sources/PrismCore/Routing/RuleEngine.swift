@@ -88,6 +88,14 @@ public enum URLRuleMatcher {
 public struct RuleEngine: Sendable {
     public init() {}
 
+    /// Returns the first active matching condition, before checking source confidence
+    /// and target availability. Preview can explain why a candidate did not execute.
+    public func matchingRule(request: LinkRequest, rules: [RoutingRule], settings: AppSettings) -> RoutingRule? {
+        guard settings.automaticRulesEnabled else { return nil }
+        return firstMatchingURLRule(in: rules, request: request)
+            ?? firstMatchingSourceRule(in: rules, request: request)
+    }
+
     public func decide(
         request: LinkRequest,
         rules: [RoutingRule],
@@ -99,18 +107,17 @@ public struct RuleEngine: Sendable {
             return .ask(reason: .rulesPaused)
         }
 
-        if let rule = firstMatchingURLRule(in: rules, request: request) {
-            return decision(for: rule, method: .urlRule, availableBrowserIDs: availableBrowserIDs)
-        }
-
         // A saved source rule matches the confirmed sender bundle ID.
-        // The support manifest only decides whether the selector offers to remember a source.
+        // The support manifest describes evidence; it never relaxes confirmation.
         _ = eligibleSourceBundleIDs
-        if let rule = firstMatchingSourceRule(in: rules, request: request) {
-            guard request.source.confidence == .confirmed else {
-                return .ask(reason: .sourceNotConfirmed)
+        if let rule = matchingRule(request: request, rules: rules, settings: settings) {
+            if case .sourceBundleIdentifier = rule.matcher {
+                guard request.source.confidence == .confirmed else {
+                    return .ask(reason: .sourceNotConfirmed)
+                }
+                return decision(for: rule, method: .sourceRule, availableBrowserIDs: availableBrowserIDs)
             }
-            return decision(for: rule, method: .sourceRule, availableBrowserIDs: availableBrowserIDs)
+            return decision(for: rule, method: .urlRule, availableBrowserIDs: availableBrowserIDs)
         }
 
         return unmatchedDecision(settings: settings, availableBrowserIDs: availableBrowserIDs)

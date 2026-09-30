@@ -193,3 +193,23 @@ import Testing
 
     #expect(decoded == settings)
 }
+
+@Test func browserDescriptorPreservesProfileMetadataAndLegacyTargets() throws {
+    let legacy = BrowserDescriptor(
+        id: "com.google.Chrome", bundleIdentifier: "com.google.Chrome", displayName: "Chrome",
+        applicationURL: URL(fileURLWithPath: "/Applications/Chrome.app"), securityScopedBookmark: nil,
+        origin: .system, availability: .available, selectorOrder: 0
+    )
+    let legacyData = try JSONEncoder().encode(legacy)
+    #expect(try JSONDecoder().decode(BrowserDescriptor.self, from: legacyData) == legacy)
+    var payload = try #require(JSONSerialization.jsonObject(with: legacyData) as? [String: Any])
+    payload["profile"] = [
+        "directoryName": "Profile 1", "displayName": "工作",
+        "userDataDirectory": "file:///tmp/prism-profile-fixture/"
+    ]
+    let profiled = try JSONDecoder().decode(BrowserDescriptor.self, from: JSONSerialization.data(withJSONObject: payload))
+    let roundTrip = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(profiled)) as? [String: Any])
+    let profile = try #require(roundTrip["profile"] as? [String: Any])
+    #expect(profile["directoryName"] as? String == "Profile 1")
+    #expect(profile["displayName"] as? String == "工作")
+}

@@ -17,6 +17,8 @@ struct HistoryRow: View {
     let copyURL: () -> Void
     let createRule: () -> Void
     let delete: () -> Void
+    var currentRules: [RoutingRule]? = nil
+    var editRule: (() -> Void)? = nil
 
     @State private var showsDetails = false
 
@@ -86,7 +88,7 @@ struct HistoryRow: View {
                 }
                 HStack(spacing: 6) {
                     ApplicationIconView(bundleIdentifier: entry.sourceBundleIdentifier, fallbackSymbol: "app.dashed", side: 16)
-                    Text(entry.sourceDisplayName).lineLimit(1)
+                    Text(displayedSource).lineLimit(1)
                     Image(systemName: "arrow.right")
                         .font(.system(size: 10, weight: .medium))
                         .accessibilityHidden(true)
@@ -182,8 +184,9 @@ struct HistoryRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.border, lineWidth: 1))
+            routingExplanationSection
             VStack(spacing: 14) {
-                detailField("Source App", value: entry.sourceDisplayName, bundleIdentifier: entry.sourceBundleIdentifier)
+                detailField("Source App", value: displayedSource, bundleIdentifier: entry.sourceBundleIdentifier)
                 detailField("Target Browser", value: targetText, bundleIdentifier: entry.targetBrowserID?.rawValue)
                 detailField("Routing Method", value: localized(methodText))
                 detailField("Result", value: localized(resultText))
@@ -200,18 +203,83 @@ struct HistoryRow: View {
                 Button("Copy Safe URL", action: copyURL)
                     .disabled(!presentation.canCopy)
                     .help(presentation.canCopy ? localized("Copy the safe saved URL") : localized("Copy is unavailable because no safe HTTP or HTTPS URL was saved"))
+                Spacer(minLength: 0)
+                recoveryButton
+            }
+            .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+            HStack(spacing: 8) {
                 Button("Create Rule for This Domain") {
                     showsDetails = false
                     createRule()
                 }
                 .disabled(!presentation.canCreateRule)
                 .help(presentation.canCreateRule ? localized("Create a rule for the saved domain") : localized("A rule cannot be created because no safe saved host is available"))
+                if case .current = routingExplanation.ruleReference, let editRule {
+                    Button(String(localized: "history.explanation.edit", defaultValue: "Edit Current Rule")) {
+                        showsDetails = false
+                        editRule()
+                    }
+                    .accessibilityIdentifier("\(accessibilityPrefix).editRule")
+                }
                 Spacer(minLength: 0)
-                recoveryButton
             }
             .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
             recoveryExplanation
         }
+    }
+
+    private var displayedSource: String {
+        entry.sourceDisplayName == "Unknown"
+            ? String(localized: "selector.source.unknown", defaultValue: "Unknown source")
+            : entry.sourceDisplayName
+    }
+
+    private var routingExplanation: HistoryRoutingExplanation {
+        HistoryRoutingExplanation(entry: entry, currentRules: currentRules)
+    }
+
+    private var routingExplanationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "history.explanation.title", defaultValue: "Why this browser?"))
+                .font(.system(size: 13, weight: .semibold))
+            Text("\(displayedSource) → \(localized(methodText)) → \(targetText)")
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(routingExplanation.methodExplanation)
+                .font(.system(size: 12))
+            switch routingExplanation.ruleReference {
+            case let .current(rule):
+                Text(String(format: String(localized: "history.explanation.currentRule", defaultValue: "Current rule: %@"), rule.label ?? RuleEditorDraft(rule: rule, browsers: []).matchValue))
+                    .font(.system(size: 12, weight: .medium))
+                Text(RuleEditorDraft(rule: rule, browsers: []).scopeDescription)
+                    .font(.system(size: 12))
+                snapshotLimitation
+            case .missing:
+                Text(String(localized: "history.explanation.deleted", defaultValue: "The recorded rule has been deleted."))
+                    .font(.system(size: 12))
+                snapshotLimitation
+            case .unavailable:
+                Text(String(localized: "history.explanation.unavailable", defaultValue: "The current rule could not be read."))
+                    .font(.system(size: 12))
+                snapshotLimitation
+            case .notRecorded:
+                Text(String(localized: "history.explanation.noID", defaultValue: "This record has no matched rule ID, so its rule cannot be identified."))
+                    .font(.system(size: 12))
+            case .notApplicable:
+                EmptyView()
+            }
+        }
+        .foregroundStyle(SettingsPalette.secondary)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("\(accessibilityPrefix).details.explanation")
+    }
+
+    private var snapshotLimitation: some View {
+        Text(String(localized: "history.explanation.noSnapshot", defaultValue: "History saved the method, browser and rule ID, but not the rule's conditions. The current rule may have changed; it is not a snapshot of that time."))
+            .font(.system(size: 12))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func detailField(_ title: String, value: String, bundleIdentifier: String? = nil) -> some View {

@@ -6,6 +6,20 @@ import Testing
 @Suite("History model")
 @MainActor
 struct HistoryViewModelTests {
+    @Test func editMatchingRuleUsesRecordedIDAndNeverOpensALink() {
+        var entry = historyVMEntry(result: .success)
+        let rule = RoutingRule(id: UUID(), isEnabled: true, matcher: .exactHost("changed.example"), targetBrowserID: "new", priority: 0, label: nil, createdAt: .distantPast, updatedAt: .now)
+        entry.method = .urlRule
+        entry.matchingRuleID = rule.id
+        let navigation = HistoryVMNavigation()
+        let fixture = makeHistoryVM(entries: [entry], navigation: navigation)
+        fixture.model.editMatchingRule(entry, currentRules: [rule])
+        #expect(navigation.prefills == [.savedRule(id: rule.id)])
+        #expect(fixture.intake.calls.isEmpty)
+        fixture.model.editMatchingRule(entry, currentRules: [])
+        #expect(navigation.prefills.count == 1)
+    }
+
     @Test func loadReturnsRecentRowsAndRepositoryFailureIsARecoverableFailureNotEmpty() async throws {
         let entry = historyVMEntry(result: .success)
         let repository = HistoryVMRepository(entries: [entry])

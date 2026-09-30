@@ -4,6 +4,7 @@ import Observation
 import PrismCore
 
 enum SelectorRulePrefill: Equatable, Sendable {
+    case savedRule(id: UUID)
     case domain(host: String, browserID: BrowserID?)
     case source(bundleIdentifier: String, displayName: String, browserID: BrowserID)
 }
@@ -120,6 +121,32 @@ final class SelectorViewModel {
         }
     }
 
+    var isFailurePresentation: Bool {
+        if case let .ruleSkipped(reason) = presentationContext {
+            switch reason {
+            case .noMatchingRule, .rulesPaused, .sourceNotConfirmed: return false
+            case .targetUnavailable, .preferredBrowserUnavailable: return true
+            }
+        }
+        return accessibleFailureMessage != nil
+    }
+
+    var sourceDisplayName: String {
+        source == .unknown || source.displayName == "Unknown"
+            ? String(localized: "selector.source.unknown", defaultValue: "Unknown source")
+            : source.displayName
+    }
+
+    var sourceHelp: String {
+        let confidence: String
+        switch source.confidence {
+        case .confirmed: confidence = String(localized: "selector.source.confirmed", defaultValue: "Confirmed sender")
+        case .low: confidence = String(localized: "selector.source.low", defaultValue: "Possible source; not confirmed")
+        case .unknown: confidence = String(localized: "selector.source.unconfirmed", defaultValue: "The sending application could not be confirmed")
+        }
+        return [sourceDisplayName, source.bundleIdentifier, confidence, sourceRuleSupportMessage].compactMap { $0 }.joined(separator: "\n")
+    }
+
     var pendingBadgeText: String? {
         pendingCount >= 2 ? String(pendingCount) : nil
     }
@@ -161,7 +188,19 @@ final class SelectorViewModel {
               let bundleIdentifier = source.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
               !bundleIdentifier.isEmpty
         else { return false }
-        return eligibleSourceBundleIDs.contains(bundleIdentifier)
+        return true
+    }
+
+    var sourceRuleSupportStatus: SourceRuleSupportStatus? {
+        guard canCreateSourceRule, let bundleIdentifier = source.bundleIdentifier else { return nil }
+        return SourceRuleSupportStatus(
+            bundleIdentifier: bundleIdentifier,
+            verifiedBundleIDs: eligibleSourceBundleIDs
+        )
+    }
+
+    var sourceRuleSupportMessage: String? {
+        sourceRuleSupportStatus?.message
     }
 
     func shortcut(forBrowserAt index: Int) -> Int? {
@@ -239,7 +278,7 @@ final class SelectorViewModel {
         scanFailureMessage = nil
         defer { isLoading = false }
         do {
-            let scanned = try await browserCatalog.scan()
+            let scanned = try await browserCatalog.scanForSelector()
             browsers = Self.availableAndOrdered(scanned)
             if browsers.isEmpty {
                 selectedIndex = 0

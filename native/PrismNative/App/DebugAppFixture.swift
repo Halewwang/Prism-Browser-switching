@@ -201,13 +201,19 @@ struct DebugAppFixture {
         variant: DebugAppFixtureVariant = .parse(arguments: ProcessInfo.processInfo.arguments)
     ) -> DebugAppFixture {
         let recorder = DebugUITestEffectRecorder()
-        let browsers = Self.browsers(for: variant)
-        let catalog = DebugAppBrowserCatalog(browsers: browsers, recorder: recorder)
+        let iterationQA = ProcessInfo.processInfo.arguments.contains("--iteration-qa")
+        var browsers = Self.browsers(for: variant)
+        if iterationQA, let chrome = browsers.first(where: { $0.bundleIdentifier == "com.google.Chrome" }) {
+            let profile = ChromiumProfileDescriptor(directoryName: "Profile 1", displayName: "工作示例", userDataDirectory: URL(fileURLWithPath: "/tmp/prism-fixture-profiles"))
+            browsers.append(BrowserDescriptor(id: profile.browserID(bundleIdentifier: chrome.bundleIdentifier), bundleIdentifier: chrome.bundleIdentifier, displayName: "Chrome · 工作示例", applicationURL: chrome.applicationURL, securityScopedBookmark: nil, origin: .system, availability: .available, selectorOrder: 3, profile: profile))
+        }
+        let browserPreferences = InMemoryBrowserPreferenceRepository()
+        let catalog = DebugAppBrowserCatalog(browsers: browsers, recorder: recorder, preferences: browserPreferences)
         let settingsRepository = InMemorySettingsRepository()
         if Self.opensHistoryInShell(variant) {
             var settings = AppSettings.defaults
             settings.onboardingCompleted = true
-            settings.language = .english
+            settings.language = iterationQA ? .simplifiedChinese : .english
             try? settingsRepository.save(settings)
         }
         let historyRepository: any HistoryRepository = variant == .historyLoadFailure
@@ -217,7 +223,7 @@ struct DebugAppFixture {
             try? historyRepository.upsert(entry)
         }
         let ruleRepository = InMemoryRuleRepository()
-        for rule in Self.rules(for: variant, browsers: browsers) {
+        for rule in Self.rules(for: variant, browsers: Array(browsers.prefix(3))) {
             try? ruleRepository.upsert(rule)
         }
         let environment = AppEnvironment(
@@ -226,7 +232,7 @@ struct DebugAppFixture {
             updateChecker: DisabledUpdateChecker(),
             ruleRepository: ruleRepository,
             historyRepository: historyRepository,
-            browserPreferenceRepository: InMemoryBrowserPreferenceRepository(),
+            browserPreferenceRepository: browserPreferences,
             settingsRepository: settingsRepository
         )
         if variant == .onboardingRecovery {
@@ -546,15 +552,29 @@ private final class DebugAppDefaultHandlerClient: DefaultHandlerClient {
 private final class DebugAppBrowserCatalog: BrowserCataloging {
     private let browsers: [BrowserDescriptor]
     private let recorder: DebugUITestEffectRecorder
+    private let preferences: any BrowserPreferenceRepository
 
-    init(browsers: [BrowserDescriptor], recorder: DebugUITestEffectRecorder) {
+    init(browsers: [BrowserDescriptor], recorder: DebugUITestEffectRecorder, preferences: any BrowserPreferenceRepository) {
         self.browsers = browsers
         self.recorder = recorder
+        self.preferences = preferences
     }
 
     func scan() async throws -> [BrowserDescriptor] {
         recorder.recordBrowserScan()
-        return browsers
+        let order = try preferences.orderedBrowserIDs()
+        let positions = Dictionary(order.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: min)
+        return browsers.enumerated().sorted {
+            (positions[$0.element.id] ?? (order.count + $0.offset)) < (positions[$1.element.id] ?? (order.count + $1.offset))
+        }.enumerated().map { index, element in
+            let browser = element.element
+            return BrowserDescriptor(id: browser.id, bundleIdentifier: browser.bundleIdentifier, displayName: browser.displayName, applicationURL: browser.applicationURL, securityScopedBookmark: browser.securityScopedBookmark, origin: browser.origin, availability: browser.availability, selectorOrder: index, profile: browser.profile)
+        }
+    }
+
+    func scanForSelector() async throws -> [BrowserDescriptor] {
+        let hidden = Set(try preferences.hiddenBrowserIDs())
+        return try await scan().filter { !hidden.contains($0.id) }
     }
 }
 

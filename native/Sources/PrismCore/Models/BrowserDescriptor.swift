@@ -26,6 +26,24 @@ public enum BrowserAvailability: String, Codable, Equatable, Sendable {
     case unavailable
 }
 
+public struct ChromiumProfileDescriptor: Codable, Equatable, Sendable {
+    public let directoryName: String
+    public let displayName: String
+    public let userDataDirectory: URL
+
+    public init(directoryName: String, displayName: String, userDataDirectory: URL) {
+        self.directoryName = directoryName
+        self.displayName = displayName
+        self.userDataDirectory = userDataDirectory
+    }
+
+    public func browserID(bundleIdentifier: String) -> BrowserID {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._")
+        let directory = directoryName.addingPercentEncoding(withAllowedCharacters: allowed) ?? directoryName
+        return BrowserID("\(bundleIdentifier)::profile::\(directory)")
+    }
+}
+
 public struct BrowserDescriptor: Codable, Equatable, Sendable {
     public let id: BrowserID
     public let bundleIdentifier: String
@@ -35,6 +53,7 @@ public struct BrowserDescriptor: Codable, Equatable, Sendable {
     public let origin: BrowserOrigin
     public let availability: BrowserAvailability
     public let selectorOrder: Int
+    public let profile: ChromiumProfileDescriptor?
 
     public init(
         id: BrowserID,
@@ -44,7 +63,8 @@ public struct BrowserDescriptor: Codable, Equatable, Sendable {
         securityScopedBookmark: Data?,
         origin: BrowserOrigin,
         availability: BrowserAvailability,
-        selectorOrder: Int
+        selectorOrder: Int,
+        profile: ChromiumProfileDescriptor? = nil
     ) {
         self.id = id
         self.bundleIdentifier = bundleIdentifier
@@ -54,5 +74,6 @@ public struct BrowserDescriptor: Codable, Equatable, Sendable {
         self.origin = origin
         self.availability = availability
         self.selectorOrder = selectorOrder
+        self.profile = profile
     }
 }

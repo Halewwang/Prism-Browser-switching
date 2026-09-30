@@ -241,6 +241,14 @@ final class HistoryViewModel {
         ))
     }
 
+    func editMatchingRule(_ entry: HistoryEntry, currentRules: [RoutingRule]?) {
+        guard case let .current(rule) = HistoryRoutingExplanation(entry: entry, currentRules: currentRules).ruleReference else {
+            actionMessage = String(localized: "history.explanation.editUnavailable", defaultValue: "The recorded rule is unavailable. Create a new domain rule instead.")
+            return
+        }
+        navigation.openRuleEditor(prefill: .savedRule(id: rule.id))
+    }
+
     func requestDelete(_ entry: HistoryEntry) {
         guard canDelete(entry) else {
             actionMessage = deleteDisabledReason(for: entry)

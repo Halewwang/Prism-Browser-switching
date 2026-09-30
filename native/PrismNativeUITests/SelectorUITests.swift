@@ -50,7 +50,7 @@ final class SelectorUITests: XCTestCase {
 
         cards[0].rightClick()
         XCTAssertTrue(
-            application.menuItems["Always open this domain in Harness Browser 1"]
+            application.menuItems["Always open this website in Harness Browser 1"]
                 .waitForExistence(timeout: 2)
         )
     }
@@ -111,7 +111,8 @@ final class SelectorUITests: XCTestCase {
         let end = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
 
         XCTAssertEqual(visibleWidth(of: fifth, in: viewport), 0, accuracy: 1.5)
-        start.press(forDuration: 0.1, thenDragTo: end)
+        // Desktop mouse events; press(forDuration:) injects a touch/Touch Bar gesture.
+        start.click(forDuration: 0.1, thenDragTo: end)
         XCTAssertTrue(waitUntil(timeout: 2) {
             self.visibleWidth(of: fifth, in: viewport) > 0
         })
@@ -179,7 +180,7 @@ final class SelectorUITests: XCTestCase {
         XCTAssertTrue(firstBrowser.label.contains("Selected"))
 
         firstBrowser.rightClick()
-        let domainMenuItem = application.menuItems["Always open this domain in Harness Browser 1"]
+        let domainMenuItem = application.menuItems["Always open this website in Harness Browser 1"]
         XCTAssertTrue(domainMenuItem.waitForExistence(timeout: 2))
     }
 

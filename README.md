@@ -1,141 +1,103 @@
 # Prism for macOS
 
 <div align="center">
-  <img src="build/icon.png" alt="Prism Logo" width="128" height="128" />
-  
-  <h3>macOS 智能浏览器路由管家</h3>
-  <p>接管系统链接点击，根据来源应用与规则，自动分发至最合适的浏览器。</p>
-
+  <img src="website/public/app-icon.png" alt="Prism Logo" width="128" height="128" />
+  <h3>链接，自有去处</h3>
+  <p>原生 macOS 浏览器路由工具：按网址规则分流，按已确认的来源应用路由，或由你选择浏览器。</p>
+  <p><strong>v1.14.0 · 构建 1 · 原生公开测试版</strong><br />macOS 15.0+ · Universal（Apple Silicon / Intel）</p>
   <p>
-    <a href="https://github.com/Halewwang/Prism-Browser-switching/releases">
-      <img src="https://img.shields.io/github/v/release/Halewwang/Prism-Browser-switching?style=flat-square&color=000000" alt="Version" />
-    </a>
-    <a href="LICENSE">
-      <img src="https://img.shields.io/github/license/Halewwang/Prism-Browser-switching?style=flat-square&color=000000" alt="License" />
-    </a>
-    <img src="https://img.shields.io/badge/platform-macOS-000000?style=flat-square&logo=apple" alt="Platform" />
+    <a href="https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.14.0/Prism-1.14.0-universal-test.dmg">下载原生公开测试版</a>
+    · <a href="https://github.com/Halewwang/Prism-Browser-switching/releases/tag/v1.14.0">发布与安装说明</a>
   </p>
 </div>
 
----
+## 当前版本
 
-## 📖 项目概述 (Project Overview)
+当前推荐下载是 **v1.14.0 原生公开测试版**，采用 SwiftUI、AppKit 与 SwiftData，支持 macOS 15 或更新版本。一个 Universal 安装包同时包含 `arm64` 和 `x86_64`。
 
-**Prism** 是一款专为 macOS 设计的高性能浏览器路由工具（Browser Router）。在现代工作流中，我们经常需要在多个浏览器之间切换：Chrome 用于开发调试，Arc 用于日常浏览，Safari 用于个人生活，或者 Edge 用于企业内网。
+此测试版使用 **ad hoc 签名，尚未经过 Developer ID 签名和 Apple 公证**。macOS 可能阻止首次打开，需要你在确认下载来源后手动允许。该构建的签名和公证状态不等同于正式发行版。
 
-Prism 通过接管 macOS 的默认浏览器行为，充当了一个智能的“交通指挥官”。它能够精准识别点击链接的**来源应用程序**（如 Slack、钉钉、微信、飞书）以及 **URL 的特征**，并根据您预设的规则，自动将链接发送到最合适的浏览器中打开。
+请使用上方的精确版本下载链接。GitHub 的 `releases/latest` 目前仍指向旧 Electron 稳定版，不包含原生预发布版本；旧版与原生版的系统要求和功能范围不同。
 
-**核心价值：**
-*   **工作生活分离**：自动将办公软件的链接分流至工作浏览器，社交软件链接分流至私人浏览器。
-*   **开发效率提升**：特定内网或调试域名自动在开发版浏览器中打开。
-*   **无感体验**：原生级的启动速度与 UI 设计，仿佛系统自带功能。
+## 功能与边界
 
-## ✨ 功能特性 (Features)
+- **网址规则**：支持精确域名、域名及其子域名、URL 包含文本三种匹配方式。
+- **来源应用规则**：以应用标识匹配；仅当 macOS 提供的发送者信息被确认为 `confirmed` 时执行自动来源路由。不同应用的链接发送方式不同，不承诺识别所有应用或所有链接。
+- **规则顺序**：先匹配网址规则，再匹配来源应用规则；同组内按你设置的顺序执行。可单独启停规则，也可暂停自动分流。
+- **无匹配时的行为**：显示浏览器选择器、使用首选浏览器，或使用上次选择的浏览器。目标浏览器不可用时会回到选择器。
+- **原生选择器**：靠近鼠标并限制在屏幕边界内，支持横向滚动、数字键、左右方向键、Return 确认与 Escape 取消。
+- **浏览器管理**：发现本机浏览器，也可手动添加浏览器应用。支持隐藏和排序选择器中的选项；隐藏不影响规则和兜底目标。稳定版 Chrome／Edge 的 Profile 目标为实验功能。
+- **规则预览与纠正**：输入网址并选择可选的模拟已确认来源，使用同一规则引擎预览命中结果，不打开浏览器；新建规则保存后可撤销。历史可跳转纠正当前规则，但不会把当前规则当作当时的完整快照。
+- **本地记录**：规则、设置与链接历史保存在此 Mac，可在应用中查看和管理。
 
-*   **🤖 智能来源识别**：采用底层系统调用，精准识别唤起链接的来源应用（支持微信、钉钉、飞书、Slack、Teams 等）。
-*   **⚡️ 强大的规则引擎**：
-    *   支持 **URL 关键字/正则** 匹配。
-    *   支持按 **来源 App** 指定目标浏览器。
-    *   支持 **优先级控制**（URL 规则 > 来源规则）。
-*   **🎨 原生级 UI 体验**：遵循 macOS 设计规范，拥有精美的毛玻璃特效、圆角设计及原生应用图标显示。
-    *   **智能跟随**：选择器弹窗会自动出现在鼠标光标位置，操作路径最短。
-    *   **横向滚动**：当浏览器选项较多时，支持直观的横向滑动交互。
-*   **⌨️ 高效操作**：支持快捷键（数字键/方向键）快速选择浏览器，操作行云流水。
-*   **📊 历史记录回溯**：自动记录跳转历史，方便随时查找错过的链接。
-*   **🔒 隐私安全**：完全开源，所有数据仅存储在本地，绝不上传服务器。
+当前原生版**不支持正则表达式规则**。来源规则不会把当前前台应用的推测结果直接当作已确认的发送者。
 
-## 🚀 快速开始 (Quick Start)
+**公测限制**：真实来源应用的覆盖仍不完整，不承诺所有应用都可识别。Chrome／Edge Profile 的冷启动、已运行浏览器中的指定 Profile、账号上下文及 Profile 删除场景尚未完成真实浏览器验收。Universal 包含 Intel 二进制，但尚未在 Intel 实机完成验收，也未覆盖所有受支持 macOS 版本。自动化测试不能替代这些实机结果，详见 [v1.14.0 公测说明](docs/public-test-release-1.14.0.md)。
 
-### 对于普通用户
+## 安装与首次使用
 
-1.  **下载**：访问 [Releases 页面](https://github.com/Halewwang/Prism-Browser-switching/releases) 下载最新的 `.dmg` 安装包。
-2.  **安装**：打开 `.dmg` 文件，将 **Prism** 拖入 `Applications` 文件夹。
-3.  **配置**：
-    *   启动 Prism。
-    *   前往 **系统设置** -> **桌面与程序坞** -> **默认浏览器**，选择 **Prism**。
-    *   (可选) 在 Prism 设置中配置您的分发规则。
+1. 下载 [Prism-1.14.0-universal-test.dmg](https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.14.0/Prism-1.14.0-universal-test.dmg)。可同时下载 [SHA256SUMS.txt](https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.14.0/SHA256SUMS.txt)，在下载目录运行 `shasum -a 256 -c SHA256SUMS.txt` 核对文件完整性。
+2. 退出已运行的 Prism，打开 DMG，将 Prism 拖入 `Applications`。更新时替换旧应用；设置和历史保存在应用包外。
+3. **先尝试打开 Applications 中的 Prism**。若 macOS 提示无法验证开发者，在确认精确版本下载来源及校验值后，前往 **系统设置 → 隐私与安全性 → 仍要打开**，再在确认弹窗点击 **打开**。参见 [Apple 的首次打开说明](https://support.apple.com/en-us/102445)。不要将此步骤用于恶意软件或应用损坏警告。
+4. 启动后按引导将 Prism 设为默认浏览器。也可前往 **系统设置 → 桌面与程序坞 → 默认网页浏览器** 选择 Prism。
+5. 在设置中检查已发现的浏览器，选择没有匹配规则时的行为。
+6. 在规则页添加网址规则或来源应用规则，然后从实际使用的应用打开 HTTP/HTTPS 链接进行验证。
 
-### 对于开发者
+此公开测试版尚未完成 Developer ID 签名和 Apple 公证；如果你不希望手动允许，请等待完成签名和公证的正式版本。受管理的 Mac 可能不允许更改安全设置。
 
-如果您想参与开发或自行构建，请确保您的环境满足以下要求：
-*   **Node.js**: v18+
-*   **macOS**: Intel 或 Apple Silicon
+## 使用示例
+
+| 需求 | 规则 | 行为 |
+| --- | --- | --- |
+| 将 GitHub 链接用于工作 | 域名及子域名 `github.com` → Chrome | `github.com` 和 `docs.github.com` 都匹配 |
+| 仅分流特定主机 | 精确域名 `example.com` → Safari | `www.example.com` 不匹配 |
+| 分流开发地址 | URL 包含 `localhost:3000` → 开发浏览器 | 完整链接包含该文本时匹配 |
+| 按来源分流 | 选择一个已安装的来源应用 → Chrome | 仅当发送者为 `confirmed` 且无更优先的网址规则时执行 |
+
+没有匹配规则时，默认显示选择器。你可以直接点击浏览器，或按对应数字键；也可在设置中改为首选浏览器或上次使用的浏览器。
+
+## 隐私与更新
+
+链接路由在本机执行，规则和历史不上传到服务器。公开测试版通过 GitHub Releases 检查原生更新；更新检查会连接 GitHub，下载后由你手动替换 Applications 中的应用。自动检查可在设置中关闭。
+
+Developer ID 正式版的 Sparkle 发布流程与公开测试版分开，参见 [原生签名与发布说明](native/docs/signing-and-release.md)。仓库根目录的 Electron 发布脚本和 `latest-release.json` 属于旧版发布流程，原生更新检查不使用该协议。
+
+## 原生开发
+
+**1.14.0 / Build 1 公测**增加实验性 Chrome／Edge Profile、新规则撤销、规则预览、历史解释及浏览器隐藏／排序。弹窗保持紧凑布局，创建规则仍可通过浏览器选项的右键菜单完成。实机验收要求见 [验收清单](native/docs/release-acceptance.md)，来源支持名单只接受真实证据。
+
+原生代码位于 [`native/`](native)。需要 macOS 15+、支持 Swift 6 的 Xcode，以及 **XcodeGen 2.46.0**（生成脚本会检查精确版本）。
 
 ```bash
-# 1. 克隆项目仓库
 git clone https://github.com/Halewwang/Prism-Browser-switching.git
-cd Prism-Browser-switching
+cd Prism-Browser-switching/native
 
-# 2. 安装项目依赖
-npm install
+# 运行独立路由核心测试
+swift test
 
-# 3. 启动开发环境
-# 终端 A: 启动 React 前端服务
-npm run dev
-
-# 终端 B: 启动 Electron 主进程
-npm start
+# 生成 Xcode 工程，再运行原生应用测试
+zsh scripts/generate-project.sh
+xcodebuild -project PrismNative.xcodeproj -scheme PrismNative-Unit \
+  -destination 'platform=macOS' CODE_SIGN_IDENTITY=- test
 ```
 
-## 💡 使用示例 (Usage Examples)
+在 Xcode 中打开生成的 `native/PrismNative.xcodeproj`，选择 `PrismNative-Unit` 开发与测试 scheme。公开测试构建使用 `PrismNative-PublicTest`，完整打包和核验步骤见 [发布说明](native/docs/signing-and-release.md)。
 
-### 场景一：按来源应用分流
-
-配置规则后，Prism 会自动处理链接跳转：
-
-*   **规则**：来源应用 `DingTalk` (钉钉) -> 目标浏览器 `Chrome`
-*   **效果**：在钉钉中点击的所有链接，都会自动在 Chrome 中打开，保持工作环境纯净。
-
-### 场景二：按 URL 关键字分流
-
-*   **规则**：URL 包含 `google.com` -> 目标浏览器 `Arc`
-*   **规则**：URL 包含 `localhost:3000` -> 目标浏览器 `Firefox Developer Edition`
-*   **效果**：访问特定域名或开发环境时，自动唤起对应的专用浏览器。
-
-### 场景三：手动选择 (Selector)
-
-当没有匹配任何规则时，Prism 会弹出一个轻量级选择框：
-
-1.  点击链接。
-2.  Prism 弹窗显示可用浏览器列表。
-3.  按 `1` 选择 Chrome，按 `2` 选择 Safari（支持自定义快捷键）。
-
-## ❓ 常见问题 (FAQ)
-
-### ⚠️ 打开应用时提示 "Prism is damaged and can't be opened"？
-
-这是由于 macOS 的安全机制（Gatekeeper）拦截了未签名的应用。由于本项目是开源免费项目，暂未购买 Apple 开发者证书进行签名。
-
-**解决方法：**
-
-请在终端（Terminal）中运行以下命令，即可正常打开：
+官网位于 [`website/`](website)，使用 React、TypeScript 与 Vite：
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/Prism.app
+cd website
+npm ci
+npm run dev
+# 提交前检查
+npm run lint
+npm run build
 ```
 
-### 🔒 为什么应用需要获取辅助功能权限？
+根目录的 `src/`、`electron/` 与 npm 开发命令保留旧 Electron 实现，不能用于构建上述原生公开测试版。
 
-Prism 需要使用辅助功能 API 来获取当前前台应用的窗口位置，以便将选择器弹窗精准显示在您的鼠标或窗口附近，提升使用体验。我们承诺不会读取您的任何其他敏感信息。
+## 反馈与贡献
 
-## 🤝 贡献指南 (Contributing)
+请在 [Issues](https://github.com/Halewwang/Prism-Browser-switching/issues) 中提交问题，附上 Prism 版本、macOS 版本、来源应用、期望行为和复现步骤。分享日志或截图前，请移除私人链接与历史内容。
 
-我们非常欢迎社区贡献！如果您有好的想法或发现了 Bug，请按以下步骤操作：
-
-1.  **Fork** 本仓库。
-2.  创建一个新的分支 (`git checkout -b feature/AmazingFeature`)。
-3.  提交您的更改 (`git commit -m 'Add some AmazingFeature'`)。
-4.  推送到分支 (`git push origin feature/AmazingFeature`)。
-5.  提交 **Pull Request**。
-
-### 问题反馈
-请在 [Issues](https://github.com/Halewwang/Prism-Browser-switching/issues) 页面提交 Bug 报告或功能请求。
-
-## 📄 许可证 (License)
-
-本项目基于 **MIT License** 开源。详情请参阅 [LICENSE](LICENSE) 文件。
-
----
-<div align="center">
-  Created with ❤️ by Hale
-</div>
+欢迎通过 Pull Request 贡献。原生改动应运行相关核心与应用测试；官网改动应通过构建和 lint，并验证实际下载入口。

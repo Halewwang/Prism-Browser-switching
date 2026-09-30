@@ -102,7 +102,7 @@ struct SelectorView: View {
                 .scaledToFit()
                 .frame(width: 19, height: 19)
                 .accessibilityHidden(true)
-            Text(model.source.displayName)
+            Text(model.sourceDisplayName)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(SelectorPalette.primaryText)
                 .lineLimit(1)
@@ -126,16 +126,17 @@ struct SelectorView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(localized: "selector.source", defaultValue: "Source"))
         .accessibilityValue(model.pendingAccessibilityValue.map {
-            "\(model.source.displayName), \($0)"
-        } ?? model.source.displayName)
+            "\(model.sourceHelp), \($0)"
+        } ?? model.sourceHelp)
+        .help(model.sourceHelp)
         .accessibilityIdentifier("selector.source")
     }
 
     private var urlField: some View {
         HStack(spacing: 7) {
             if model.accessibleFailureMessage != nil {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(SelectorPalette.error)
+                Image(systemName: model.isFailurePresentation ? "exclamationmark.triangle.fill" : "info.circle")
+                    .foregroundStyle(model.isFailurePresentation ? SelectorPalette.error : SelectorPalette.secondaryText)
                     .accessibilityHidden(true)
             }
             Text(model.url.absoluteString)
@@ -149,7 +150,7 @@ struct SelectorView: View {
                     showsFailureHelp.toggle()
                 } label: {
                     Image(systemName: "questionmark.circle")
-                        .accessibilityLabel(String(localized: "selector.failure.help", defaultValue: "Failure details"))
+                        .accessibilityLabel(String(localized: "selector.reason.help", defaultValue: "Why Prism is asking"))
                 }
                 .buttonStyle(.plain)
                 .popover(isPresented: $showsFailureHelp) {
@@ -162,7 +163,7 @@ struct SelectorView: View {
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .selectorHeaderField(contrast: contrast, failure: model.accessibleFailureMessage != nil)
+        .selectorHeaderField(contrast: contrast, failure: model.isFailurePresentation)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(localized: "selector.url", defaultValue: "Link"))
         .accessibilityValue(model.accessibleFailureMessage ?? model.url.absoluteString)
@@ -239,18 +240,12 @@ struct SelectorView: View {
         )
         .contextMenu {
             if model.canCreateDomainRule {
-                Button(String(
-                    localized: "selector.rule.domain",
-                    defaultValue: "Always open this domain in \(browser.displayName)"
-                )) {
+                Button(String(format: String(localized: "selector.rule.domainFormat", defaultValue: "Always open this website in %@"), browser.displayName)) {
                     model.openDomainRule(browserID: browser.id)
                 }
             }
             if model.canCreateSourceRule {
-                Button(String(
-                    localized: "selector.rule.source",
-                    defaultValue: "Always open links from \(model.source.displayName) in \(browser.displayName)"
-                )) {
+                Button(String(format: String(localized: "selector.rule.sourceFormat", defaultValue: "Always open links from %@ in %@"), model.sourceDisplayName, browser.displayName)) {
                     model.openSourceRule(browserID: browser.id)
                 }
             }

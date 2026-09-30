@@ -32,12 +32,14 @@ enum SourceProbeExpectedSource: String, CaseIterable, Identifiable {
 enum SourceProbeRecorderError: Error {
     case noCapturedSource
     case invalidExpectedSource
+    case invalidExpectedBundleIdentifier
 }
 
 @MainActor
 @Observable
 final class SourceProbeRecorder {
     private struct EvidenceRow: Codable {
+        let captureID: UUID
         let timestamp: Date
         let appName: String
         let bundleIdentifier: String?
@@ -50,6 +52,7 @@ final class SourceProbeRecorder {
 
     let fileURL: URL
     private(set) var latestCapture: LinkCaptureDiagnostic?
+    private var latestCaptureID: UUID?
     private(set) var savedRowCount = 0
 
     init(fileURL: URL) {
@@ -67,14 +70,21 @@ final class SourceProbeRecorder {
 
     func record(_ diagnostic: LinkCaptureDiagnostic) {
         latestCapture = diagnostic
+        latestCaptureID = UUID()
+    }
+
+    static func isValidExpectedBundleIdentifier(_ value: String) -> Bool {
+        let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return candidate.range(of: #"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$"#, options: .regularExpression) != nil
     }
 
     func appendEvidence(
         expectedSource: String,
+        expectedBundleIdentifier: String,
         runState: SourceProbeRunState,
         passed: Bool
     ) throws {
-        guard let capture = latestCapture else {
+        guard let capture = latestCapture, let captureID = latestCaptureID else {
             throw SourceProbeRecorderError.noCapturedSource
         }
         let candidate = expectedSource.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -82,12 +92,17 @@ final class SourceProbeRecorder {
             throw SourceProbeRecorderError.invalidExpectedSource
         }
         let expected = expectedApplication.rawValue
+        let expectedBundle = expectedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidExpectedBundleIdentifier(expectedBundle) else {
+            throw SourceProbeRecorderError.invalidExpectedBundleIdentifier
+        }
 
         let verifiedPass = passed
             && capture.confidence == .confirmed
-            && capture.sourceBundleIdentifier?.isEmpty == false
-            && capture.sourceDisplayName.localizedCaseInsensitiveContains(expected)
+            && capture.senderPIDPresent
+            && capture.sourceBundleIdentifier == expectedBundle
         let row = EvidenceRow(
+            captureID: captureID,
             timestamp: capture.timestamp,
             appName: capture.sourceDisplayName,
             bundleIdentifier: capture.sourceBundleIdentifier,
@@ -98,7 +113,12 @@ final class SourceProbeRecorder {
             passed: verifiedPass
         )
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
         var data = try encoder.encode(row)
         data.append(0x0A)
 
@@ -121,6 +141,7 @@ final class SourceProbeRecorder {
 struct SourceProbeView: View {
     let recorder: SourceProbeRecorder
     @State private var expectedSource = SourceProbeExpectedSource.safari
+    @State private var expectedBundleIdentifier = ""
     @State private var runState = SourceProbeRunState.cold
     @State private var passed = true
     @State private var status = "Waiting for an HTTP or HTTPS link"
@@ -139,6 +160,12 @@ struct SourceProbeView: View {
                         Text(source.rawValue).tag(source)
                     }
                 }
+                .onChange(of: expectedSource) { _, _ in expectedBundleIdentifier = "" }
+                TextField("Expected bundle ID", text: $expectedBundleIdentifier)
+                    .accessibilityIdentifier("sourceProbe.expectedBundleIdentifier")
+                Text("Enter the expected application's bundle ID from independent inspection. Do not copy the captured result as the expected identity.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker("State", selection: $runState) {
                     ForEach(SourceProbeRunState.allCases) { state in
                         Text(state.rawValue.capitalized).tag(state)
@@ -149,6 +176,7 @@ struct SourceProbeView: View {
                     do {
                         try recorder.appendEvidence(
                             expectedSource: expectedSource.rawValue,
+                            expectedBundleIdentifier: expectedBundleIdentifier,
                             runState: runState,
                             passed: passed
                         )
@@ -157,7 +185,7 @@ struct SourceProbeView: View {
                         status = "The diagnostic row was not saved"
                     }
                 }
-                .disabled(recorder.latestCapture == nil)
+                .disabled(recorder.latestCapture == nil || !SourceProbeRecorder.isValidExpectedBundleIdentifier(expectedBundleIdentifier))
             }
             Text(status)
                 .foregroundStyle(.secondary)

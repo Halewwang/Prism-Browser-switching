@@ -45,6 +45,16 @@ struct SourceSupportManifest: Equatable {
         })
     }
 
+    func supportStatus(
+        for bundleIdentifier: String,
+        on operatingSystemVersion: OperatingSystemVersion
+    ) -> SourceRuleSupportStatus {
+        SourceRuleSupportStatus(
+            bundleIdentifier: bundleIdentifier,
+            verifiedBundleIDs: eligibleBundleIDs(for: operatingSystemVersion)
+        )
+    }
+
     enum ValidationError: Error {
         case unsupportedSchema
         case duplicateBundleIdentifier
