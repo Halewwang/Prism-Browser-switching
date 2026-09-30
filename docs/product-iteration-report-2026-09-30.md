@@ -6,7 +6,7 @@
 
 ## 版本边界
 
-本工作区和待发布官网统一为 **1.14.0 / Build 1**，要求 macOS 15+，Universal 包包含 arm64 与 x86_64。下载使用精确版本链接，避免 `releases/latest` 指向旧 Electron 稳定版。发布说明明确 ad hoc 签名、未公证和实机验收缺口。官网现有界面截图为旧版本示意图，已有明确说明；新选择器的实际验证截图见本记录。
+原生应用和官网发布配置统一为 **1.14.0 / Build 1**，要求 macOS 15+，Universal 包包含 arm64 与 x86_64。下载使用精确版本链接，避免 `releases/latest` 指向旧 Electron 稳定版。发布说明明确 ad hoc 签名、未公证和实机验收缺口。官网现有界面截图为旧版本示意图，已有明确说明；新选择器的实际验证截图见本记录。
 
 ## 完成的产品变化
 
@@ -34,7 +34,9 @@
 - 隔离应用 CUA：已看到移除底部入口后的 425×200 弹窗，方向键切换、数字 4 选择 Profile、历史显示实际目标通过；浏览器管理隐藏／排序值即时更新。使用独立 bundle ID、内存仓库和 stub launcher，不影响生产配置，也不代表真实浏览器交接成功。
 - 修复集成审查发现的重复管理行身份、持久化失败回滚、规则编辑待处理意图问题；另修复首页测试链接在完成引导后不响应的问题。对应回归已通过。
 
-候选安装包：[Prism-1.14.0-universal-test.dmg](../native/build/release/1.14.0-1/Prism-1.14.0-universal-test.dmg)。SHA-256：`feb8eb896bd7f654048b9384fb331f7f17a5fe1d780de1fcaf06dd557b30b8f0`。
+公开安装包：[Prism-1.14.0-universal-test.dmg](https://github.com/Halewwang/Prism-Browser-switching/releases/download/v1.14.0/Prism-1.14.0-universal-test.dmg)。SHA-256：`feb8eb896bd7f654048b9384fb331f7f17a5fe1d780de1fcaf06dd557b30b8f0`。
+
+2026-09-30 发布记录：[v1.14.0](https://github.com/Halewwang/Prism-Browser-switching/releases/tag/v1.14.0) 以 Pre-release 公开，源码标签对应 `e6c3f5ce083da1bc416eea7ff49b2406c629f462`。上传后从 GitHub 草稿重新下载 DMG 和校验文件，SHA-256 与本地一致。官网更新通过现有 Vercel Git 集成部署，不创建新项目。
 
 ## 真实验收缺口
 
