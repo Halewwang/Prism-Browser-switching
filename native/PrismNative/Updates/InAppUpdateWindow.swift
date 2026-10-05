@@ -40,6 +40,19 @@ struct InAppUpdateView: View {
                 Text(message).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("update.message")
             }
             status
+            if session.stage == .ready {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Allow this unnotarized public-test update", isOn: Binding(
+                        get: { session.allowUnnotarizedPublicTestUpdate },
+                        set: { session.allowUnnotarizedPublicTestUpdate = $0 }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .accessibilityIdentifier("update.allowUnnotarizedPublicTestUpdate")
+                    Text("This update has not been notarized by Apple. Permission applies only to this verified Prism update.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             HStack {
                 if session.stage == .ready {
                     Button("Show downloaded installer") { session.revealInstaller() }
@@ -50,7 +63,7 @@ struct InAppUpdateView: View {
                 Spacer()
                 action
             }
-        }.padding(24).frame(minWidth: 500, minHeight: 460)
+        }.padding(24).frame(width: 500, height: 460)
     }
     @ViewBuilder private var status: some View {
         switch session.stage {

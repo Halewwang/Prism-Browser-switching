@@ -54,7 +54,7 @@ final class NativeUpdateInstallationCoordinator: UpdateInstallationCoordinating 
         try InstallerSystem.requireUpgrade(prepared.version, from: InstallerSystem.version(targetURL))
         let workspace = prepared.workspaceURL.resolvingSymlinksInPath()
         try InstallerSystem.validateControlDirectory(workspace)
-        let plan = UpdateInstallationPlan(id: UUID(), workspaceURL: workspace, applicationURL: prepared.applicationURL, targetURL: targetURL, version: prepared.version, parent: parent, installerFileURL: prepared.installerFileURL)
+        let plan = UpdateInstallationPlan(id: UUID(), workspaceURL: workspace, applicationURL: prepared.applicationURL, targetURL: targetURL, version: prepared.version, parent: parent, installerFileURL: prepared.installerFileURL, allowUnnotarizedPublicTestUpdate: prepared.allowUnnotarizedPublicTestUpdate)
         try FileManager.default.createDirectory(at: plan.controlURL, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         let planURL = plan.controlURL.appendingPathComponent("plan.json")
         try JSONEncoder().encode(plan).write(to: planURL, options: .atomic)

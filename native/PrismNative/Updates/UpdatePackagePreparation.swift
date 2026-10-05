@@ -6,6 +6,7 @@ struct PreparedUpdate: Sendable {
     let workspaceURL: URL
     let installerFileURL: URL
     let version: String
+    var allowUnnotarizedPublicTestUpdate = false
 }
 
 @MainActor protocol UpdatePackagePreparing {

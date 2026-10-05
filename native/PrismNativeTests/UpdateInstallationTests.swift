@@ -4,6 +4,21 @@ import Testing
 
 @Suite("Transactional update installation")
 struct UpdateInstallationTests {
+    @Test func onlyExplicitConsentRemovesQuarantineFromVerifiedReplacement() async throws {
+        for consent: Bool? in [nil, false, true] {
+            let fixture = try InstallerFixture()
+            defer { fixture.remove() }
+            _ = try InstallerSystem.run("/usr/bin/xattr", ["-w", "com.apple.quarantine", "0081;00000000;Prism;test", fixture.plan.applicationURL.path])
+            var candidatePlan = fixture.plan
+            candidatePlan.allowUnnotarizedPublicTestUpdate = consent
+            let plan = try JSONDecoder().decode(UpdateInstallationPlan.self, from: JSONEncoder().encode(candidatePlan))
+            let result = await UpdateInstallerEngine(operations: fixture.operations).run(plan)
+            #expect(result.status == .installed)
+            let quarantine = try? InstallerSystem.run("/usr/bin/xattr", ["-p", "com.apple.quarantine", fixture.target.path])
+            #expect((quarantine == nil) == (consent == true))
+        }
+    }
+
     @Test func rejectsCandidateOutsideWorkspaceBeforeCopying() async throws {
         let fixture = try InstallerFixture()
         defer { fixture.remove() }
