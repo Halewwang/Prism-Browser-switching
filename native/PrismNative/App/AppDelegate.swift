@@ -275,7 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lockedWidth: CGFloat = 668
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: lockedWidth, height: 554),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -285,8 +285,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarSeparatorStyle = .none
         window.backgroundColor = .windowBackgroundColor
         window.toolbar = nil
+        window.collectionBehavior = [.fullScreenNone]
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.contentMinSize = NSSize(width: lockedWidth, height: 554)
-        window.contentMaxSize = NSSize(width: WorkspaceLayout.windowContentWidth, height: 10_000)
+        window.contentMaxSize = window.contentMinSize
         window.isReleasedWhenClosed = false
         let hostingView = MainWindowHostingView(rootView: mainWindowRoot())
         hostingView.sizingOptions = []
