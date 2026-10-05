@@ -30,6 +30,8 @@ Universal 双架构、应用与助手签名、隔离启动、DMG 只读挂载及
 
 已用独立测试身份验证同一安装助手源码的真实更新：授权后，带隔离标记的新版在最终确认后替换旧包，经 LaunchServices 启动新进程并通过动态代码身份认证，回执为 installed；原 DMG 的隔离标记保留，备份清理与磁盘映像卸载通过。此项为 Apple Silicon 主机验证，不代表 Intel 实机验收。
 
+六轮隔离安装助手检查通过：明确许可成功升级、缺省许可及 false 取消保留原包、DMG 篡改与签名篡改阻止替换、新版提前退出后恢复并启动旧版。QA 助手仅在仓库外编译时使用独立测试身份和公钥，产品身份及公钥保持不变。
+
 同一版本提供 Prism-1.14.3-universal-test.dmg、SHA256SUMS.txt、update-manifest.json 和 update-manifest.sig。在下载目录执行 `shasum -a 256 -c SHA256SUMS.txt` 校验安装包。
 
 安装包大小：4,618,790 bytes。
