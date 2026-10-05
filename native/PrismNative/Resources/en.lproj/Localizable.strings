@@ -404,6 +404,10 @@
 
 "Update verified. Ready to install." = "Update verified. Ready to install.";
 
+"Allow this unnotarized public-test update" = "Allow this unnotarized public-test update";
+
+"This update has not been notarized by Apple. Permission applies only to this verified Prism update." = "This update has not been notarized by Apple. Permission applies only to this verified Prism update.";
+
 "Preparing to install and restart…" = "Preparing to install and restart…";
 
 "Show downloaded installer" = "Show downloaded installer";

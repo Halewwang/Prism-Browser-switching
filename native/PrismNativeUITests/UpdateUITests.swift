@@ -31,4 +31,24 @@ import XCTest
         XCTAssertTrue(app.buttons["update.download"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["update.install"].exists)
     }
+    func testUnnotarizedPublicTestConsentStartsOffAndCanBeEnabled() {
+        for (language, label) in [
+            ("en", "Allow this unnotarized public-test update"),
+            ("zh-Hans", "允许安装此次未公证公测更新")
+        ] {
+            app.terminate()
+            app.launchArguments = ["--ui-testing", "--update-harness", "-AppleLanguages", "(\(language))"]
+            app.launch()
+            XCTAssertFalse(app.checkBoxes["update.allowUnnotarizedPublicTestUpdate"].exists)
+            app.buttons["update.download"].click()
+            let consent = app.checkBoxes["update.allowUnnotarizedPublicTestUpdate"]
+            XCTAssertTrue(consent.waitForExistence(timeout: 8))
+            XCTAssertEqual(consent.label, label)
+            XCTAssertEqual(consent.value as? NSNumber, NSNumber(value: false))
+            consent.click()
+            XCTAssertEqual(consent.value as? NSNumber, NSNumber(value: true))
+            XCTAssertTrue(app.buttons["update.install"].isEnabled)
+            XCTAssertTrue(app.buttons["update.install"].isHittable)
+        }
+    }
 }

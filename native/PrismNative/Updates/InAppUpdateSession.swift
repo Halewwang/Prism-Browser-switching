@@ -9,6 +9,7 @@ final class InAppUpdateSession {
     private(set) var stage: Stage = .available
     private(set) var progress: Double?
     private(set) var message: String?
+    var allowUnnotarizedPublicTestUpdate = false
     private var prepared: PreparedUpdate?
     @ObservationIgnored private var operation: Task<Void, Never>?
     @ObservationIgnored private var downloadID: UUID?
@@ -94,7 +95,8 @@ final class InAppUpdateSession {
     }
 
     func install() async {
-        guard stage == .ready, let prepared else { return }
+        guard stage == .ready, var prepared else { return }
+        prepared.allowUnnotarizedPublicTestUpdate = allowUnnotarizedPublicTestUpdate
         stage = .installing
         message = nil
         do {

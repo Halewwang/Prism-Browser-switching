@@ -4,6 +4,21 @@ import Testing
 
 @Suite("In-app update workflow")
 struct InAppUpdateSessionTests {
+    @Test @MainActor func publicTestExceptionRequiresExplicitConsentForEachSession() async {
+        for consent in [false, true] {
+            var granted: Bool?
+            let model = InAppUpdateSession(installer: fixtureInstaller(), prepare: { _, _ in fixturePrepared() }, cleanup: { _ in }, startInstallation: { prepared in
+                granted = prepared.allowUnnotarizedPublicTestUpdate
+                return {}
+            }, prepareTermination: {}, cancelTermination: {}, terminate: {})
+            #expect(!model.allowUnnotarizedPublicTestUpdate)
+            model.allowUnnotarizedPublicTestUpdate = consent
+            await model.download()
+            await model.install()
+            #expect(granted == consent)
+        }
+    }
+
     @Test @MainActor func downloadOnlyPreparesAndExplicitInstallQuitsAfterHelperAndGate() async throws {
         var order: [String] = []
         let model = InAppUpdateSession(installer: fixtureInstaller(), prepare: { _, progress in

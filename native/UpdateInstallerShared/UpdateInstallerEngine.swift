@@ -17,6 +17,8 @@ struct UpdateInstallationPlan: Codable, Sendable {
     let version: String
     let parent: InstallerParentIdentity
     var installerFileURL: URL? = nil
+    // Missing in plans from older apps; only explicit true grants this exception.
+    var allowUnnotarizedPublicTestUpdate: Bool? = nil
     var controlURL: URL { workspaceURL.appendingPathComponent("installation-\(id.uuidString)") }
     var readyURL: URL { controlURL.appendingPathComponent("ready") }
     var commitURL: URL { controlURL.appendingPathComponent("commit") }
@@ -118,6 +120,11 @@ struct UpdateInstallerEngine: Sendable {
             guard try operations.applicationFingerprint(plan.targetURL) == targetFingerprint else { throw UpdateInstallationError.invalidApplication }
             try operations.validateUpgrade(plan.version, currentURL: plan.targetURL)
             guard !operations.isCancelled(plan) else { throw InstallerCancellation() }
+            if plan.allowUnnotarizedPublicTestUpdate == true {
+                // The helper has independently verified the signed archive and
+                // this staged app. The exception applies only to this replacement.
+                _ = try InstallerSystem.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", plan.stageURL.path])
+            }
             try operations.moveItem(from: plan.targetURL, to: plan.backupURL)
             backupMade = true
             try operations.moveItem(from: plan.stageURL, to: plan.targetURL)
