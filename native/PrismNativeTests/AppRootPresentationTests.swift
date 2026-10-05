@@ -1,9 +1,33 @@
+import AppKit
 import PrismCore
+import SwiftUI
 import Testing
 @testable import PrismNative
 
 @Suite("App root presentation")
 struct AppRootPresentationTests {
+    @Test @MainActor func managementWindowUsesFixedContentBounds() async {
+        let composition = DebugAppFixture.make(
+            bootstrapBuffer: BootstrapLinkBuffer(), variant: .history
+        ).composition
+        await composition.finishLaunchingOnce()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 800),
+            styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let hostingView = NSHostingView(rootView: AppRootView(composition: composition, systemActions: .inert))
+        hostingView.sizingOptions = []
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+
+        let expectedSize = NSSize(width: 1120, height: 800)
+        #expect(window.contentMinSize == expectedSize)
+        #expect(window.contentMaxSize == expectedSize)
+        #expect(window.contentView?.frame.size == expectedSize)
+    }
+
     @Test(arguments: [
         (phase: AppStartupPhase.loading, expected: AppRootKind.loading),
         (phase: AppStartupPhase.onboarding, expected: AppRootKind.onboarding),
