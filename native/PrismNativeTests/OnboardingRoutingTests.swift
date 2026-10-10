@@ -114,7 +114,7 @@ import Testing
     )
     coordinator.continuationRequester = intake
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let settings = OnboardingRoutingSettingsRepository(settings: .defaults, saveFails: false)
     let environment = makeOnboardingRoutingEnvironment(settings: settings)
     let recorder = OnboardingModelRecorder()
@@ -168,7 +168,7 @@ import Testing
         coordinator: coordinator
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let settings = OnboardingRoutingSettingsRepository(settings: .defaults, saveFails: false)
     let environment = makeOnboardingRoutingEnvironment(settings: settings)
     let recorder = OnboardingModelRecorder()
@@ -219,7 +219,7 @@ import Testing
         lastActivatedSource: { nil }
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let workerCount = intake.workerStartCount
 
     let requestID = await intake.captureForExplicitSelection(
@@ -244,7 +244,7 @@ import Testing
         lastActivatedSource: { nil }
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     await pendingStore.suspendNextSave()
 
     #expect(intake.capture(
@@ -262,7 +262,7 @@ import Testing
 
     await pendingStore.releaseSuspendedSave()
     #expect(await testCapture.value == nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect((await queue.snapshot()).map(\.url.host) == ["older-real-request.example"])
 }
 

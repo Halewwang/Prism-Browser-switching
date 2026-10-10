@@ -9,6 +9,7 @@ enum WorkspaceLayout {
     static let windowContentWidth: CGFloat = 1120
     static let windowContentHeight: CGFloat = 900
     static let sidebarWidth: CGFloat = 218
+    static let windowControlClearance: CGFloat = 24
 }
 
 enum AppShellActionID: String, CaseIterable, Equatable, Sendable {

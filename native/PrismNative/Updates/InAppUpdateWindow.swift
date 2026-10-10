@@ -50,7 +50,7 @@ struct InAppUpdateView: View {
         .ignoresSafeArea(.container, edges: .top)
         .tint(SettingsPalette.action)
         .onChange(of: session.stage, initial: true) { _, stage in
-            onSizeChange(stage == .available ? 315 : 460)
+            onSizeChange((stage == .available ? 315 : 460) + WorkspaceLayout.windowControlClearance)
         }
     }
 
@@ -93,7 +93,8 @@ struct InAppUpdateView: View {
             .frame(height: 39)
         }
         .padding(26)
-        .frame(width: 666, height: 315, alignment: .topLeading)
+        .padding(.top, WorkspaceLayout.windowControlClearance)
+        .frame(width: 666, height: 315 + WorkspaceLayout.windowControlClearance, alignment: .topLeading)
     }
 
     private var progressContent: some View {
@@ -138,7 +139,9 @@ struct InAppUpdateView: View {
             }
         }
         .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 39))
-        .padding(26).frame(width: 666, height: 460)
+        .padding(26)
+        .padding(.top, WorkspaceLayout.windowControlClearance)
+        .frame(width: 666, height: 460 + WorkspaceLayout.windowControlClearance)
     }
     @ViewBuilder private var status: some View {
         switch session.stage {

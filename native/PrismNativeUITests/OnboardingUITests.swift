@@ -7,7 +7,8 @@ final class OnboardingUITests: PrismUITestCase {
         XCTAssertTrue(accessibilityText(of: welcome).contains("你的链接"))
         let window = requireMainWindow(in: application)
         XCTAssertEqual(window.frame.width, 668, accuracy: 1)
-        XCTAssertEqual(window.frame.height, 554, accuracy: 1)
+        XCTAssertEqual(window.frame.height, 578, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(requireElement("onboarding.progress.label", in: application).frame.minY - window.frame.minY, 48)
         try attachWindowScreenshot("pen-onboarding-welcome-zh", application: application, appearance: .light)
 
         requireButton("onboarding.welcome.continue", in: application).click()
@@ -111,7 +112,7 @@ final class OnboardingUITests: PrismUITestCase {
         _ = requireElement("onboarding.step.welcome", in: application)
         let welcomeWindow = requireMainWindow(in: application)
         XCTAssertEqual(welcomeWindow.frame.width, 668, accuracy: 1)
-        XCTAssertEqual(welcomeWindow.frame.height, 554, accuracy: 1)
+        XCTAssertEqual(welcomeWindow.frame.height, 578, accuracy: 1)
         try attachWindowScreenshot(
             "onboarding-welcome",
             application: application,

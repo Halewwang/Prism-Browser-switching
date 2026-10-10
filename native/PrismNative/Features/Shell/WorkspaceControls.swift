@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct WorkspaceButtonStyle: ButtonStyle {
@@ -126,11 +127,21 @@ struct WorkspacePicker<Value: Hashable>: View {
         .focusEffectDisabled()
         .focused($triggerFocused)
         .onKeyPress(.space) {
-            toggleOptions()
+            confirmOrOpenOptions()
             return .handled
         }
         .onKeyPress(.return) {
-            toggleOptions()
+            confirmOrOpenOptions()
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            guard isPresented else { return .ignored }
+            moveHighlight(by: -1)
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            guard isPresented else { return .ignored }
+            moveHighlight(by: 1)
             return .handled
         }
         .onKeyPress(.escape) {
@@ -141,6 +152,15 @@ struct WorkspacePicker<Value: Hashable>: View {
         .help(LocalizedStringKey(options.first(where: { $0.value == selection })?.title ?? title))
         .accessibilityLabel(LocalizedStringKey(title))
         .accessibilityValue(Text(LocalizedStringKey(options.first(where: { $0.value == selection })?.title ?? title)))
+        .background {
+            WorkspacePickerKeyboardMonitor(
+                presentation: $isPresented,
+                handlesSpace: searchPlaceholder == nil,
+                moveHighlight: moveHighlight,
+                confirmSelection: selectHighlightedOption
+            )
+            .accessibilityHidden(true)
+        }
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
           VStack(spacing: 0) {
             if let searchPlaceholder {
@@ -196,18 +216,18 @@ struct WorkspacePicker<Value: Hashable>: View {
             .focusable()
             .focused($optionsFocused)
             .defaultFocus($optionsFocused, true)
-            .onAppear { optionsFocused = true }
-            .onDisappear {
-                guard !isPresented else { return }
-                optionsFocused = false
-                triggerFocused = true
+            .task {
+                await Task.yield()
+                guard isPresented else { return }
+                optionsFocused = true
             }
+            .onDisappear(perform: restoreTriggerFocus)
             .onKeyPress(.upArrow) {
-                highlightedIndex = max(0, highlightedIndex - 1)
+                moveHighlight(by: -1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
-                highlightedIndex = min(max(0, filteredOptions.count - 1), highlightedIndex + 1)
+                moveHighlight(by: 1)
                 return .handled
             }
             .onKeyPress(.return) {
@@ -222,9 +242,10 @@ struct WorkspacePicker<Value: Hashable>: View {
         .onChange(of: isPresented) { _, presented in
             if !presented {
                 optionsFocused = false
-                triggerFocused = true
+                restoreTriggerFocus()
             }
         }
+        .onDisappear { isPresented = false }
     }
 
     private var filteredOptions: [WorkspacePickerOption<Value>] {
@@ -244,11 +265,141 @@ struct WorkspacePicker<Value: Hashable>: View {
         isPresented = false
     }
 
+    private func confirmOrOpenOptions() {
+        if isPresented {
+            selectHighlightedOption()
+        } else {
+            toggleOptions()
+        }
+    }
+
+    private func moveHighlight(by offset: Int) {
+        highlightedIndex = min(max(0, filteredOptions.count - 1), max(0, highlightedIndex + offset))
+    }
+
+    private func restoreTriggerFocus() {
+        Task { @MainActor in
+            // NSPopover returns its parent window's focus after the content disappears.
+            await Task.yield()
+            guard !isPresented else { return }
+            optionsFocused = false
+            triggerFocused = false
+            await Task.yield()
+            guard !isPresented else { return }
+            triggerFocused = true
+        }
+    }
+
     private func toggleOptions() {
         searchQuery = ""
         highlightedIndex = options.firstIndex(where: { $0.value == selection }) ?? 0
         optionsFocused = false
-        triggerFocused = false
+        triggerFocused = !isPresented
         isPresented.toggle()
+    }
+}
+
+private struct WorkspacePickerKeyboardMonitor: NSViewRepresentable {
+    let presentation: Binding<Bool>
+    let handlesSpace: Bool
+    let moveHighlight: @MainActor (Int) -> Void
+    let confirmSelection: @MainActor () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> MonitorView {
+        let view = MonitorView()
+        view.setAccessibilityElement(false)
+        return view
+    }
+
+    func updateNSView(_ view: MonitorView, context: Context) {
+        context.coordinator.update(
+            ownerView: view,
+            presentation: presentation,
+            handlesSpace: handlesSpace,
+            moveHighlight: moveHighlight,
+            confirmSelection: confirmSelection
+        )
+    }
+
+    static func dismantleNSView(_ view: MonitorView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    @MainActor
+    final class MonitorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var monitor: Any?
+        private weak var ownerView: NSView?
+        private var presentation: Binding<Bool>?
+        private var handlesSpace = false
+        private var moveHighlight: (@MainActor (Int) -> Void)?
+        private var confirmSelection: (@MainActor () -> Void)?
+
+        func update(
+            ownerView: NSView,
+            presentation: Binding<Bool>,
+            handlesSpace: Bool,
+            moveHighlight: @escaping @MainActor (Int) -> Void,
+            confirmSelection: @escaping @MainActor () -> Void
+        ) {
+            self.ownerView = ownerView
+            self.presentation = presentation
+            self.handlesSpace = handlesSpace
+            self.moveHighlight = moveHighlight
+            self.confirmSelection = confirmSelection
+            if presentation.wrappedValue {
+                guard monitor == nil else { return }
+                // Consume popup keys before AppKit dispatches a sheet's cancel equivalent.
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                    let consumed = MainActor.assumeIsolated { self?.handle(event) ?? false }
+                    return consumed ? nil : event
+                }
+            } else {
+                stop()
+            }
+        }
+
+        func stop() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> Bool {
+            guard presentation?.wrappedValue == true,
+                  ownerView?.window != nil,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            else { return false }
+
+            // Let an input method finish composing search text before selecting an option.
+            if event.keyCode != 53,
+               let input = NSApp.keyWindow?.firstResponder as? NSTextInputClient,
+               input.hasMarkedText() {
+                return false
+            }
+
+            switch event.keyCode {
+            case 53: // Escape
+                presentation?.wrappedValue = false
+                stop()
+            case 126: // Up
+                moveHighlight?(-1)
+            case 125: // Down
+                moveHighlight?(1)
+            case 36, 76: // Return, keypad Enter
+                confirmSelection?()
+            case 49 where handlesSpace: // Space remains text input in searchable pickers.
+                confirmSelection?()
+            default:
+                return false
+            }
+            return true
+        }
     }
 }

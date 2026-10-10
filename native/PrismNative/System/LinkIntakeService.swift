@@ -409,7 +409,7 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
             self.routingEnabled = false
             self.reportRecoveryState()
             self.startDrainWorkerIfNeeded(routeAfterDraining: false)
-            await self.waitForPersistenceForTesting()
+            await self.waitForPersistence()
             let succeeded = !self.persistencePaused && self.bootstrap.first() == nil
             if succeeded {
                 self.runtimeRoutingResumeRequired = true
@@ -449,7 +449,7 @@ final class LinkIntakeService: LinkRoutingContinuationRequesting {
         }
     }
 
-    func waitForPersistenceForTesting() async {
+    func waitForPersistence() async {
         while let drainTask {
             await drainTask.value
         }

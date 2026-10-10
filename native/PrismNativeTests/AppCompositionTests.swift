@@ -336,7 +336,7 @@ import Testing
         url: URL(string: "https://running-during-onboarding.example")!,
         senderPID: nil
     )
-    await composition.linkIntakeService.waitForPersistenceForTesting()
+    await composition.linkIntakeService.waitForPersistence()
 
     #expect(launcher.handoffCount == 0)
     #expect(buffer.snapshot().isEmpty)
@@ -353,6 +353,46 @@ import Testing
     await composition.resumeRoutingAfterOnboardingCompletion()
 
     #expect(launcher.handoffCount == 3)
+    #expect(await queue.next() == nil)
+}
+
+@Test @MainActor func onboardingCompletionWaitsForCapturedLinksToPersistBeforeResumingFIFO() async throws {
+    let restored = LinkRequest.fixture(id: UUID(), url: "https://restored-before-completion.example")
+    let store = ScriptedRestorationStore(snapshot: .init(pendingRequests: [restored], terminalRecords: []))
+    let queue = LinkRequestQueue(store: store)
+    let buffer = BootstrapLinkBuffer()
+    let launcher = CountingBrowserLauncher()
+    let graph = TestLaunchGraph(
+        queue: queue, buffer: buffer,
+        automaticBrowserID: "com.apple.Safari", onboardingCompleted: false,
+        browserCatalog: SingleBrowserCatalog(), browserLauncher: launcher
+    )
+    let composition = makeComposition(graph: graph, queue: queue, buffer: buffer)
+    await composition.finishLaunchingOnce()
+    await graph.intake.waitForPersistence()
+    await store.suspendNextSave()
+    #expect(graph.intake.capture(url: URL(string: "https://first-during-completion.example")!, senderPID: nil))
+    await store.waitUntilSaveSuspended()
+    #expect(graph.intake.capture(url: URL(string: "https://second-during-completion.example")!, senderPID: nil))
+    #expect(graph.environment.mutateSettings { $0.onboardingCompleted = true })
+
+    var completionStarted = false
+    let completion = Task { @MainActor in
+        completionStarted = true
+        await composition.resumeRoutingAfterOnboardingCompletion()
+    }
+    while !completionStarted { await Task.yield() }
+    #expect(launcher.handoffCount == 0)
+    await store.releaseSuspendedSave()
+    await completion.value
+    await graph.intake.waitForPersistence()
+
+    #expect(launcher.openedURLs.map(\.host) == [
+        "restored-before-completion.example",
+        "first-during-completion.example",
+        "second-during-completion.example"
+    ])
+    #expect(buffer.snapshot().isEmpty)
     #expect(await queue.next() == nil)
 }
 
@@ -515,7 +555,7 @@ import Testing
         url: URL(string: "https://observable-recovery.example")!,
         senderPID: nil
     )
-    await composition.linkIntakeService.waitForPersistenceForTesting()
+    await composition.linkIntakeService.waitForPersistence()
 
     #expect(graph.environment.runtimeLinkRecoveryState == .persistenceRetryRequired)
     #expect(composition.runtimeLinkRecoveryState == .persistenceRetryRequired)
@@ -958,6 +998,9 @@ private actor ScriptedRestorationStore: PendingRequestStore, PersistenceWarningS
     private var activeSuspendedLoadCalls: Set<Int> = []
     private var suspendedLoadContinuations: [Int: CheckedContinuation<Void, Never>] = [:]
     private var suspendedLoadObservers: [Int: [CheckedContinuation<Void, Never>]] = [:]
+    private var shouldSuspendNextSave = false
+    private var suspendedSave: CheckedContinuation<Void, Never>?
+    private var suspendedSaveObservers: [CheckedContinuation<Void, Never>] = []
     private(set) var loadCount = 0
     private(set) var saveCount = 0
 
@@ -993,6 +1036,15 @@ private actor ScriptedRestorationStore: PendingRequestStore, PersistenceWarningS
 
     func save(_ snapshot: PendingRequestSnapshot) async throws {
         saveCount += 1
+        if shouldSuspendNextSave {
+            shouldSuspendNextSave = false
+            await withCheckedContinuation { continuation in
+                suspendedSave = continuation
+                let observers = suspendedSaveObservers
+                suspendedSaveObservers.removeAll()
+                observers.forEach { $0.resume() }
+            }
+        }
         if failingSaveCalls.remove(saveCount) != nil {
             throw TestCompositionFailure.unavailable
         }
@@ -1010,6 +1062,19 @@ private actor ScriptedRestorationStore: PendingRequestStore, PersistenceWarningS
 
     func releaseSuspendedLoad(call: Int) {
         suspendedLoadContinuations.removeValue(forKey: call)?.resume()
+    }
+
+    func suspendNextSave() { shouldSuspendNextSave = true }
+
+    func waitUntilSaveSuspended() async {
+        if suspendedSave != nil { return }
+        await withCheckedContinuation { suspendedSaveObservers.append($0) }
+    }
+
+    func releaseSuspendedSave() {
+        let continuation = suspendedSave
+        suspendedSave = nil
+        continuation?.resume()
     }
 }
 
@@ -1165,9 +1230,11 @@ private final class NoopBrowserLauncher: BrowserLaunching {
 @MainActor
 private final class CountingBrowserLauncher: BrowserLaunching {
     private(set) var handoffCount = 0
+    private(set) var openedURLs: [URL] = []
 
-    func open(_: URL, with _: BrowserDescriptor) async throws -> BrowserLaunchResult {
+    func open(_ url: URL, with _: BrowserDescriptor) async throws -> BrowserLaunchResult {
         handoffCount += 1
+        openedURLs.append(url)
         return .handoffSucceeded
     }
 }

@@ -18,7 +18,7 @@ final class PrismAboutWindowController: NSWindowController {
         let hostingView = NSHostingView(rootView: PrismAboutView())
         hostingView.sizingOptions = []
         window.contentView = hostingView
-        window.setFrame(NSRect(origin: window.frame.origin, size: NSSize(width: 666, height: 233)), display: false)
+        window.setFrame(NSRect(origin: window.frame.origin, size: NSSize(width: 666, height: 233 + WorkspaceLayout.windowControlClearance)), display: false)
         super.init(window: window)
         window.center()
     }
@@ -79,7 +79,8 @@ private struct PrismAboutView: View {
                 .accessibilityIdentifier("about.version")
         }
         .padding(26)
-        .frame(width: 666, height: 233, alignment: .topLeading)
+        .padding(.top, WorkspaceLayout.windowControlClearance)
+        .frame(width: 666, height: 233 + WorkspaceLayout.windowControlClearance, alignment: .topLeading)
         .background(SettingsPalette.elevated)
         .ignoresSafeArea(.container, edges: .top)
     }
