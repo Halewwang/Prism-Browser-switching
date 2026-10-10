@@ -129,6 +129,23 @@ final class AppEnvironment: RuntimeLinkPersistenceWarningPresenting {
     }
 
     @discardableResult
+    func resetSettingsToDefaults() -> Bool {
+        guard mutateSettings({ current in
+            var defaults = AppSettings.defaults
+            defaults.onboardingCompleted = current.onboardingCompleted
+            defaults.schemaVersion = current.schemaVersion
+            // Restoring shorter retention would delete existing History on its next load.
+            defaults.historyLimit = current.historyLimit
+            defaults.historyRetentionDays = current.historyRetentionDays
+            current = defaults
+        }) else { return false }
+        if updateChecker.canCheckForUpdates {
+            updateChecker.automaticallyChecksForUpdates = true
+        }
+        return true
+    }
+
+    @discardableResult
     func restoreAndReconcile(
         queue: LinkRequestQueue,
         warningSource: (any PersistenceWarningSource)?

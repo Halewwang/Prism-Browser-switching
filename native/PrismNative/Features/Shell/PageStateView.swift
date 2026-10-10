@@ -111,59 +111,76 @@ struct PageStateView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             stateSymbol
 
             Text(LocalizedStringKey(model.title))
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(SettingsPalette.primary)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(SettingsPalette.tertiary)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("\(model.accessibilityIdentifier).title")
 
             if let message = model.message {
                 Text(LocalizedStringKey(message))
-                    .font(.system(size: 14))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(SettingsPalette.muted)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 440)
+                    .lineSpacing(5)
+                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("\(model.accessibilityIdentifier).message")
+            }
+
+            if model.kind == .loading {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .tint(SettingsPalette.action)
+                    .frame(width: 160, height: 4)
+                    .clipShape(Capsule())
+                    .accessibilityHidden(true)
             }
 
             if !model.actions.isEmpty {
                 actionButtons
-                    .padding(.top, 4)
             }
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
+        .frame(maxWidth: .infinity)
+        .frame(height: 297)
+        .background(SettingsPalette.elevated, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SettingsPalette.borderSubtle, lineWidth: 1)
+        }
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
     private var stateSymbol: some View {
-        if model.kind == .loading {
-            ProgressView()
-                .controlSize(.large)
-                .accessibilityLabel("Loading")
-                .accessibilityIdentifier("\(model.accessibilityIdentifier).progress")
-        } else if let iconSystemName = model.iconSystemName {
-            Image(systemName: iconSystemName)
-                .font(.system(size: 30, weight: .regular))
-                .foregroundStyle(SettingsPalette.secondary)
-                .accessibilityHidden(true)
+        if model.kind == .loading || model.iconSystemName != nil {
+            Group {
+                if model.kind == .loading {
+                    ProgressView()
+                        .controlSize(.large)
+                        .scaleEffect(0.875)
+                        .accessibilityLabel("Loading")
+                        .accessibilityIdentifier("\(model.accessibilityIdentifier).progress")
+                } else if let iconSystemName = model.iconSystemName {
+                    Image(systemName: iconSystemName)
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundStyle(model.kind == .failed ? SettingsPalette.danger : SettingsPalette.iconMuted)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 54, height: 54)
+            .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 18))
         }
     }
 
     private var actionButtons: some View {
         HStack(spacing: 8) {
-            ForEach(Array(model.actions.enumerated()), id: \.element.id) { index, action in
-                if index == 0 {
-                    actionButton(action)
-                        .buttonStyle(WorkspaceButtonStyle(kind: .primary))
-                } else {
-                    actionButton(action)
-                        .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
-                }
+            ForEach(model.actions) { action in
+                actionButton(action)
+                    .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 39))
             }
         }
     }

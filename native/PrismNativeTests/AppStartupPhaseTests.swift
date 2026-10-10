@@ -1,3 +1,4 @@
+import Foundation
 import PrismCore
 import Testing
 @testable import PrismNative
@@ -93,6 +94,64 @@ struct AppStartupPhaseTests {
 
         #expect(fixture.environment.startupPhase == .onboarding)
         #expect(fixture.settings.savedSettings?.onboardingCompleted == false)
+    }
+
+    @Test func resetRestoresOptionsWithoutRepeatingOnboardingOrPruningExistingHistory() async throws {
+        let fixture = StartupPhaseFixture(onboardingCompleted: true)
+        #expect(await fixture.restore())
+        #expect(fixture.environment.mutateSettings {
+            $0.language = .english
+            $0.automaticRulesEnabled = false
+            $0.showMenuBarItem = false
+            $0.unmatchedBehavior = .preferredBrowser
+            $0.preferredBrowserID = "browser"
+            $0.lastUsedBrowserID = "browser"
+            $0.historyLimit = 500
+            $0.historyRetentionDays = 365
+        })
+        let date = Date.now.addingTimeInterval(-90 * 24 * 60 * 60)
+        let rule = RoutingRule(
+            id: UUID(), isEnabled: true, matcher: .exactHost("example.com"),
+            targetBrowserID: "browser", priority: 0, label: nil,
+            createdAt: date, updatedAt: date
+        )
+        try fixture.environment.ruleRepository.upsert(rule)
+        for _ in 0..<105 {
+            let id = UUID()
+            try fixture.environment.historyRepository.upsert(HistoryEntry(
+                id: id, requestID: id, sanitizedURL: URL(string: "https://example.com"),
+                sourceBundleIdentifier: nil, sourceDisplayName: "Unknown",
+                targetBrowserID: "browser", targetDisplayName: "Browser",
+                method: .manual, result: .success, matchingRuleID: nil,
+                failureReason: nil, attemptCount: 1, createdAt: date, completedAt: date
+            ))
+        }
+
+        #expect(fixture.environment.resetSettingsToDefaults())
+
+        var expected = AppSettings.defaults
+        expected.onboardingCompleted = true
+        expected.historyLimit = 500
+        expected.historyRetentionDays = 365
+        #expect(fixture.environment.settings == expected)
+        #expect(try fixture.settings.load() == expected)
+        #expect(fixture.environment.startupPhase == .shell)
+        #expect(try fixture.environment.ruleRepository.all() == [rule])
+        #expect(try await fixture.environment.historyService.loadRecent(settings: expected).count == 105)
+    }
+
+    @Test func failedResetRetainsTheSavedOptionsAndReportsThePersistenceWarning() async {
+        let fixture = StartupPhaseFixture(onboardingCompleted: true)
+        #expect(await fixture.restore())
+        #expect(fixture.environment.mutateSettings { $0.automaticRulesEnabled = false })
+        let before = fixture.environment.settings
+        fixture.settings.saveFails = true
+
+        #expect(!fixture.environment.resetSettingsToDefaults())
+
+        #expect(fixture.environment.settings == before)
+        #expect(fixture.environment.startupPhase == .shell)
+        #expect(fixture.environment.persistenceWarnings.contains(.settingsNotSaved))
     }
 }
 

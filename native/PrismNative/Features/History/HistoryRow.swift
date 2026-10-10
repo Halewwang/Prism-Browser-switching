@@ -21,6 +21,8 @@ struct HistoryRow: View {
     var editRule: (() -> Void)? = nil
 
     @State private var showsDetails = false
+    @State private var showsRoutingExplanation = false
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -35,14 +37,18 @@ struct HistoryRow: View {
             .accessibilityLabel(Text(rowAccessibilityLabel))
             .accessibilityHint(Text("View Details"))
             .accessibilityIdentifier("\(accessibilityPrefix).url")
+            if isHovered || isPerformingAction {
+                inlineRecoveryButton
+            }
             Menu {
                 Button("View Details") { showsDetails = true }
                 Divider()
                 secondaryActions
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 16))
+                    .foregroundStyle(SettingsPalette.muted)
+                    .frame(width: 16, height: 28)
                     .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
@@ -51,8 +57,10 @@ struct HistoryRow: View {
             .accessibilityLabel("More actions for \(urlText)")
             .accessibilityIdentifier("\(accessibilityPrefix).more")
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .frame(minHeight: 84)
+        .background(isHovered ? SettingsPalette.elevated : .clear)
+        .onHover { isHovered = $0 }
         .accessibilityAction(named: Text("View Details")) { showsDetails = true }
         .contextMenu {
             Button("View Details") { showsDetails = true }
@@ -66,13 +74,13 @@ struct HistoryRow: View {
     private var detailsButtonContent: some View {
         HStack(spacing: 14) {
             Image(systemName: "globe")
-                .font(.system(size: 17))
-                .foregroundStyle(SettingsPalette.secondary)
+                .font(.system(size: 16))
+                .foregroundStyle(SettingsPalette.tertiary)
                 .frame(width: 34, height: 34)
-                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .firstTextBaseline, spacing: 9) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(presentation.safeHost ?? localized("URL not saved"))
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(SettingsPalette.primary)
@@ -81,38 +89,46 @@ struct HistoryRow: View {
                     if let safeURL = presentation.safeURL, !safeURL.path.isEmpty, safeURL.path != "/" {
                         Text(safeURL.path)
                             .font(.system(size: 12))
-                            .foregroundStyle(SettingsPalette.secondary)
+                            .foregroundStyle(SettingsPalette.tertiary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
                 }
-                HStack(spacing: 6) {
-                    ApplicationIconView(bundleIdentifier: entry.sourceBundleIdentifier, fallbackSymbol: "app.dashed", side: 16)
+                .frame(height: 22)
+                HStack(spacing: 7) {
                     Text(displayedSource).lineLimit(1)
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsPalette.muted)
                         .accessibilityHidden(true)
-                    ApplicationIconView(bundleIdentifier: entry.targetBrowserID?.rawValue, fallbackSymbol: "safari", side: 16)
+                    Image(systemName: "safari")
+                        .font(.system(size: 14))
+                        .foregroundStyle(entry.targetBrowserID == nil ? SettingsPalette.muted : SettingsPalette.primary)
+                        .accessibilityHidden(true)
                     Text(targetText).lineLimit(1)
                     Text("·")
-                    Text(LocalizedStringKey(methodText)).lineLimit(1)
+                    Text(LocalizedStringKey(methodText))
+                        .font(.system(size: 12))
+                        .lineLimit(1)
                 }
                 .font(.system(size: 13))
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(height: 19)
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 7) {
-                statusLabel
+                statusLabel.frame(height: 17)
                 Text(HistoryListPresentation.eventDate(for: entry), format: .dateTime.hour().minute())
                     .font(.system(size: 12))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.tertiary)
+                    .frame(height: 17)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var details: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 22) {
             detailsHeader
             ScrollView {
                 detailsContent
@@ -123,8 +139,8 @@ struct HistoryRow: View {
         }
         .foregroundStyle(SettingsPalette.primary)
         .padding(28)
-        .frame(width: 640, height: 620)
-        .background(SettingsPalette.canvas)
+        .frame(width: 640, height: 592)
+        .background(SettingsPalette.elevated)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(accessibilityPrefix).details")
     }
@@ -133,12 +149,15 @@ struct HistoryRow: View {
         HStack {
             Text("Link Details")
                 .font(.system(size: 23, weight: .semibold))
+                .frame(height: 33)
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Button { showsDetails = false } label: {
-                Image(systemName: "xmark").font(.system(size: 12))
+                Image(systemName: "xmark")
+                    .font(.system(size: 16))
+                    .frame(width: 16, height: 33)
             }
-            .buttonStyle(WorkspaceButtonStyle(kind: .quiet))
+            .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
             .foregroundStyle(SettingsPalette.secondary)
             .accessibilityLabel("Close")
@@ -147,15 +166,79 @@ struct HistoryRow: View {
     }
 
     private var detailsContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                statusLabel
-                if let reason = entry.failureReason,
-                   entry.result == .failure || SelectorReasonCopy.message(forPersistenceCode: reason) != nil {
+        VStack(alignment: .leading, spacing: 22) {
+            detailsStatusCard
+            VStack(alignment: .leading, spacing: 9) {
+                Text("Saved Safe URL")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.tertiary)
+                    .frame(height: 16)
+                Text(urlText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: 21, alignment: .leading)
+                    .accessibilityIdentifier("\(accessibilityPrefix).details.url")
+                Text("Sensitive parameters such as login tokens are hidden from history and copied URLs.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.muted)
+                    .frame(minHeight: 16, alignment: .leading)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(SettingsPalette.border, lineWidth: 1))
+            VStack(spacing: 14) {
+                detailField("Source App", value: displayedSource)
+                detailField("Target Browser", value: targetText)
+                HStack(spacing: 10) {
+                    Text("Routing Method")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsPalette.muted)
+                    Spacer()
+                    Button { showsRoutingExplanation = true } label: {
+                        Text(LocalizedStringKey(methodText))
+                            .font(.system(size: 13))
+                            .foregroundStyle(SettingsPalette.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "history.explanation.title", defaultValue: "Why this browser?"))
+                    .accessibilityIdentifier("\(accessibilityPrefix).details.explanation")
+                    .popover(isPresented: $showsRoutingExplanation) {
+                        routingExplanationSection.frame(width: 440)
+                    }
+                }
+                .frame(minHeight: 19)
+                detailField("Time", value: timeText)
+                detailField("Attempts", value: String(format: localized("Attempt %d"), entry.attemptCount))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var detailsStatusCard: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: statusSymbol)
+                .font(.system(size: 16))
+                .foregroundStyle(statusColor)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(entry.result == .failure
+                     ? String(localized: "history.failure.title", defaultValue: "This link could not be opened")
+                     : localized(resultText))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(minHeight: 20, alignment: .leading)
+                if entry.result == .failure {
+                    Text(LocalizedStringKey(failureReasonText(entry.failureReason ?? "")))
+                        .font(.system(size: 12))
+                        .frame(minHeight: 17, alignment: .leading)
+                        .accessibilityLabel("Failure: \(failureReasonText(entry.failureReason ?? ""))")
+                } else if let reason = entry.failureReason,
+                          SelectorReasonCopy.message(forPersistenceCode: reason) != nil {
                     Text(LocalizedStringKey(failureReasonText(reason)))
                         .font(.system(size: 12))
-                        .foregroundStyle(SettingsPalette.secondary)
-                        .accessibilityLabel("Failure: \(failureReasonText(reason))")
                 }
                 if activity == .deleting {
                     Label("Deleting…", systemImage: "hourglass")
@@ -164,66 +247,30 @@ struct HistoryRow: View {
                         .accessibilityValue("Deleting")
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Saved Safe URL")
-                    .font(.system(size: 11))
-                    .foregroundStyle(SettingsPalette.secondary)
-                Text(urlText)
-                    .font(.system(size: 13))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("\(accessibilityPrefix).details.url")
-                Text("Sensitive parameters such as login tokens are hidden from history and copied URLs.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(SettingsPalette.secondary)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.border, lineWidth: 1))
-            routingExplanationSection
-            VStack(spacing: 14) {
-                detailField("Source App", value: displayedSource, bundleIdentifier: entry.sourceBundleIdentifier)
-                detailField("Target Browser", value: targetText, bundleIdentifier: entry.targetBrowserID?.rawValue)
-                detailField("Routing Method", value: localized(methodText))
-                detailField("Result", value: localized(resultText))
-                detailField("Time", value: timeText)
-                detailField("Attempts", value: String(format: localized("Attempt %d"), entry.attemptCount))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(SettingsPalette.border, lineWidth: 1))
     }
 
     private var detailsFooter: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 9) {
                 Button("Copy Safe URL", action: copyURL)
                     .disabled(!presentation.canCopy)
                     .help(presentation.canCopy ? localized("Copy the safe saved URL") : localized("Copy is unavailable because no safe HTTP or HTTPS URL was saved"))
-                Spacer(minLength: 0)
-                recoveryButton
-            }
-            .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
-            HStack(spacing: 8) {
                 Button("Create Rule for This Domain") {
                     showsDetails = false
                     createRule()
                 }
                 .disabled(!presentation.canCreateRule)
                 .help(presentation.canCreateRule ? localized("Create a rule for the saved domain") : localized("A rule cannot be created because no safe saved host is available"))
-                if case .current = routingExplanation.ruleReference, let editRule {
-                    Button(String(localized: "history.explanation.edit", defaultValue: "Edit Current Rule")) {
-                        showsDetails = false
-                        editRule()
-                    }
-                    .accessibilityIdentifier("\(accessibilityPrefix).editRule")
-                }
                 Spacer(minLength: 0)
+                recoveryButton
             }
-            .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+            .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 39))
+            .padding(.top, 10)
             recoveryExplanation
         }
     }
@@ -240,8 +287,9 @@ struct HistoryRow: View {
 
     private var routingExplanationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "history.explanation.title", defaultValue: "Why this browser?"))
-                .font(.system(size: 13, weight: .semibold))
+          Text(String(localized: "history.explanation.title", defaultValue: "Why this browser?"))
+              .font(.system(size: 14, weight: .semibold))
+          VStack(alignment: .leading, spacing: 10) {
             Text("\(displayedSource) → \(localized(methodText)) → \(targetText)")
                 .font(.system(size: 13))
                 .fixedSize(horizontal: false, vertical: true)
@@ -268,12 +316,23 @@ struct HistoryRow: View {
             case .notApplicable:
                 EmptyView()
             }
+            if case .current = routingExplanation.ruleReference, let editRule {
+                Button(String(localized: "history.explanation.edit", defaultValue: "Edit Current Rule")) {
+                    showsDetails = false
+                    editRule()
+                }
+                .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                .accessibilityIdentifier("\(accessibilityPrefix).editRule")
+            }
+          }
+          .padding(.top, 10)
         }
+        .font(.system(size: 12))
         .foregroundStyle(SettingsPalette.secondary)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityIdentifier("\(accessibilityPrefix).details.explanation")
+        .accessibilityIdentifier("\(accessibilityPrefix).details.explanation.content")
     }
 
     private var snapshotLimitation: some View {
@@ -282,20 +341,19 @@ struct HistoryRow: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func detailField(_ title: String, value: String, bundleIdentifier: String? = nil) -> some View {
+    private func detailField(_ title: String, value: String) -> some View {
         HStack(spacing: 10) {
             Text(LocalizedStringKey(title))
                 .font(.system(size: 12))
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.muted)
             Spacer()
-            if let bundleIdentifier {
-                ApplicationIconView(bundleIdentifier: bundleIdentifier, fallbackSymbol: "app.dashed", side: 16)
-            }
             Text(value)
                 .font(.system(size: 13))
+                .foregroundStyle(SettingsPalette.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.trailing)
         }
+        .frame(minHeight: 19)
     }
 
     @ViewBuilder
@@ -307,7 +365,7 @@ struct HistoryRow: View {
             } label: {
                 actionLabel(idleTitle: "Retry", busyTitle: "Retrying…", isBusy: activity == .retrying)
             }
-            .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+            .buttonStyle(WorkspaceButtonStyle(kind: .primary, height: 39))
             .disabled(!isRetryAvailable || isPerformingAction)
             .accessibilityIdentifier("\(accessibilityPrefix).retry")
             .accessibilityAddTraits(.isButton)
@@ -320,7 +378,7 @@ struct HistoryRow: View {
             } label: {
                 actionLabel(idleTitle: "Reopen", busyTitle: "Reopening…", isBusy: activity == .reopening)
             }
-            .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+            .buttonStyle(WorkspaceButtonStyle(kind: .primary, height: 39))
             .disabled(!canReopen || isPerformingAction)
             .accessibilityIdentifier("\(accessibilityPrefix).reopen")
             .accessibilityAddTraits(.isButton)
@@ -337,10 +395,10 @@ struct HistoryRow: View {
                     ? "Retry is available while the original link remains in the recovery queue."
                     : "Retry is unavailable because the original link is no longer in the recovery queue."))
             } icon: {
-                Image(systemName: "lock")
+                Image(systemName: "info.circle")
             }
                 .font(.system(size: 11))
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         } else if entry.result == .cancelled, !canReopen {
             Text(LocalizedStringKey(reopenDisabledReason))
@@ -388,13 +446,44 @@ struct HistoryRow: View {
             if isPerformingAction {
                 ProgressView().controlSize(.mini)
             } else {
-                Image(systemName: statusSymbol).accessibilityHidden(true)
+                Image(systemName: statusSymbol)
+                    .font(.system(size: 14))
+                    .accessibilityHidden(true)
             }
             Text(LocalizedStringKey(resultText))
         }
         .font(.system(size: 12))
-        .foregroundStyle(SettingsPalette.secondary)
+        .foregroundStyle(statusColor)
         .accessibilityLabel("Result: \(resultText)")
+    }
+
+    private var statusColor: Color {
+        switch entry.result {
+        case .failure: SettingsPalette.danger
+        case .success: SettingsPalette.primary
+        case .processing, .cancelled: SettingsPalette.tertiary
+        }
+    }
+
+    @ViewBuilder
+    private var inlineRecoveryButton: some View {
+        if entry.result == .failure {
+            Button(action: retry) {
+                actionLabel(idleTitle: "Retry", busyTitle: "Retrying…", isBusy: activity == .retrying)
+            }
+            .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 28, horizontalPadding: 12, fontSize: 11))
+            .disabled(!isRetryAvailable || isPerformingAction)
+            .help(isRetryAvailable ? localized("Retry with the browser selected for this request") : localized("The original full URL is no longer available for retry"))
+            .accessibilityIdentifier("\(accessibilityPrefix).inlineRetry")
+        } else if entry.result == .cancelled {
+            Button(action: reopen) {
+                actionLabel(idleTitle: "Reopen", busyTitle: "Reopening…", isBusy: activity == .reopening)
+            }
+            .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 28, horizontalPadding: 12, fontSize: 11))
+            .disabled(!canReopen || isPerformingAction)
+            .help(canReopen ? localized("Reopen the saved safe URL") : reopenDisabledReason)
+            .accessibilityIdentifier("\(accessibilityPrefix).inlineReopen")
+        }
     }
 
     private var urlText: String {
@@ -449,9 +538,9 @@ struct HistoryRow: View {
     private var statusSymbol: String {
         switch entry.result {
         case .processing: "hourglass"
-        case .success: "checkmark.circle.fill"
-        case .failure: "exclamationmark.triangle.fill"
-        case .cancelled: "xmark.circle.fill"
+        case .success: "checkmark.circle"
+        case .failure: "exclamationmark.triangle"
+        case .cancelled: "minus.circle"
         }
     }
 
@@ -467,7 +556,7 @@ struct HistoryRow: View {
     }
 
     private var timeText: String {
-        (entry.completedAt ?? entry.createdAt).formatted(date: .abbreviated, time: .shortened)
+        (entry.completedAt ?? entry.createdAt).formatted(.dateTime.month().day().hour().minute())
     }
 
     private func failureReasonText(_ reason: String) -> String {

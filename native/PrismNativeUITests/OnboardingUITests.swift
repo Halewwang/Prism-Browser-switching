@@ -7,7 +7,8 @@ final class OnboardingUITests: PrismUITestCase {
         XCTAssertTrue(accessibilityText(of: welcome).contains("你的链接"))
         let window = requireMainWindow(in: application)
         XCTAssertEqual(window.frame.width, 668, accuracy: 1)
-        XCTAssertEqual(window.frame.height, 554, accuracy: 1)
+        XCTAssertEqual(window.frame.height, 578, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(requireElement("onboarding.progress.label", in: application).frame.minY - window.frame.minY, 48)
         try attachWindowScreenshot("pen-onboarding-welcome-zh", application: application, appearance: .light)
 
         requireButton("onboarding.welcome.continue", in: application).click()
@@ -17,6 +18,8 @@ final class OnboardingUITests: PrismUITestCase {
         requireButton("onboarding.browsers.rescan", in: application).click()
         _ = requireElement("onboarding.step.testLink", in: application)
         _ = requireElement("onboarding.browsers.browser.invalid.prism.fixture.browser", in: application)
+        XCTAssertTrue(requireButton("onboarding.browsers.rescan", in: application).isHittable)
+        XCTAssertTrue(requireButton("onboarding.browsers.addCustomBrowser", in: application).isHittable)
         XCTAssertTrue(requireButton("onboarding.testLink.start", in: application).isHittable)
         try attachWindowScreenshot("pen-onboarding-browsers-zh", application: application, appearance: .light)
 
@@ -109,7 +112,7 @@ final class OnboardingUITests: PrismUITestCase {
         _ = requireElement("onboarding.step.welcome", in: application)
         let welcomeWindow = requireMainWindow(in: application)
         XCTAssertEqual(welcomeWindow.frame.width, 668, accuracy: 1)
-        XCTAssertEqual(welcomeWindow.frame.height, 554, accuracy: 1)
+        XCTAssertEqual(welcomeWindow.frame.height, 578, accuracy: 1)
         try attachWindowScreenshot(
             "onboarding-welcome",
             application: application,
@@ -151,6 +154,17 @@ final class OnboardingUITests: PrismUITestCase {
         let selector = requireElement("selector.panel", in: application)
         requireElement("selector.browser.invalid.prism.fixture.browser", in: application).click()
         XCTAssertTrue(waitUntil(timeout: 5) { !selector.exists })
+
+        let finish = requireButton("onboarding.testLink.finish", in: application)
+        XCTAssertTrue(finish.isHittable)
+        XCTAssertTrue(requireButton("onboarding.testLink.retest", in: application).isHittable)
+        XCTAssertFalse(application.descendants(matching: .any)["appShell.page.history.heading"].exists)
+        try attachWindowScreenshot("onboarding-complete", application: application, appearance: appearance)
+        requireButton("onboarding.testLink.retest", in: application).click()
+        let repeatedSelector = requireElement("selector.panel", in: application)
+        requireElement("selector.browser.invalid.prism.fixture.browser", in: application).click()
+        XCTAssertTrue(waitUntil(timeout: 5) { !repeatedSelector.exists })
+        requireButton("onboarding.testLink.finish", in: application).click()
 
         let historyURL = application.descendants(matching: .any).matching(
             NSPredicate(format: "identifier ENDSWITH %@", ".url")

@@ -95,7 +95,6 @@
 "Always ask" = "Always ask";
 "Open in preferred browser" = "Open in preferred browser";
 "Open in last used browser" = "Open in last used browser";
-"Preferred browser" = "Preferred browser";
 "Choose a browser" = "Choose a browser";
 "Startup" = "Startup";
 "Open Prism at login" = "Open Prism at login";
@@ -423,3 +422,56 @@
 "Prism is still starting. Try installing the update again in a moment." = "Prism is still starting. Try installing the update again in a moment.";
 
 "Download verified updates in Prism, then install and restart when you choose." = "Download verified updates in Prism, then install and restart when you choose.";
+
+"Prism is the default" = "Prism is the default";
+"Let Prism handle links and route them to the right browser." = "Let Prism handle links and route them to the right browser.";
+"Get new features and improvements." = "Get new features and improvements.";
+"See whether a new version is available." = "See whether a new version is available.";
+"Check Now" = "Check Now";
+"Get the published installer from GitHub." = "Get the published installer from GitHub.";
+"Go to Download" = "Go to Download";
+"%d links" = "%d links";
+"Reset All Settings" = "Reset All Settings";
+"Restore default options without deleting rules or History." = "Restore default options without deleting rules or History.";
+"Reset…" = "Reset…";
+"Reset All Settings?" = "Reset All Settings?";
+"Reset Settings" = "Reset Settings";
+"Restore default options while keeping your rules, History, and History retention limits. Launch at login will be turned off." = "Restore default options while keeping your rules, History, and History retention limits. Launch at login will be turned off.";
+"Prism could not reset settings. Your previous values are still in use." = "Prism could not reset settings. Your previous values are still in use.";
+"Prism reset its saved settings, but could not turn off launch at login." = "Prism reset its saved settings, but could not turn off launch at login.";
+
+"history.failure.title" = "This link could not be opened";
+"rules.editor.sourceDescription" = "Choose a dedicated browser for this application.";
+"keyboard.escapeCancel" = "Esc cancel";
+"rules.editor.domain" = "Domain";
+"picker.search.empty" = "No matching options";
+"%d rules" = "%d rules";
+"Choose a browser .app in the macOS file picker." = "Choose a browser .app in the macOS file picker.";
+"Removing a custom entry does not uninstall the application. Detected browsers do not need to be added manually." = "Removing a custom entry does not uninstall the application. Detected browsers do not need to be added manually.";
+"Smart browser routing for macOS" = "Smart browser routing for macOS";
+"Every link opens in the right browser.\nOpen source, local first." = "Every link opens in the right browser.\nOpen source, local first.";
+"Project Homepage ↗" = "Project Homepage ↗";
+"Report an Issue ↗" = "Report an Issue ↗";
+"A new version is available" = "A new version is available";
+"Upgrade Prism for the latest features and fixes." = "Upgrade Prism for the latest features and fixes.";
+"Remind me later" = "Remind me later";
+"rules.page.searchPlaceholder" = "Search rule names, conditions, or browsers";
+"rules.page.newRule" = "New Rule";
+"rules.page.openSettings" = "Go to Settings";
+"rules.condition.urlContains" = "URL contains %@";
+"rules.condition.sourceApplication" = "Source application is %@";
+"browsers.addButton" = "Add Browser";
+"browsers.available" = "Available";
+"browsers.reselectApplication" = "Custom browser · Choose the application again";
+"update.releaseNotesVersion" = "Release Notes · Prism %@";
+"history.clearButton" = "Clear History";
+
+"Start Using Prism" = "Start Using Prism";
+"Test Again" = "Test Again";
+"pageState.clearFilters" = "Clear Filters";
+"Loading History" = "Loading History";
+"Reading recently handled links…" = "Reading recently handled links…";
+"History could not be loaded" = "History could not be loaded";
+"Your History remains unchanged. Try reading it again." = "Your History remains unchanged. Try reading it again.";
+"rules.empty.title" = "Start with your first rule";
+"rules.empty.message" = "Send work links to your work browser,\nand everyday browsing to your favorite apps.";

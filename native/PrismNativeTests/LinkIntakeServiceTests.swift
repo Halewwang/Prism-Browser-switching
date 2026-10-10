@@ -191,7 +191,7 @@ import Testing
     #expect(bootstrap.snapshot().map(\.url.host) == ["a.example", "b.example", "c.example"])
     await store.releaseSuspendedSave()
     #expect(await reopened.value?.id == fixedUUID(621))
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(await queue.snapshot().map(\.url.host) == ["a.example", "b.example", "c.example"])
     #expect(await queue.snapshot().map(\.id) == [fixedUUID(620), fixedUUID(621), fixedUUID(622)])
     let b = try #require((await queue.snapshot()).first { $0.url.host == "b.example" })
@@ -213,7 +213,7 @@ import Testing
     #expect(intake.capture(url: URL(string: "https://a-fails.example")!, senderPID: nil))
     await store.failNextSave()
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(intake.recoveryState == .persistenceRetryRequired)
 
     let result = await intake.enqueueReopened(
@@ -224,7 +224,7 @@ import Testing
     #expect(result == nil)
     #expect(bootstrap.snapshot().map(\.url.host) == ["a-fails.example"])
     #expect(await intake.retryPendingPersistenceAfterUserAction())
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(await queue.snapshot().map(\.url.host) == ["a-fails.example"])
 }
 
@@ -428,7 +428,7 @@ import Testing
     intake.capture(url: URL(string: "https://first-retry.example")!, senderPID: nil)
     await store.failNextSave()
     intake.finishRestorationAndStartDraining(routeAfterDraining: true)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(intake.recoveryState == .persistenceRetryRequired)
 
     await store.suspendNextSave()
@@ -478,7 +478,7 @@ import Testing
     await coordinator.waitUntilSuspended()
 
     intake.capture(url: URL(string: "https://second-durable.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     #expect(bootstrap.snapshot().isEmpty)
     #expect(await queue.snapshot().map(\.url.host) == [
@@ -536,7 +536,7 @@ import Testing
     await launcher.waitUntilStarted(count: 1)
 
     intake.capture(url: URL(string: "https://second-handoff.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     #expect(bootstrap.snapshot().isEmpty)
     #expect(await queue.snapshot().map(\.state) == [.launching, .queued])
@@ -601,7 +601,7 @@ import Testing
     intake.finishRestorationAndStartDraining()
     await launcher.waitUntilStarted()
     intake.capture(url: URL(string: "https://ask-second.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     var askSettings = automaticSettings
     askSettings.unmatchedBehavior = .alwaysAsk
     askSettings.preferredBrowserID = nil
@@ -647,7 +647,7 @@ import Testing
     intake.finishRestorationAndStartDraining()
     await launcher.waitUntilStarted(count: 1)
     intake.capture(url: URL(string: "https://failed-second.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     launcher.succeedNext()
     await launcher.waitUntilStarted(count: 2)
@@ -704,7 +704,7 @@ import Testing
     }
     await launcher.waitUntilStarted()
     intake.capture(url: URL(string: "https://ask-after-manual.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     #expect(bootstrap.snapshot().isEmpty)
     #expect(launcher.handoffCount == 1)
@@ -756,7 +756,7 @@ import Testing
     await launcher.waitUntilStarted(count: 1)
     await store.failNextSave()
     intake.capture(url: URL(string: "https://automatic-c.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     launcher.succeedNext()
     await intake.waitForDrainForTesting()
@@ -764,7 +764,7 @@ import Testing
     #expect(bootstrap.snapshot().map(\.url.host) == ["automatic-c.example"])
 
     _ = await intake.retryPendingPersistenceAfterUserAction()
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(launcher.openedURLs.map(\.host) == ["automatic-a.example"])
     #expect(bootstrap.snapshot().isEmpty)
 
@@ -827,10 +827,10 @@ import Testing
     }
     await launcher.waitUntilStarted(count: 1)
     intake.capture(url: URL(string: "https://durable-before-pause.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     await store.failNextSave()
     intake.capture(url: URL(string: "https://buffered-by-pause.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     launcher.succeedNext()
     await manualSelection.value
@@ -841,7 +841,7 @@ import Testing
     #expect(presenter.presentationCount == 1)
 
     _ = await intake.retryPendingPersistenceAfterUserAction()
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(launcher.openedURLs.map(\.host) == ["manual-before-pause.example"])
     #expect(bootstrap.snapshot().isEmpty)
 
@@ -880,7 +880,7 @@ import Testing
     await store.failNextSave()
 
     intake.capture(url: URL(string: "https://failed-persistence.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     intake.capture(url: URL(string: "https://queued-behind-failure.example")!, senderPID: nil)
 
     #expect(bootstrap.snapshot().map(\.url.host) == [
@@ -897,7 +897,7 @@ import Testing
     #expect(intake.routingWorkerStartCount == 1)
 
     _ = await intake.retryPendingPersistenceAfterUserAction()
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     #expect(bootstrap.snapshot().isEmpty)
     #expect(await queue.snapshot().map(\.url.host) == [
@@ -930,10 +930,10 @@ import Testing
     await coordinator.waitUntilSuspended()
     await store.failNextSave()
     intake.capture(url: URL(string: "https://waiting-for-resume.example")!, senderPID: nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
 
     _ = await intake.retryPendingPersistenceAfterUserAction()
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     await intake.resumeRoutingAfterRecoveryUserAction()
 
     #expect(coordinator.processNextCount == 1)
@@ -2323,7 +2323,7 @@ private func fixedUUID(_ value: Int) -> UUID {
     #expect(intake.canTerminateForUpdate)
     intake.capture(url: URL(string: "https://arrived-before-terminate.example")!, senderPID: nil)
     #expect(!intake.canTerminateForUpdate)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect(!intake.canTerminateForUpdate)
     #expect(await store.currentSnapshot().pendingRequests.map(\.url.host) == ["arrived-before-terminate.example"])
     intake.cancelUpdateTermination()

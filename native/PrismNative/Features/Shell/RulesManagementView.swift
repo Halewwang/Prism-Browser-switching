@@ -22,6 +22,9 @@ struct RulesManagementView: View {
     @State private var saveUndo = RuleSaveUndo()
     @State private var editorIntents = RuleEditorIntentCoordinator()
     @State private var editorHostVisible = false
+    @State private var hoveredRuleID: UUID?
+    @State private var showsRoutingPreview = false
+    @State private var previewRuleToEdit: RoutingRule?
 
     var body: some View {
         PageColumn {
@@ -48,31 +51,41 @@ struct RulesManagementView: View {
                 .accessibilityIdentifier("rules.savedNotice")
             }
             HStack(spacing: 9) {
-                Image(systemName: "info.circle")
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 16))
+                    .foregroundStyle(SettingsPalette.primary)
                 Text("URL rules are matched first, followed by source applications. Rules in each group run in order.")
                     .font(.system(size: 13))
             }
-            .foregroundStyle(SettingsPalette.secondary)
+            .foregroundStyle(SettingsPalette.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 12))
 
             if isLoading {
-                ProgressView("Loading rules…")
-                    .frame(maxWidth: .infinity, minHeight: 180)
+                PageStateView(model: .loading(title: "Loading rules…"))
             } else if !searchText.isEmpty && filteredRules.isEmpty {
-                ContentUnavailableView(
-                    "No matching rules",
-                    systemImage: "magnifyingglass",
-                    description: Text("Try a different search.")
-                )
-                .frame(maxWidth: .infinity, minHeight: 180)
+                PageStateView(model: .empty(
+                    iconSystemName: "magnifyingglass",
+                    title: "No matching rules",
+                    message: "Try a different search.",
+                    actions: [PageStateAction(id: "rules.clearFilters", title: "pageState.clearFilters", accessibilityIdentifier: "rules.clearFilters")]
+                )) { _ in
+                    searchText = ""
+                }
+                .accessibilityIdentifier("rules.emptyFilter")
+            } else if rules.isEmpty {
+                PageStateView(model: .empty(
+                    iconSystemName: "list.bullet",
+                    title: "rules.empty.title",
+                    message: "rules.empty.message",
+                    actions: [PageStateAction(id: "rules.emptyCreate", title: "rules.page.newRule", accessibilityIdentifier: "rules.emptyCreate")]
+                )) { _ in beginCreatingRule() }
+                .disabled(browsers.allSatisfy { $0.availability != .available })
             } else {
                 ruleGroup(title: "URL Rules", groupPriority: "01", rules: filteredURLRules, orderedRules: urlRules)
                 ruleGroup(title: "Source Application Rules", groupPriority: "02", rules: filteredSourceRules, orderedRules: sourceRules)
-            }
-            RuleRoutingPreviewView(rules: rules, browsers: browsers, applications: installedApplications, settings: environment.settings) { rule in
-                beginEditingRule(rule)
             }
             unmatchedBehaviorCard
         }
@@ -114,6 +127,41 @@ struct RulesManagementView: View {
                 save(updatedRule, reportsError: false)
             }
         }
+        .sheet(isPresented: $showsRoutingPreview, onDismiss: {
+            let dismissedID = editorIntents.activePresentationID
+            Task { @MainActor in
+                await Task.yield()
+                if let dismissedID {
+                    guard editorIntents.finishDismissal(id: dismissedID) else { return }
+                }
+                if let rule = previewRuleToEdit {
+                    previewRuleToEdit = nil
+                    beginEditingRule(rule)
+                }
+                resumePendingEditorIntent()
+            }
+        }) {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack {
+                    Text(String(localized: "rules.preview.title", defaultValue: "Test routing rules"))
+                        .font(.system(size: 23, weight: .semibold))
+                    Spacer()
+                    Button { showsRoutingPreview = false } label: {
+                        Image(systemName: "xmark").font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Close")
+                }
+                RuleRoutingPreviewView(rules: rules, browsers: browsers, applications: installedApplications, settings: environment.settings) { rule in
+                    previewRuleToEdit = rule
+                    showsRoutingPreview = false
+                }
+            }
+            .padding(28)
+            .frame(width: 520)
+            .background(SettingsPalette.elevated)
+        }
         .confirmationDialog(
             "Delete this rule?",
             isPresented: Binding(
@@ -144,46 +192,66 @@ struct RulesManagementView: View {
 
     private var searchRow: some View {
         HStack(spacing: 12) {
-            WorkspaceSearchField(placeholder: "Search rules", text: $searchText)
+            WorkspaceSearchField(placeholder: String(localized: "rules.page.searchPlaceholder", defaultValue: "Search rule names, conditions, or browsers"), text: $searchText)
                 .frame(width: 340)
                 .accessibilityIdentifier("rules.search")
             Spacer(minLength: 12)
-            Button("Create Rule", systemImage: "plus") { beginCreatingRule() }
-                .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+            Button { beginCreatingRule() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus").frame(width: 16, height: 16)
+                    Text(String(localized: "rules.page.newRule", defaultValue: "New Rule"))
+                }
+            }
+                .buttonStyle(WorkspaceButtonStyle(kind: .primary, height: 56, horizontalPadding: 20, fontSize: 14))
                 .disabled(browsers.allSatisfy { $0.availability != .available })
                 .accessibilityIdentifier("rules.create")
         }
     }
 
     private var unmatchedBehaviorCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.turn.down.right")
-                .font(.system(size: 17))
-                .foregroundStyle(SettingsPalette.secondary)
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 18))
+                .foregroundStyle(SettingsPalette.muted)
             VStack(alignment: .leading, spacing: 4) {
                 Text("No matching rule")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SettingsPalette.tertiary)
                 Text(LocalizedStringKey(unmatchedBehaviorDescription))
                     .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.tertiary)
             }
             Spacer(minLength: 12)
             if let onOpenSettings {
                 Button(action: onOpenSettings) {
                     HStack(spacing: 5) {
-                        Text("Open Settings")
-                        Image(systemName: "arrow.right")
+                        Text(String(localized: "rules.page.openSettings", defaultValue: "Go to Settings"))
+                        Image(systemName: "arrow.up.right")
                     }
                 }
                 .buttonStyle(WorkspaceButtonStyle(kind: .quiet))
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13))
                 .accessibilityIdentifier("rules.openSettings")
             }
+            Menu {
+                Button(String(localized: "rules.preview.title", defaultValue: "Test routing rules")) { beginRoutingPreview() }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16))
+                    .foregroundStyle(SettingsPalette.muted)
+                    .frame(width: 16, height: 28)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(String(localized: "rules.preview.title", defaultValue: "Test routing rules"))
+            .accessibilityIdentifier("rules.preview.open")
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 15)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 10))
+        .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(SettingsPalette.borderSubtle, lineWidth: 1))
     }
 
     private var unmatchedBehaviorDescription: String {
@@ -197,6 +265,10 @@ struct RulesManagementView: View {
     private var filteredRules: [RoutingRule] {
         guard !searchText.isEmpty else { return rules }
         return rules.filter { rule in
+            if case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher,
+               bundleIdentifier.localizedCaseInsensitiveContains(searchText) {
+                return true
+            }
             return rule.displayName.localizedCaseInsensitiveContains(searchText)
                 || matchDetail(rule).localizedCaseInsensitiveContains(searchText)
                 || browserName(for: rule.targetBrowserID).localizedCaseInsensitiveContains(searchText)
@@ -225,19 +297,17 @@ struct RulesManagementView: View {
         rules: [RoutingRule],
         orderedRules: [RoutingRule]
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(LocalizedStringKey(title))
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(SettingsPalette.secondary)
                     .accessibilityAddTraits(.isHeader)
+                    .frame(height: 22)
                 Spacer()
-                Text("\(String(localized: "Priority")) \(groupPriority)")
+                Text("\(String(localized: "Priority")) \(groupPriority) · \(String(format: String(localized: "%d rules"), rules.count))")
                     .font(.system(size: 12))
-                    .foregroundStyle(SettingsPalette.secondary)
-                Text("\(rules.count) rules")
-                    .font(.system(size: 12))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.tertiary)
             }
             SettingsGroup {
                 if rules.isEmpty {
@@ -258,7 +328,7 @@ struct RulesManagementView: View {
                             moveDown: { move(orderedRules, from: orderedIndex, to: orderedIndex + 1) }
                         )
                         if index < rules.count - 1 {
-                            SettingsSeparator(leadingInset: 20)
+                            SettingsSeparator()
                         }
                     }
                 }
@@ -275,42 +345,55 @@ struct RulesManagementView: View {
         moveDown: @escaping () -> Void
     ) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            VStack(spacing: 3) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 10))
-                Text(String(format: "%02d", priority))
-                    .font(.system(size: 10, design: .monospaced))
+            VStack(spacing: 2) {
+                ForEach(0..<3) { _ in
+                    HStack(spacing: 2) {
+                        Circle().frame(width: 2, height: 2)
+                        Circle().frame(width: 2, height: 2)
+                    }
+                }
             }
-            .foregroundStyle(SettingsPalette.secondary)
-            .frame(width: 18)
-            .accessibilityLabel("\(String(localized: "Priority")) \(priority)")
+                .foregroundStyle(SettingsPalette.muted)
+                .frame(width: 16)
+                .accessibilityLabel("\(String(localized: "Priority")) \(priority)")
+            Image(systemName: rule.matcherIcon)
+                .font(.system(size: 16))
+                .foregroundStyle(rule.isEnabled ? SettingsPalette.tertiary : SettingsPalette.muted)
+                .frame(width: 34, height: 34)
+                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(rule.displayName)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .foregroundStyle(rule.isEnabled ? SettingsPalette.primary : SettingsPalette.tertiary)
                     .lineLimit(1)
+                    .frame(height: 22)
                 Text(matchDetail(rule))
                     .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher {
-                    Text(sourceManifest.supportStatus(for: bundleIdentifier, on: operatingSystemVersion).message)
-                        .font(.system(size: 12))
-                        .foregroundStyle(SettingsPalette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).sourceSupport")
-                }
+                    .frame(height: 19)
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .help(ruleSupportDescription(rule))
+            .accessibilityHint(ruleSupportDescription(rule))
+            Image(systemName: "arrow.right")
+                .font(.system(size: 16))
+                .foregroundStyle(SettingsPalette.muted)
+                .accessibilityHidden(true)
             HStack(spacing: 7) {
-                browserIcon(for: rule.targetBrowserID)
+                Image(systemName: "safari")
+                    .font(.system(size: 16))
+                    .foregroundStyle(rule.isEnabled ? SettingsPalette.primary : SettingsPalette.muted)
+                    .accessibilityHidden(true)
                 Text(browserName(for: rule.targetBrowserID))
-                    .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(SettingsPalette.tertiary)
                     .lineLimit(1)
             }
-            .frame(width: 138, alignment: .leading)
+            .frame(width: 155, alignment: .leading)
             Toggle("Enable rule", isOn: Binding(
                 get: { rule.isEnabled },
                 set: { _ in toggle(rule) }
@@ -338,8 +421,9 @@ struct RulesManagementView: View {
                     systemImage: "ellipsis"
                 )
                 .labelStyle(.iconOnly)
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 28, height: 28)
+                .font(.system(size: 16))
+                .foregroundStyle(SettingsPalette.muted)
+                .frame(width: 16, height: 28)
                 .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
@@ -348,26 +432,42 @@ struct RulesManagementView: View {
             .accessibilityLabel(String(format: String(localized: "Actions for rule %@"), rule.displayName))
             .accessibilityIdentifier("rules.rule.\(rule.id.uuidString).actions")
         }
-        .padding(.horizontal, 20)
-        .frame(minHeight: 72)
+        .padding(.horizontal, 18)
+        .frame(minHeight: 82)
+        .background(hoveredRuleID == rule.id ? SettingsPalette.elevated : .clear)
+        .onHover { hoveredRuleID = $0 ? rule.id : nil }
+    }
+
+    private func ruleSupportDescription(_ rule: RoutingRule) -> String {
+        if case let .sourceBundleIdentifier(bundleIdentifier) = rule.matcher {
+            return sourceManifest.supportStatus(for: bundleIdentifier, on: operatingSystemVersion).message
+        }
+        return matchDetail(rule)
+    }
+
+    private func beginRoutingPreview() {
+        guard draft == nil, errorMessage == nil, !showsRoutingPreview,
+              editorIntents.beginPresentation(takePending: { nil }) != nil
+        else { return }
+        showsRoutingPreview = true
     }
 
     private func resumePendingEditorIntent() {
-        guard editorHostVisible, draft == nil, errorMessage == nil,
+        guard editorHostVisible, draft == nil, errorMessage == nil, !showsRoutingPreview,
               environment.pendingSelectorRulePrefill != nil
         else { return }
         beginCreatingRule()
     }
 
     private func beginEditingRule(_ rule: RoutingRule) {
-        guard draft == nil, errorMessage == nil,
+        guard draft == nil, errorMessage == nil, !showsRoutingPreview,
               editorIntents.beginPresentation(takePending: { nil }) != nil
         else { return }
         draft = RuleEditorDraft(rule: rule, browsers: browsers)
     }
 
     private func beginCreatingRule() {
-        guard draft == nil, errorMessage == nil,
+        guard draft == nil, errorMessage == nil, !showsRoutingPreview,
               let intent = editorIntents.beginPresentation(takePending: environment.consumeSelectorRulePrefill)
         else { return }
         if case let .savedRule(id) = intent.prefill {
@@ -462,16 +562,6 @@ struct RulesManagementView: View {
         }
     }
 
-    private func browserIcon(for id: BrowserID) -> some View {
-        let browser = browsers.first(where: { $0.id == id })
-        return ApplicationIconView(
-            bundleIdentifier: browser?.bundleIdentifier ?? id.rawValue,
-            applicationURL: browser?.applicationURL,
-            fallbackSymbol: "safari",
-            side: 16
-        )
-    }
-
     private func matchDetail(_ rule: RoutingRule) -> String {
         switch rule.matcher {
         case let .exactHost(host):
@@ -479,9 +569,9 @@ struct RulesManagementView: View {
         case let .hostAndSubdomains(host):
             "\(String(localized: "Domain and subdomains")) · \(host)"
         case let .urlContains(value):
-            "\(String(localized: "URL contains")) · \(value)"
+            String(format: String(localized: "rules.condition.urlContains", defaultValue: "URL contains %@"), value)
         case let .sourceBundleIdentifier(bundleIdentifier):
-            "\(String(localized: "Source application")) · \(bundleIdentifier)"
+            String(format: String(localized: "rules.condition.sourceApplication", defaultValue: "Source application is %@"), installedApplications.first(where: { $0.bundleIdentifier == bundleIdentifier })?.displayName ?? bundleIdentifier)
         }
     }
 
@@ -545,7 +635,6 @@ private struct RuleEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: RuleEditorDraft
-    @State private var applicationSearch = ""
     @State private var saveFailed = false
 
     let browsers: [BrowserDescriptor]
@@ -571,45 +660,59 @@ private struct RuleEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(draft.existingRule == nil ? "Create Rule" : "Edit Rule")
+        VStack(alignment: .leading, spacing: 22) {
+            HStack {
+                Text(draft.existingRule == nil ? String(localized: "rules.page.newRule", defaultValue: "New Rule") : String(localized: "Edit Rule"))
                     .font(.system(size: 23, weight: .semibold))
                     .foregroundStyle(SettingsPalette.primary)
-                Text("Set a condition and choose where matching links should open.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(SettingsPalette.secondary)
-            }
-
-            ViewThatFits(in: .vertical) {
-                editorContent.fixedSize(horizontal: false, vertical: true)
-                ScrollView {
-                    editorContent
+                    .frame(height: 33)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16))
+                        .foregroundStyle(SettingsPalette.iconMuted)
+                        .frame(width: 18, height: 18)
                 }
-                .scrollBounceBehavior(.basedOnSize)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("rules.editor.close")
             }
-            .frame(maxHeight: 400)
+            Text(draft.matchKind == .sourceApplication
+                 ? String(localized: "rules.editor.sourceDescription", defaultValue: "Choose a dedicated browser for this application.")
+                 : String(localized: "Set a condition and choose where matching links should open."))
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(minHeight: 17)
+            ScrollView {
+                editorContent
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: .infinity)
             Rectangle()
                 .fill(SettingsPalette.border)
                 .frame(height: 1)
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
+                Text(String(localized: "keyboard.escapeCancel", defaultValue: "Esc to cancel"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.muted)
                 Spacer()
                 Button("Cancel") { dismiss() }
-                    .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                    .buttonStyle(WorkspaceButtonStyle(kind: .secondary, horizontalPadding: 18))
                     .keyboardShortcut(.cancelAction)
                 Button(draft.existingRule == nil ? "Create Rule" : "Save Changes") {
                     guard let rule = draft.makeRule() else { return }
                     if save(rule) { dismiss() } else { saveFailed = true }
                 }
-                .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+                .buttonStyle(WorkspaceButtonStyle(kind: .primary, horizontalPadding: 18))
                 .disabled(!draft.canSave)
                 .keyboardShortcut(.defaultAction)
+                .help("\(draft.scopeDescription) \(selectedTargetDescription)")
                 .accessibilityIdentifier("rules.editor.save")
             }
         }
         .padding(28)
-        .frame(width: 520)
-        .background(SettingsPalette.group)
+        .frame(width: 520, height: 637)
+        .background(SettingsPalette.elevated)
     }
 
     private var editorContent: some View {
@@ -623,14 +726,13 @@ private struct RuleEditorSheet: View {
                     )
                     .accessibilityIdentifier("rules.editor.match")
                 }
-                editorField("Condition") {
+                editorField(conditionTitle) {
                     if draft.matchKind == .sourceApplication {
-                        WorkspaceSearchField(placeholder: "Search applications", text: $applicationSearch)
-                            .accessibilityIdentifier("rules.editor.applicationSearch")
                         WorkspacePicker(
                             title: "Source application",
                             selection: $draft.matchValue,
-                            options: applicationOptions
+                            options: applicationOptions,
+                            searchPlaceholder: "Search applications"
                         )
                         .onChange(of: draft.matchValue) { _, value in
                             guard draft.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -639,29 +741,17 @@ private struct RuleEditorSheet: View {
                             draft.label = application.displayName
                         }
                         .accessibilityIdentifier("rules.editor.condition")
-                        if let selected = applications.first(where: { $0.bundleIdentifier == draft.matchValue }) {
-                            Text(selected.bundleIdentifier)
-                                .font(.system(size: 12))
-                                .foregroundStyle(SettingsPalette.secondary)
-                        }
                     } else {
                         WorkspaceInputField(placeholder: draft.matchKind.prompt, text: $draft.matchValue)
                             .accessibilityIdentifier("rules.editor.condition")
                     }
-                    Text(LocalizedStringKey(draft.matchKind.hint))
-                        .font(.system(size: 12))
-                        .foregroundStyle(SettingsPalette.secondary)
+                    Text(conditionExplanation)
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsPalette.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let supportStatus = draft.sourceSupportStatus(
-                        manifest: sourceManifest,
-                        operatingSystemVersion: operatingSystemVersion
-                    ) {
-                        Text(supportStatus.message)
-                            .font(.system(size: 12))
-                            .foregroundStyle(SettingsPalette.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("rules.editor.sourceSupport")
-                    }
+                        .frame(minHeight: 17, alignment: .leading)
+                        .help(draft.scopeDescription)
+                        .accessibilityIdentifier(draft.matchKind == .sourceApplication ? "rules.editor.sourceSupport" : "rules.editor.scopePreview")
                 }
                 editorField("Open in") {
                     WorkspacePicker(
@@ -669,21 +759,9 @@ private struct RuleEditorSheet: View {
                         selection: $draft.targetBrowserID,
                         options: browserOptions
                     )
+                    .help(selectedTargetDescription)
                     .accessibilityIdentifier("rules.editor.browser")
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(String(localized: "rules.scope.title", defaultValue: "Review this rule's scope"))
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(draft.scopeDescription)
-                        .font(.system(size: 13))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Label(selectedTargetDescription, systemImage: "arrow.right")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 8))
-                .accessibilityIdentifier("rules.editor.scopePreview")
                 editorField("Rule name (optional)") {
                     WorkspaceInputField(placeholder: "Optional label", text: $draft.label)
                         .accessibilityIdentifier("rules.editor.label")
@@ -698,9 +776,24 @@ private struct RuleEditorSheet: View {
             if saveFailed {
                 Label("Prism could not save this rule. Try again.", systemImage: "exclamationmark.circle")
                     .font(.system(size: 12))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.danger)
             }
         }
+    }
+
+    private var conditionTitle: String {
+        switch draft.matchKind {
+        case .exactDomain, .domainAndSubdomains: String(localized: "rules.editor.domain", defaultValue: "Domain")
+        case .urlContains: String(localized: "URL contains")
+        case .sourceApplication: String(localized: "Source application")
+        }
+    }
+
+    private var conditionExplanation: String {
+        if let supportStatus = draft.sourceSupportStatus(manifest: sourceManifest, operatingSystemVersion: operatingSystemVersion) {
+            return "\(draft.matchValue) · \(supportStatus.message)"
+        }
+        return draft.matcher == nil ? String(localized: String.LocalizationValue(draft.matchKind.hint)) : draft.scopeDescription
     }
 
     private var selectedTargetDescription: String {
@@ -716,13 +809,8 @@ private struct RuleEditorSheet: View {
            !applications.contains(where: { $0.bundleIdentifier == draft.matchValue }) {
             options.append(WorkspacePickerOption(value: draft.matchValue, title: draft.matchValue))
         }
-        options += applications.filter {
-            applicationSearch.isEmpty
-                || $0.bundleIdentifier == draft.matchValue
-                || $0.displayName.localizedStandardContains(applicationSearch)
-                || $0.bundleIdentifier.localizedStandardContains(applicationSearch)
-        }.map {
-            WorkspacePickerOption(value: $0.bundleIdentifier, title: $0.displayName)
+        options += applications.map {
+            WorkspacePickerOption(value: $0.bundleIdentifier, title: $0.displayName, searchText: $0.bundleIdentifier)
         }
         return options
     }
@@ -740,8 +828,9 @@ private struct RuleEditorSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(LocalizedStringKey(title))
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(SettingsPalette.primary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(height: 17)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -774,8 +863,9 @@ private extension RoutingRule {
 
     var matcherIcon: String {
         switch matcher {
-        case .sourceBundleIdentifier: "app.badge"
-        case .exactHost, .hostAndSubdomains, .urlContains: "globe"
+        case .sourceBundleIdentifier: "briefcase"
+        case .exactHost, .hostAndSubdomains: "globe"
+        case .urlContains: "link"
         }
     }
 }
@@ -791,9 +881,10 @@ private struct RuleRoutingPreviewView: View {
     @State private var sourceBundleID = ""
     @State private var result: RulePreviewResult?
     @State private var invalidInput = false
+    @State private var isExpanded = true
 
     var body: some View {
-        DisclosureGroup(String(localized: "rules.preview.title", defaultValue: "Test routing rules")) {
+        DisclosureGroup(String(localized: "rules.preview.title", defaultValue: "Test routing rules"), isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(String(localized: "rules.preview.description", defaultValue: "Preview the current rules and fallback settings without opening a browser. A selected source is simulated as confirmed."))
                     .font(.system(size: 12))

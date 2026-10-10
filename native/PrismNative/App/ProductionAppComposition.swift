@@ -264,7 +264,7 @@ final class ProductionAppComposition {
         guard await restore(retryFailed: true) else { return false }
         await finishRestoration(allowAutomaticRouting: false)
         if environment.settings.onboardingCompleted {
-            await linkIntakeService.waitForPersistenceForTesting()
+            await linkIntakeService.waitForPersistence()
             _ = await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
         }
         return true
@@ -286,6 +286,7 @@ final class ProductionAppComposition {
         guard didFinishRestoration, environment.settings.onboardingCompleted else {
             return
         }
+        await linkIntakeService.waitForPersistence()
         await linkIntakeService.resumeRoutingAfterRecoveryUserAction()
     }
 

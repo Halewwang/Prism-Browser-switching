@@ -114,7 +114,7 @@ import Testing
     )
     coordinator.continuationRequester = intake
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let settings = OnboardingRoutingSettingsRepository(settings: .defaults, saveFails: false)
     let environment = makeOnboardingRoutingEnvironment(settings: settings)
     let recorder = OnboardingModelRecorder()
@@ -141,9 +141,16 @@ import Testing
     await model.beginTestLink()
 
     #expect(coordinator.presentedRequestIDs.count == 1)
-    #expect(environment.settings.onboardingCompleted)
+    #expect(!environment.settings.onboardingCompleted)
+    #expect(model.testLinkWasAccepted)
     #expect(!model.isTestLinkInProgress)
     #expect(model.alert == nil)
+    #expect(recorder.openedRoutes.isEmpty)
+    #expect(recorder.resumeCount == 0)
+
+    await model.finishSetup()
+
+    #expect(environment.settings.onboardingCompleted)
     #expect(recorder.openedRoutes == [.history])
     #expect(recorder.resumeCount == 1)
 }
@@ -161,7 +168,7 @@ import Testing
         coordinator: coordinator
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let settings = OnboardingRoutingSettingsRepository(settings: .defaults, saveFails: false)
     let environment = makeOnboardingRoutingEnvironment(settings: settings)
     let recorder = OnboardingModelRecorder()
@@ -212,7 +219,7 @@ import Testing
         lastActivatedSource: { nil }
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     let workerCount = intake.workerStartCount
 
     let requestID = await intake.captureForExplicitSelection(
@@ -237,7 +244,7 @@ import Testing
         lastActivatedSource: { nil }
     )
     intake.finishRestorationAndStartDraining(routeAfterDraining: false)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     await pendingStore.suspendNextSave()
 
     #expect(intake.capture(
@@ -255,11 +262,11 @@ import Testing
 
     await pendingStore.releaseSuspendedSave()
     #expect(await testCapture.value == nil)
-    await intake.waitForPersistenceForTesting()
+    await intake.waitForPersistence()
     #expect((await queue.snapshot()).map(\.url.host) == ["older-real-request.example"])
 }
 
-@Test @MainActor func onboardingModelCompletesOnlyAfterItsRealHandoffAndResumesOnce() async throws {
+@Test @MainActor func onboardingModelWaitsForStartUsingAfterItsRealHandoffAndResumesOnce() async throws {
     let fixture = OnboardingModelRoutingFixture(launchOutcomes: [.success])
     await fixture.enterTestLink()
 
@@ -278,6 +285,14 @@ import Testing
 
     #expect(!fixture.model.isTestLinkInProgress)
     #expect(fixture.model.alert == nil)
+    #expect(fixture.model.testLinkWasAccepted)
+    #expect(!fixture.routing.environment.settings.onboardingCompleted)
+    #expect(fixture.recorder.openedRoutes.isEmpty)
+    #expect(fixture.recorder.resumeCount == 0)
+
+    await fixture.model.finishSetup()
+    await fixture.model.finishSetup()
+
     #expect(fixture.routing.environment.settings.onboardingCompleted)
     #expect(fixture.recorder.openedRoutes == [.history])
     #expect(fixture.recorder.resumeCount == 1)
@@ -296,6 +311,11 @@ import Testing
         browserID: onboardingRoutingBrowser.id,
         for: requestID
     )
+
+    #expect(fixture.model.testLinkWasAccepted)
+    #expect(fixture.model.alert == nil)
+    #expect(!fixture.model.completionSaveIsPending)
+    await fixture.model.finishSetup()
 
     #expect(fixture.model.step == .testLink)
     #expect(fixture.model.alert == .settingsNotSaved)
@@ -388,6 +408,11 @@ import Testing
     fixture.routing.launcher.acceptSuspendedHandoff()
     await selection.value
 
+    #expect(fixture.model.testLinkWasAccepted)
+    #expect(!fixture.routing.environment.settings.onboardingCompleted)
+    #expect(fixture.recorder.openedRoutes.isEmpty)
+    await fixture.model.finishSetup()
+
     #expect(fixture.routing.environment.settings.onboardingCompleted)
     #expect(!fixture.model.isTestLinkInProgress)
     #expect(fixture.recorder.openedRoutes == [.history])
@@ -418,6 +443,11 @@ import Testing
         browserID: onboardingRoutingBrowser.id,
         for: request.id
     )
+
+    #expect(fixture.model.testLinkWasAccepted)
+    #expect(!fixture.routing.environment.settings.onboardingCompleted)
+    #expect(fixture.recorder.resumeCount == 0)
+    await fixture.model.finishSetup()
 
     #expect(fixture.routing.environment.settings.onboardingCompleted)
     #expect(fixture.recorder.resumeCount == 1)

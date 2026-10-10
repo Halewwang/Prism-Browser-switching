@@ -392,7 +392,8 @@ struct AppRootView: View {
 
     var body: some View {
         rootContent
-            .frame(minWidth: isShell ? WorkspaceLayout.windowContentWidth : 668, minHeight: isShell ? 640 : 554)
+            .padding(.top, isShell ? 0 : WorkspaceLayout.windowControlClearance)
+            .frame(minWidth: isShell ? WorkspaceLayout.windowContentWidth : 668, minHeight: isShell ? 640 : 554 + WorkspaceLayout.windowControlClearance)
             .background(SettingsPalette.canvas)
             .background(WorkspaceWindowSizing(isShell: isShell))
             .ignoresSafeArea(.container, edges: .top)
@@ -477,7 +478,7 @@ private struct WorkspaceWindowSizing: NSViewRepresentable {
             guard let window, appliedShell != isShell else { return }
             appliedShell = isShell
             let width = isShell ? WorkspaceLayout.windowContentWidth : 668
-            let size = NSSize(width: width, height: isShell ? 800 : 554)
+            let size = NSSize(width: width, height: isShell ? WorkspaceLayout.windowContentHeight : 554 + WorkspaceLayout.windowControlClearance)
             window.contentMinSize = size
             window.contentMaxSize = size
             window.setContentSize(size)

@@ -1,24 +1,27 @@
+import AppKit
 import SwiftUI
 
 struct WorkspaceButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, quiet }
     let kind: Kind
     var height: CGFloat = 37
+    var horizontalPadding: CGFloat? = nil
+    var fontSize: CGFloat = 13
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, kind == .quiet ? 0 : 16)
+            .font(.system(size: fontSize, weight: .medium))
+            .padding(.horizontal, horizontalPadding ?? (kind == .quiet ? 0 : 16))
             .frame(height: height)
-            .foregroundStyle(kind == .primary ? SettingsPalette.actionText : SettingsPalette.primary)
+            .foregroundStyle(kind == .primary ? SettingsPalette.actionText : kind == .secondary ? SettingsPalette.secondary : SettingsPalette.tertiary)
             .background {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(kind == .primary ? SettingsPalette.action : kind == .secondary ? SettingsPalette.group : .clear)
             }
             .overlay {
                 if kind == .secondary {
-                    RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.border, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.borderStrong, lineWidth: 1)
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 8))
@@ -41,9 +44,9 @@ struct WorkspaceToggleStyle: ToggleStyle {
                 Capsule()
                     .fill(configuration.isOn ? SettingsPalette.action : SettingsPalette.switchOff)
                     .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                        Circle().fill(configuration.isOn ? SettingsPalette.actionText : .white).frame(width: 14, height: 14).padding(2)
+                        Circle().fill(SettingsPalette.toggleKnob).frame(width: 16, height: 16).padding(2)
                     }
-                    .frame(width: 34, height: 18)
+                    .frame(width: 34, height: 20)
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
             }
@@ -65,14 +68,14 @@ struct WorkspaceInputField: View {
     var body: some View {
         TextField(LocalizedStringKey(placeholder), text: $text)
             .textFieldStyle(.plain)
-            .font(.system(size: 13))
+            .font(.system(size: 14))
             .focused($isFocused)
-            .padding(.horizontal, 11)
-            .frame(height: 36)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
             .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isFocused ? SettingsPalette.primary : SettingsPalette.border, lineWidth: isFocused ? 2 : 1)
+                    .stroke(isFocused ? SettingsPalette.action : SettingsPalette.border, lineWidth: isFocused ? 2 : 1)
             }
     }
 }
@@ -81,6 +84,7 @@ struct WorkspacePickerOption<Value: Hashable>: Identifiable {
     let value: Value
     let title: String
     var accessibilityIdentifier: String? = nil
+    var searchText: String? = nil
     var id: Value { value }
 }
 
@@ -88,6 +92,9 @@ struct WorkspacePicker<Value: Hashable>: View {
     let title: String
     @Binding var selection: Value
     let options: [WorkspacePickerOption<Value>]
+    var compact = false
+    var searchPlaceholder: String? = nil
+    @State private var searchQuery = ""
     @State private var isPresented = false
     @State private var highlightedIndex = 0
     @FocusState private var optionsFocused: Bool
@@ -95,34 +102,46 @@ struct WorkspacePicker<Value: Hashable>: View {
 
     var body: some View {
         Button(action: toggleOptions) {
-            HStack(spacing: 12) {
+            HStack(spacing: compact ? 6 : 12) {
                 Text(LocalizedStringKey(options.first(where: { $0.value == selection })?.title ?? title))
                     .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(SettingsPalette.secondary)
+                if !compact { Spacer(minLength: 0) }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: compact ? 12 : 14, weight: .regular))
+                    .foregroundStyle(SettingsPalette.iconMuted)
+                    .frame(width: 14, height: 14)
             }
-            .font(.system(size: 13))
-            .foregroundStyle(SettingsPalette.primary)
-            .padding(.horizontal, 11)
-            .frame(height: 36)
-            .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
+            .font(.system(size: compact ? 13 : 14))
+            .foregroundStyle(compact ? SettingsPalette.tertiary : SettingsPalette.secondary)
+            .padding(.horizontal, compact ? 10 : 14)
+            .frame(height: compact ? 31 : 44)
+            .background(compact ? SettingsPalette.elevated : SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(triggerFocused ? SettingsPalette.primary : SettingsPalette.border, lineWidth: triggerFocused ? 2 : 1)
+                    .stroke(triggerFocused ? SettingsPalette.action : SettingsPalette.border, lineWidth: triggerFocused ? 2 : 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .focusable()
+        .focusEffectDisabled()
         .focused($triggerFocused)
         .onKeyPress(.space) {
-            toggleOptions()
+            confirmOrOpenOptions()
             return .handled
         }
         .onKeyPress(.return) {
-            toggleOptions()
+            confirmOrOpenOptions()
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            guard isPresented else { return .ignored }
+            moveHighlight(by: -1)
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            guard isPresented else { return .ignored }
+            moveHighlight(by: 1)
             return .handled
         }
         .onKeyPress(.escape) {
@@ -133,11 +152,27 @@ struct WorkspacePicker<Value: Hashable>: View {
         .help(LocalizedStringKey(options.first(where: { $0.value == selection })?.title ?? title))
         .accessibilityLabel(LocalizedStringKey(title))
         .accessibilityValue(Text(LocalizedStringKey(options.first(where: { $0.value == selection })?.title ?? title)))
+        .background {
+            WorkspacePickerKeyboardMonitor(
+                presentation: $isPresented,
+                handlesSpace: searchPlaceholder == nil,
+                moveHighlight: moveHighlight,
+                confirmSelection: selectHighlightedOption
+            )
+            .accessibilityHidden(true)
+        }
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+          VStack(spacing: 0) {
+            if let searchPlaceholder {
+                WorkspaceSearchField(placeholder: searchPlaceholder, text: $searchQuery)
+                    .padding(6)
+                    .onSubmit { selectHighlightedOption() }
+                    .accessibilityIdentifier("workspace.picker.search.\(title)")
+            }
             ScrollViewReader { proxy in
               ScrollView {
                VStack(spacing: 3) {
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                ForEach(Array(filteredOptions.enumerated()), id: \.element.id) { index, option in
                     Button {
                         selection = option.value
                         isPresented = false
@@ -163,33 +198,40 @@ struct WorkspacePicker<Value: Hashable>: View {
                     .onHover { if $0 { highlightedIndex = index } }
                     .id(index)
                 }
+                if filteredOptions.isEmpty {
+                    Text(String(localized: "picker.search.empty", defaultValue: "No matching options"))
+                        .font(.system(size: 13))
+                        .foregroundStyle(SettingsPalette.tertiary)
+                        .padding(10)
+                }
                }
                .padding(6)
               }
-              .frame(width: 260, height: min(320, CGFloat(options.count) * 35 + 9))
+              .frame(width: 260, height: min(320, max(44, CGFloat(filteredOptions.count) * 35 + 9)))
               .onChange(of: highlightedIndex) { _, index in proxy.scrollTo(index) }
             }
+          }
             .background(SettingsPalette.group)
+            .onChange(of: searchQuery) { _, _ in highlightedIndex = 0 }
             .focusable()
             .focused($optionsFocused)
             .defaultFocus($optionsFocused, true)
-            .onAppear { optionsFocused = true }
-            .onDisappear {
-                guard !isPresented else { return }
-                optionsFocused = false
-                triggerFocused = true
+            .task {
+                await Task.yield()
+                guard isPresented else { return }
+                optionsFocused = true
             }
+            .onDisappear(perform: restoreTriggerFocus)
             .onKeyPress(.upArrow) {
-                highlightedIndex = max(0, highlightedIndex - 1)
+                moveHighlight(by: -1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
-                highlightedIndex = min(options.count - 1, highlightedIndex + 1)
+                moveHighlight(by: 1)
                 return .handled
             }
             .onKeyPress(.return) {
-                if options.indices.contains(highlightedIndex) { selection = options[highlightedIndex].value }
-                isPresented = false
+                selectHighlightedOption()
                 return .handled
             }
             .onKeyPress(.escape) {
@@ -200,15 +242,164 @@ struct WorkspacePicker<Value: Hashable>: View {
         .onChange(of: isPresented) { _, presented in
             if !presented {
                 optionsFocused = false
-                triggerFocused = true
+                restoreTriggerFocus()
             }
+        }
+        .onDisappear { isPresented = false }
+    }
+
+    private var filteredOptions: [WorkspacePickerOption<Value>] {
+        Self.matchingOptions(options, query: searchPlaceholder == nil ? "" : searchQuery)
+    }
+
+    static func matchingOptions(_ options: [WorkspacePickerOption<Value>], query: String) -> [WorkspacePickerOption<Value>] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty ? options : options.filter {
+            $0.title.localizedStandardContains(query) || ($0.searchText?.localizedStandardContains(query) ?? false)
+        }
+    }
+
+    private func selectHighlightedOption() {
+        guard filteredOptions.indices.contains(highlightedIndex) else { return }
+        selection = filteredOptions[highlightedIndex].value
+        isPresented = false
+    }
+
+    private func confirmOrOpenOptions() {
+        if isPresented {
+            selectHighlightedOption()
+        } else {
+            toggleOptions()
+        }
+    }
+
+    private func moveHighlight(by offset: Int) {
+        highlightedIndex = min(max(0, filteredOptions.count - 1), max(0, highlightedIndex + offset))
+    }
+
+    private func restoreTriggerFocus() {
+        Task { @MainActor in
+            // NSPopover returns its parent window's focus after the content disappears.
+            await Task.yield()
+            guard !isPresented else { return }
+            optionsFocused = false
+            triggerFocused = false
+            await Task.yield()
+            guard !isPresented else { return }
+            triggerFocused = true
         }
     }
 
     private func toggleOptions() {
+        searchQuery = ""
         highlightedIndex = options.firstIndex(where: { $0.value == selection }) ?? 0
         optionsFocused = false
-        triggerFocused = false
+        triggerFocused = !isPresented
         isPresented.toggle()
+    }
+}
+
+private struct WorkspacePickerKeyboardMonitor: NSViewRepresentable {
+    let presentation: Binding<Bool>
+    let handlesSpace: Bool
+    let moveHighlight: @MainActor (Int) -> Void
+    let confirmSelection: @MainActor () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> MonitorView {
+        let view = MonitorView()
+        view.setAccessibilityElement(false)
+        return view
+    }
+
+    func updateNSView(_ view: MonitorView, context: Context) {
+        context.coordinator.update(
+            ownerView: view,
+            presentation: presentation,
+            handlesSpace: handlesSpace,
+            moveHighlight: moveHighlight,
+            confirmSelection: confirmSelection
+        )
+    }
+
+    static func dismantleNSView(_ view: MonitorView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    @MainActor
+    final class MonitorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    @MainActor
+    final class Coordinator {
+        private var monitor: Any?
+        private weak var ownerView: NSView?
+        private var presentation: Binding<Bool>?
+        private var handlesSpace = false
+        private var moveHighlight: (@MainActor (Int) -> Void)?
+        private var confirmSelection: (@MainActor () -> Void)?
+
+        func update(
+            ownerView: NSView,
+            presentation: Binding<Bool>,
+            handlesSpace: Bool,
+            moveHighlight: @escaping @MainActor (Int) -> Void,
+            confirmSelection: @escaping @MainActor () -> Void
+        ) {
+            self.ownerView = ownerView
+            self.presentation = presentation
+            self.handlesSpace = handlesSpace
+            self.moveHighlight = moveHighlight
+            self.confirmSelection = confirmSelection
+            if presentation.wrappedValue {
+                guard monitor == nil else { return }
+                // Consume popup keys before AppKit dispatches a sheet's cancel equivalent.
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                    let consumed = MainActor.assumeIsolated { self?.handle(event) ?? false }
+                    return consumed ? nil : event
+                }
+            } else {
+                stop()
+            }
+        }
+
+        func stop() {
+            guard let monitor else { return }
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> Bool {
+            guard presentation?.wrappedValue == true,
+                  ownerView?.window != nil,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            else { return false }
+
+            // Let an input method finish composing search text before selecting an option.
+            if event.keyCode != 53,
+               let input = NSApp.keyWindow?.firstResponder as? NSTextInputClient,
+               input.hasMarkedText() {
+                return false
+            }
+
+            switch event.keyCode {
+            case 53: // Escape
+                presentation?.wrappedValue = false
+                stop()
+            case 126: // Up
+                moveHighlight?(-1)
+            case 125: // Down
+                moveHighlight?(1)
+            case 36, 76: // Return, keypad Enter
+                confirmSelection?()
+            case 49 where handlesSpace: // Space remains text input in searchable pickers.
+                confirmSelection?()
+            default:
+                return false
+            }
+            return true
+        }
     }
 }

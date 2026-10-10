@@ -30,8 +30,8 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: 15.0
         SWIFT_VERSION: 6.0
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.14.3
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: 1.14.4
+        CURRENT_PROJECT_VERSION: 5
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist
@@ -82,8 +82,8 @@ targets:
         SWIFT_VERSION: 6.0
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) PRISM_PUBLIC_TEST
         ENABLE_HARDENED_RUNTIME: YES
-        MARKETING_VERSION: 1.14.3
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: 1.14.4
+        CURRENT_PROJECT_VERSION: 5
         SPARKLE_PUBLIC_ED_KEY: ""
     info:
       path: PrismNative/Resources/Info.plist

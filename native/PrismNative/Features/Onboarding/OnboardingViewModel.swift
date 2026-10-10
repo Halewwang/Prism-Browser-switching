@@ -79,15 +79,19 @@ final class OnboardingViewModel {
     }
 
     func advanceFromBrowserScan() async {
-        guard step == .browsers else { return }
+        guard step == .browsers || step == .testLink,
+              !isTestLinkInProgress, !testLinkWasAccepted, !completionSaveIsPending
+        else { return }
         do {
             let scanned = try await browserCatalog.scan()
             usableBrowsers = scanned.filter { $0.availability == .available }
             guard !usableBrowsers.isEmpty else {
+                step = .browsers
                 alert = .noUsableBrowser
                 return
             }
             guard environment.mutateSettings({ $0.unmatchedBehavior = .alwaysAsk }) else {
+                step = .browsers
                 alert = .settingsNotSaved
                 return
             }
@@ -95,12 +99,15 @@ final class OnboardingViewModel {
             step = .testLink
         } catch {
             usableBrowsers = []
+            step = .browsers
             alert = .browserScanFailed
         }
     }
 
     func reportCustomBrowserFailure() {
-        guard step == .browsers else { return }
+        guard step == .browsers || step == .testLink,
+              !isTestLinkInProgress, !testLinkWasAccepted, !completionSaveIsPending
+        else { return }
         alert = .customBrowserFailed
     }
 
@@ -114,6 +121,7 @@ final class OnboardingViewModel {
         }
         let generation = UUID()
         testLinkGeneration = generation
+        testLinkWasAccepted = false
         alert = nil
 
         let session = await testLinkRouter.start(
@@ -187,6 +195,14 @@ final class OnboardingViewModel {
         await completeOnboarding()
     }
 
+    func finishSetup() async {
+        guard step == .testLink, testLinkWasAccepted, !isTestLinkInProgress,
+              !environment.settings.onboardingCompleted
+        else { return }
+        completionSaveIsPending = true
+        await completeOnboarding()
+    }
+
     private func queryCurrentHandler() async {
         do {
             let state = try await defaultBrowserService.status()
@@ -223,8 +239,7 @@ final class OnboardingViewModel {
             testLinkGeneration = nil
             testLinkSession = nil
             testLinkWasAccepted = true
-            completionSaveIsPending = true
-            await completeOnboarding()
+            alert = nil
             return false
         case .cancelled where finishLaterCancellationRequestID == outcome.requestID:
             return false
