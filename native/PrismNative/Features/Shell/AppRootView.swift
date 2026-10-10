@@ -477,7 +477,7 @@ private struct WorkspaceWindowSizing: NSViewRepresentable {
             guard let window, appliedShell != isShell else { return }
             appliedShell = isShell
             let width = isShell ? WorkspaceLayout.windowContentWidth : 668
-            let size = NSSize(width: width, height: isShell ? 800 : 554)
+            let size = NSSize(width: width, height: isShell ? WorkspaceLayout.windowContentHeight : 554)
             window.contentMinSize = size
             window.contentMaxSize = size
             window.setContentSize(size)

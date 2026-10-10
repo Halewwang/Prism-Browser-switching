@@ -305,6 +305,52 @@ import Testing
     #expect(fixture.recorder.openedRoutes == [.history])
 }
 
+@Test @MainActor func acceptedTestCanBeRepeatedBeforeExplicitlyCompletingSetup() async throws {
+    let fixture = OnboardingFixture(handlerState: .active, browsers: [onboardingBrowser])
+    let model = fixture.model
+    await model.advanceFromWelcome()
+    await model.advanceFromBrowserScan()
+    await model.finishSetup()
+    #expect(fixture.recorder.openedRoutes.isEmpty)
+    await model.beginTestLink()
+    let first = try #require(await fixture.queue.snapshot().first)
+    await fixture.routingCoordinator.select(browserID: onboardingBrowser.id, for: first.id)
+    #expect(model.testLinkWasAccepted)
+    #expect(!fixture.environment.settings.onboardingCompleted)
+    #expect(fixture.recorder.openedRoutes.isEmpty)
+
+    await model.beginTestLink()
+    let second = try #require(await fixture.queue.snapshot().first)
+    #expect(second.id != first.id)
+    #expect(!model.testLinkWasAccepted)
+    #expect(model.isTestLinkInProgress)
+    await fixture.routingCoordinator.select(browserID: onboardingBrowser.id, for: second.id)
+
+    #expect(model.testLinkWasAccepted)
+    await model.finishSetup()
+    await model.finishSetup()
+    #expect(try fixture.settingsRepository.load().onboardingCompleted)
+    #expect(fixture.recorder.openedRoutes == [.history])
+    #expect(fixture.recorder.resumeRoutingCount == 1)
+}
+
+@Test @MainActor func rescanRemainsAvailableAtTheIdleTestStepButDoesNotInterruptAnActiveTest() async throws {
+    let fixture = OnboardingFixture(handlerState: .active, browsers: [onboardingBrowser])
+    let model = fixture.model
+    await model.advanceFromWelcome()
+    await model.advanceFromBrowserScan()
+    fixture.settingsRepository.updateDurableSettings { $0.unmatchedBehavior = .preferredBrowser }
+    await model.advanceFromBrowserScan()
+    #expect(try fixture.settingsRepository.load().unmatchedBehavior == .alwaysAsk)
+    #expect(model.step == .testLink)
+
+    await model.beginTestLink()
+    let requestIDs = await fixture.queue.snapshot().map(\.id)
+    await model.advanceFromBrowserScan()
+    #expect(model.isTestLinkInProgress)
+    #expect(await fixture.queue.snapshot().map(\.id) == requestIDs)
+}
+
 @Test @MainActor func browserScanFiltersUnavailableApplications() async {
     let unavailable = makeOnboardingBrowser(
         id: "com.example.unavailable",

@@ -10,7 +10,9 @@ final class AppShellUITests: PrismUITestCase {
         let edit = application.menuItems["Edit"].firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 3))
         edit.click()
-        _ = requireElement("rules.editor.applicationSearch", in: application)
+        requireButton("rules.editor.condition", in: application).click()
+        _ = requireElement("workspace.picker.search.Source application", in: application)
+        application.typeKey(.escape, modifierFlags: [])
         let save = requireButton("rules.editor.save", in: application)
         let match = requireButton("rules.editor.match", in: application)
         XCTAssertEqual(match.value as? String, "Source application")
@@ -31,10 +33,11 @@ final class AppShellUITests: PrismUITestCase {
         XCTAssertTrue(waitUntil(timeout: 3) { !save.exists })
     }
 
-    func testBrowserManagementOpensFromCenterOfSettingsActionRow() throws {
+    func testBrowserManagementOpensFromApplicationMenu() throws {
         let application = launchFixture("workspace", appearance: .light)
         requireElement("appShell.sidebar.settings", in: application).click()
-        requireButton("settings.manageBrowsers", in: application).click()
+        application.menuBars.menuBarItems["Prism"].click()
+        application.menuItems["Manage Browsers"].click()
         _ = requireButton("browsers.rescan", in: application)
         _ = requireButton("browsers.add", in: application)
         try attachWindowScreenshot("review-browser-management", application: application, appearance: .light)
@@ -50,9 +53,8 @@ final class AppShellUITests: PrismUITestCase {
 
         requireElement("appShell.sidebar.rules", in: application).click()
         _ = requireElement("appShell.page.rules.heading", in: application)
-        let emptyRuleGroups = application.staticTexts.matching(identifier: "No rules in this group")
-        XCTAssertTrue(emptyRuleGroups.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(emptyRuleGroups.count, 2)
+        _ = requirePageStateTitle("Start with your first rule", kind: "empty", in: application)
+        _ = requireButton("rules.emptyCreate", in: application)
         _ = requireButton("rules.create", in: application)
         try attachWindowScreenshot(
             "rules-management",
@@ -69,7 +71,8 @@ final class AppShellUITests: PrismUITestCase {
         _ = requireElement("settings.launchAtLogin", in: application)
         let automaticUpdateChecks = requireElement("settings.automaticUpdateChecks", in: application)
         XCTAssertFalse(automaticUpdateChecks.isEnabled)
-        XCTAssertFalse(application.buttons["settings.checkForUpdates"].exists)
+        XCTAssertTrue(application.buttons["settings.checkForUpdates"].exists)
+        XCTAssertFalse(application.buttons["settings.checkForUpdates"].isEnabled)
         try attachWindowScreenshot(
             "settings-management",
             application: application,

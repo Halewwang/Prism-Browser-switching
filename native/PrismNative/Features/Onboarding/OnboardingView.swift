@@ -14,6 +14,7 @@ enum OnboardingActionID: String, CaseIterable, Equatable, Hashable {
     case startTestLink
     case retryTestLink
     case retryCompletionSave
+    case finishSetup
     case finishTestLater
 }
 
@@ -248,14 +249,16 @@ struct OnboardingViewPresentation: Equatable {
             message = "Prism will send a test link through the real selector and confirm that a browser accepts it."
             statusRows = []
             browserRows = []
-            if isTestLinkPreparing {
+            if isScanningBrowsers {
+                activityText = "Looking for installed browsers…"
+            } else if isTestLinkPreparing {
                 activityText = "Preparing the test link…"
             } else if isTestLinkInProgress {
                 activityText = "Waiting for the browser to accept the test link…"
             } else {
                 activityText = nil
             }
-            if completionSaveIsPending || testLinkWasAccepted {
+            if completionSaveIsPending || (testLinkWasAccepted && alert == .settingsNotSaved) {
                 actions = [
                     Self.action(
                         .retryCompletionSave,
@@ -263,6 +266,21 @@ struct OnboardingViewPresentation: Equatable {
                         identifier: "onboarding.testLink.retryCompletionSave",
                         hint: "Save the completed setup without opening another test link",
                         emphasis: .primary
+                    ),
+                ]
+            } else if testLinkWasAccepted {
+                actions = [
+                    Self.action(
+                        .finishSetup, title: "Start Using Prism",
+                        identifier: "onboarding.testLink.finish",
+                        hint: "Save the completed setup and open History",
+                        emphasis: .primary
+                    ),
+                    Self.action(
+                        .retryTestLink, title: "Test Again",
+                        identifier: "onboarding.testLink.retest",
+                        hint: "Open another test link in the real browser selector",
+                        emphasis: .quiet
                     ),
                 ]
             } else if isTestLinkInProgress {
@@ -278,22 +296,38 @@ struct OnboardingViewPresentation: Equatable {
                 ]
             } else {
                 let retry = alert == .testLinkFailed
-                actions = [
-                    Self.action(
-                        retry ? .retryTestLink : .startTestLink,
-                        title: retry ? "Retry Test Link" : "Test Link",
-                        identifier: retry ? "onboarding.testLink.retry" : "onboarding.testLink.start",
-                        hint: "Open the real browser selector for a test link",
-                        emphasis: .primary
-                    ),
-                    Self.action(
-                        .finishTestLater,
-                        title: "Finish Later",
+                let primary = Self.action(
+                    retry ? .retryTestLink : .startTestLink,
+                    title: retry ? "Retry Test Link" : "Test Link",
+                    identifier: retry ? "onboarding.testLink.retry" : "onboarding.testLink.start",
+                    hint: "Open the real browser selector for a test link",
+                    emphasis: .primary,
+                    isEnabled: !isScanningBrowsers
+                )
+                if alert != nil {
+                    actions = [primary, Self.action(
+                        .finishTestLater, title: "Finish Later",
                         identifier: "onboarding.testLink.finishLater",
                         hint: "Finish setup without confirming the test link",
-                        emphasis: .quiet
-                    ),
-                ]
+                        emphasis: .quiet,
+                        isEnabled: !isScanningBrowsers
+                    )]
+                } else {
+                    actions = [primary,
+                        Self.action(
+                            .rescanBrowsers, title: "Rescan",
+                            identifier: "onboarding.browsers.rescan",
+                            hint: "Look for installed browsers again",
+                            emphasis: .quiet, isEnabled: !isScanningBrowsers
+                        ),
+                        Self.action(
+                            .addCustomBrowser, title: "Add Custom Browser",
+                            identifier: "onboarding.browsers.addCustomBrowser",
+                            hint: "Choose another browser application",
+                            emphasis: .quiet, isEnabled: !isScanningBrowsers
+                        ),
+                    ]
+                }
             }
         }
     }
@@ -532,11 +566,11 @@ struct OnboardingView: View {
         HStack {
             Spacer()
             Text(String(format: "PRISM  /  %02d — 04", displayStepNumber))
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(SettingsPalette.secondary)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SettingsPalette.muted)
                 .accessibilityIdentifier("onboarding.progress.label")
         }
-        .frame(height: 14)
+        .frame(height: 16)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Setup progress")
         .accessibilityValue(String(format: String(localized: "Step %d of %d"), displayStepNumber, OnboardingStep.allCases.count))
@@ -567,20 +601,19 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 62, height: 62)
+                    .frame(width: 48, height: 48)
                     .accessibilityHidden(true)
             } else if model.testLinkWasAccepted {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 31))
-                    .foregroundStyle(SettingsPalette.secondary)
-                    .frame(width: 62, height: 62)
-                    .background(SettingsPalette.iconWell, in: RoundedRectangle(cornerRadius: 20))
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 32))
+                    .foregroundStyle(SettingsPalette.iconStrong)
+                    .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
             } else {
                 Image(systemName: stepSymbol)
-                    .font(.system(size: 34, weight: .regular))
-                    .foregroundStyle(SettingsPalette.primary)
-                    .frame(width: 34, height: 34)
+                    .font(.system(size: 32, weight: .regular))
+                    .foregroundStyle(SettingsPalette.iconStrong)
+                    .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
             }
             Text(LocalizedStringKey(displayTitle))
@@ -593,13 +626,13 @@ struct OnboardingView: View {
             Text(displayMessage)
                 .font(.system(size: 13))
                 .lineSpacing(6)
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var titleSize: CGFloat {
-        presentation.step == .welcome || model.testLinkWasAccepted ? 29 : 25
+        25
     }
 
     private var displayTitle: String {
@@ -667,7 +700,7 @@ struct OnboardingView: View {
                         HStack {
                             Text(LocalizedStringKey(row.title))
                                 .font(.system(size: 13))
-                                .foregroundStyle(SettingsPalette.secondary)
+                                .foregroundStyle(SettingsPalette.tertiary)
                             Spacer()
                             Text(LocalizedStringKey(handlerStatusText(row)))
                                 .font(.system(size: 12))
@@ -682,7 +715,7 @@ struct OnboardingView: View {
             }
             Text("If setup did not finish, open System Settings and refresh the status.")
                 .font(.system(size: 11))
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.muted)
         }
     }
 
@@ -715,32 +748,29 @@ struct OnboardingView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(renderedBrowserRows.enumerated()), id: \.element.id) { index, browser in
                         if index > 0 {
-                            Rectangle().fill(SettingsPalette.border).frame(height: 1)
+                            Rectangle().fill(SettingsPalette.sidebar).frame(height: 1)
                         }
                         HStack(spacing: 10) {
-                            Image(systemName: "safari")
-                                .font(.system(size: 21))
-                                .foregroundStyle(SettingsPalette.secondary)
-                                .frame(width: 21)
-                                .accessibilityHidden(true)
+                            ApplicationIconView(bundleIdentifier: browser.id, fallbackSymbol: "safari", side: 18)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(browser.name)
                                     .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(SettingsPalette.primary)
+                                    .foregroundStyle(SettingsPalette.secondary)
                                 Text(browser.location)
                                     .font(.system(size: 11))
-                                    .foregroundStyle(SettingsPalette.secondary)
+                                    .foregroundStyle(SettingsPalette.muted)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                     .help(browser.location)
                             }
                             Spacer()
-                            Text(LocalizedStringKey(browser.statusText))
+                            Text(LocalizedStringKey(browser.statusText == "Ready" ? "browsers.available" : browser.statusText))
                                 .font(.system(size: 11))
                                 .foregroundStyle(SettingsPalette.primary)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 13)
+                        .frame(minHeight: 64)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(browser.accessibilityLabel)
                         .accessibilityIdentifier(browser.accessibilityIdentifier)
@@ -765,16 +795,16 @@ struct OnboardingView: View {
                 onboardingCard {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 20))
-                            .foregroundStyle(SettingsPalette.secondary)
+                            .font(.system(size: 18))
+                            .foregroundStyle(SettingsPalette.iconDefault)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Test link opened")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(SettingsPalette.secondary)
+                                .foregroundStyle(SettingsPalette.tertiary)
                             Text("Link handling and browser launch verified")
                                 .font(.system(size: 11))
-                                .foregroundStyle(SettingsPalette.secondary)
+                                .foregroundStyle(SettingsPalette.muted)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Text("Opened")
@@ -788,7 +818,7 @@ struct OnboardingView: View {
                 Text("Create your first routing rule next, or start using Prism right away.")
                     .font(.system(size: 12))
                     .lineSpacing(6)
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.muted)
             }
         }
     }
@@ -796,13 +826,13 @@ struct OnboardingView: View {
     private func featureRow(icon: String, message: String) -> some View {
         HStack(spacing: 9) {
             Image(systemName: icon)
-                .font(.system(size: 17))
-                .foregroundStyle(SettingsPalette.primary)
-                .frame(width: 17)
+                .font(.system(size: 16))
+                .foregroundStyle(SettingsPalette.iconStrong)
+                .frame(width: 16)
                 .accessibilityHidden(true)
             Text(LocalizedStringKey(message))
-                .font(.system(size: 11))
-                .foregroundStyle(SettingsPalette.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsPalette.tertiary)
         }
     }
 
@@ -812,7 +842,7 @@ struct OnboardingView: View {
             .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12))
             .overlay {
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(SettingsPalette.border, lineWidth: 1)
+                    .stroke(SettingsPalette.borderSubtle, lineWidth: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
@@ -857,31 +887,37 @@ struct OnboardingView: View {
             if presentation.step == .welcome {
                 Text("About one minute")
                     .font(.system(size: 11))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .foregroundStyle(SettingsPalette.muted)
             }
-            ForEach(presentation.actions.filter { $0.emphasis == .quiet }) { action in
-                actionButton(action)
-            }
-            ForEach(presentation.actions.filter { $0.emphasis == .secondary }) { action in
-                actionButton(action)
+            HStack(spacing: 6) {
+                ForEach(Array(presentation.actions.filter { $0.emphasis != .primary }.enumerated()), id: \.element.id) { index, action in
+                    if index > 0 {
+                        Text("·").font(.system(size: 11)).foregroundStyle(SettingsPalette.tertiary)
+                    }
+                    actionButton(action)
+                }
             }
             Spacer(minLength: 12)
             ForEach(presentation.actions.filter { $0.emphasis == .primary }) { action in
                 actionButton(action)
             }
         }
-        .frame(height: 37)
+        .frame(height: 39)
     }
 
     @ViewBuilder
     private func actionButton(_ action: OnboardingActionPresentation) -> some View {
         if action.emphasis == .primary {
             baseButton(action)
-                .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+                .buttonStyle(WorkspaceButtonStyle(kind: .primary, height: 39))
                 .keyboardShortcut(.defaultAction)
         } else {
             baseButton(action)
-                .buttonStyle(WorkspaceButtonStyle(kind: .quiet))
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(height: 39)
+                .contentShape(Rectangle())
         }
     }
 
@@ -901,6 +937,8 @@ struct OnboardingView: View {
         case .setAsDefault: "Set as Default Browser"
         case .finishLinkHandlingLater: "Set Up Later"
         case .startTestLink: "Open Test Link"
+        case .retryTestLink: model.testLinkWasAccepted ? "Test Again" : action.title
+        case .addCustomBrowser: "Add Browser"
         case .retryCompletionSave: action.title
         default: action.title
         }
@@ -928,6 +966,8 @@ struct OnboardingView: View {
             startTestLink()
         case .retryCompletionSave:
             Task { await model.retryCompletionSave() }
+        case .finishSetup:
+            Task { await model.finishSetup() }
         case .finishTestLater:
             Task { await model.finishTestLater() }
         }

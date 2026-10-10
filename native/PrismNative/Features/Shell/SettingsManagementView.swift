@@ -18,17 +18,17 @@ struct SettingsManagementView: View {
     @State private var actionMessage: String?
     @State private var languageRestartRequired = false
     @State private var publishedInstaller: GitHubPublishedInstaller?
-    @State private var publishedInstallerUnavailable = false
     @State private var showBrowserManagement = false
+    @State private var showResetConfirmation = false
 
     var body: some View {
         PageColumn {
             SystemSettingsPageHeader(
-                    title: "Settings",
-                    subtitle: "Control how Prism handles links and keeps local History.",
-                    accessibilityIdentifier: "appShell.page.settings.heading"
-                )
-                settingsCards
+                title: "Settings",
+                subtitle: "Control how Prism handles links and keeps local History.",
+                accessibilityIdentifier: "appShell.page.settings.heading"
+            )
+            settingsCards
         }
         .task { await loadContext() }
         .onAppear { consumeBrowserManagementRequest() }
@@ -61,27 +61,35 @@ struct SettingsManagementView: View {
         } message: {
             Text("Prism will use the selected language the next time it opens.")
         }
+        .alert("Reset All Settings?", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+                .keyboardShortcut(.cancelAction)
+            Button("Reset Settings", role: .destructive) { resetSettings() }
+                .accessibilityIdentifier("settings.confirmReset")
+        } message: {
+            Text("Restore default options while keeping your rules, History, and History retention limits. Launch at login will be turned off.")
+        }
     }
 
     private var settingsCards: some View {
         VStack(alignment: .leading, spacing: 24) {
-            settingsSection("Link Handling", symbol: "link") {
+            settingsSection("Link Handling", symbol: "arrow.triangle.branch") {
                 defaultHandlerRow
-                SettingsSeparator()
+                settingsSeparator
                 settingsToggle(
                     "Use routing rules automatically",
                     detail: "Enabled rules open matching links without asking.",
                     symbol: "arrow.triangle.branch", tint: SettingsPalette.primary,
                     isOn: automaticRulesEnabled, identifier: "settings.automaticRules"
                 )
-                SettingsSeparator()
+                settingsSeparator
                 settingsRow(
                     title: "When no rule matches",
                     detail: "Choose what happens after rules are checked.",
                     symbol: "questionmark.circle", tint: SettingsPalette.primary
                 ) { unmatchedPicker }
                 if environment.settings.unmatchedBehavior == .preferredBrowser {
-                    SettingsSeparator()
+                    settingsSeparator
                     settingsRow(
                         title: "Preferred browser", detail: "Used when no rule matches.",
                         symbol: "safari", tint: SettingsPalette.primary
@@ -89,39 +97,35 @@ struct SettingsManagementView: View {
                 }
             }
 
-            settingsSection("General", symbol: "gearshape") {
+            settingsSection("General", symbol: "slider.horizontal.3") {
                 settingsRow(
                     title: "Language",
                     detail: "Prism applies the language the next time it opens.",
                     symbol: "globe", tint: SettingsPalette.primary
                 ) { languagePicker }
-                SettingsSeparator()
+                settingsSeparator
                 settingsToggle(
                     "Open Prism at login", detail: loginItemDetail,
                     symbol: "person.crop.circle", tint: SettingsPalette.primary,
                     isOn: launchAtLogin, identifier: "settings.launchAtLogin",
                     disabled: isUpdatingLoginItem || environment.loginItemService == nil
                 )
-                SettingsSeparator()
+                settingsSeparator
                 settingsToggle(
                     "Show Prism in the menu bar",
                     detail: "Pause rules, open History, and quit from the menu bar.",
                     symbol: "menubar.rectangle", tint: SettingsPalette.primary,
                     isOn: showMenuBarItem, identifier: "settings.showMenuBarItem"
                 )
-                SettingsSeparator()
-                settingsAction("Manage Browsers", symbol: "safari", tint: SettingsPalette.primary, identifier: "settings.manageBrowsers") {
-                    showBrowserManagement = true
-                }
                 if loginItemState == .requiresApproval {
-                    SettingsSeparator()
+                    settingsSeparator
                     settingsAction("Open Login Items Settings", symbol: "gearshape", tint: SettingsPalette.primary, identifier: "settings.openLoginItems") {
                         environment.loginItemService?.openApprovalSettingsAfterUserAction()
                     }
                 }
             }
 
-            settingsSection("History & Privacy", symbol: "lock.shield") {
+            settingsSection("History & Privacy", symbol: "checkmark.shield") {
                 settingsToggle(
                     "Save History",
                     detail: "Saved links stay on this Mac. Prism removes sensitive URL data before showing or copying them.",
@@ -129,12 +133,12 @@ struct SettingsManagementView: View {
                     isOn: historyEnabled, identifier: "settings.historyEnabled"
                 )
                 if environment.settings.historyEnabled {
-                    SettingsSeparator()
+                    settingsSeparator
                     settingsRow(
                         title: "How many links to keep", detail: "Older links are removed first.",
                         symbol: "number", tint: SettingsPalette.primary
                     ) { historyLimitPicker }
-                    SettingsSeparator()
+                    settingsSeparator
                     settingsRow(
                         title: "How long to keep links", detail: "Links older than this are removed.",
                         symbol: "calendar", tint: SettingsPalette.primary
@@ -142,47 +146,79 @@ struct SettingsManagementView: View {
                 }
             }
 
-            settingsSection("Software Updates", symbol: "arrow.down.circle") {
+            settingsSection("Software Updates", symbol: "arrow.down.to.line") {
                 settingsToggle(
                     "Automatically check for updates", detail: updateCheckDetail,
                     symbol: "arrow.down.circle", tint: SettingsPalette.primary,
                     isOn: automaticUpdateChecks, identifier: "settings.automaticUpdateChecks",
                     disabled: !environment.updateChecker.canCheckForUpdates
                 )
-                if environment.updateChecker.canCheckForUpdates {
-                    SettingsSeparator()
-                    settingsAction("Check for Updates", symbol: "arrow.clockwise", tint: SettingsPalette.primary, identifier: "settings.checkForUpdates") {
-                        environment.updateChecker.checkForUpdates()
+                settingsSeparator
+                settingsRow(
+                    title: "Check for Updates", detail: "See whether a new version is available.",
+                    symbol: "arrow.clockwise", tint: SettingsPalette.primary
+                ) {
+                    Button { environment.updateChecker.checkForUpdates() } label: {
+                        Text("Check Now")
+                            .font(.system(size: 13))
+                            .foregroundStyle(SettingsPalette.tertiary)
+                            .padding(.horizontal, 10)
+                            .frame(height: 31)
+                            .background(SettingsPalette.elevated, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay { RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.border, lineWidth: 1) }
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!environment.updateChecker.canCheckForUpdates)
+                    .opacity(environment.updateChecker.canCheckForUpdates ? 1 : 0.4)
+                    .accessibilityIdentifier("settings.checkForUpdates")
                 }
-                SettingsSeparator()
+                settingsSeparator
                 publishedInstallerRow
             }
 
-            HStack(spacing: 14) {
-                Text("Prism for macOS")
-                Spacer(minLength: 12)
-                Text(version)
-                Button("About Prism") {
-                    NSApp.orderFrontStandardAboutPanel(nil)
+            settingsSection("About", symbol: "info.circle") {
+                settingsRow(
+                    title: "Version", detail: "Link history stays on this Mac.",
+                    symbol: "info.circle", tint: SettingsPalette.primary,
+                    detailColor: SettingsPalette.muted
+                ) {
+                    Text(version)
+                        .font(.system(size: 13))
+                        .foregroundStyle(SettingsPalette.tertiary)
+                        .accessibilityIdentifier("settings.version")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.about")
-                Button("GitHub") {
-                    NSWorkspace.shared.open(GitHubPublishedInstaller.releasesURL)
+                SettingsSeparator(color: SettingsPalette.borderSubtle)
+                settingsRow(
+                    title: "Reset All Settings",
+                    detail: "Restore default options without deleting rules or History.",
+                    symbol: "arrow.counterclockwise", tint: SettingsPalette.primary,
+                    detailColor: SettingsPalette.muted
+                ) {
+                    Button { showResetConfirmation = true } label: {
+                        Text("Reset…")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(SettingsPalette.secondary)
+                            .padding(.horizontal, 10)
+                            .frame(height: 31)
+                            .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay { RoundedRectangle(cornerRadius: 8).stroke(SettingsPalette.borderStrong, lineWidth: 1) }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isUpdatingLoginItem)
+                    .opacity(isUpdatingLoginItem ? 0.4 : 1)
+                    .accessibilityIdentifier("settings.reset")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.openReleases")
             }
-            .font(.system(size: 12))
-            .foregroundStyle(SettingsPalette.secondary)
-            .padding(.horizontal, 2)
         }
         .tint(SettingsPalette.primary)
     }
 
     private func consumeBrowserManagementRequest() {
         if environment.consumeBrowserManagement() { showBrowserManagement = true }
+    }
+
+    private var settingsSeparator: some View {
+        SettingsSeparator(color: SettingsPalette.window)
     }
 
     private func settingsSection<Content: View>(
@@ -199,8 +235,7 @@ struct SettingsManagementView: View {
             WorkspacePickerOption(value: AppLanguage.system, title: "Use System Language", accessibilityIdentifier: "settings.language.system"),
             WorkspacePickerOption(value: AppLanguage.english, title: "English", accessibilityIdentifier: "settings.language.english"),
             WorkspacePickerOption(value: AppLanguage.simplifiedChinese, title: "Simplified Chinese", accessibilityIdentifier: "settings.language.simplifiedChinese")
-        ])
-        .frame(width: 178)
+        ], compact: true)
         .accessibilityIdentifier("settings.language")
     }
 
@@ -209,7 +244,7 @@ struct SettingsManagementView: View {
             WorkspacePickerOption(value: UnmatchedBehavior.alwaysAsk, title: "Always ask"),
             WorkspacePickerOption(value: UnmatchedBehavior.preferredBrowser, title: "Preferred browser"),
             WorkspacePickerOption(value: UnmatchedBehavior.lastUsedBrowser, title: "Last used")
-        ]).frame(width: 178)
+        ], compact: true)
         .accessibilityIdentifier("settings.unmatchedBehavior")
     }
 
@@ -218,15 +253,20 @@ struct SettingsManagementView: View {
             [WorkspacePickerOption(value: BrowserID?.none, title: "Choose a browser")]
             + browsers.filter { $0.availability == .available }.map {
                 WorkspacePickerOption(value: BrowserID?.some($0.id), title: $0.displayName)
-            }
-        ).frame(width: 178)
+            },
+            compact: true
+        )
         .accessibilityIdentifier("settings.preferredBrowser")
     }
 
     private var historyLimitPicker: some View {
         WorkspacePicker(title: "How many links to keep", selection: historyLimit, options:
-            [50, 100, 250, 500, 1_000].map { WorkspacePickerOption(value: $0, title: "\($0)") }
-        ).frame(width: 130)
+            [50, 100, 250, 500, 1_000].map {
+                WorkspacePickerOption(value: $0, title: String(format: NSLocalizedString("%d links", comment: "History limit"), $0))
+            },
+            compact: true
+        )
+        .accessibilityIdentifier("settings.historyLimit")
     }
 
     private var historyRetentionPicker: some View {
@@ -235,25 +275,26 @@ struct SettingsManagementView: View {
             WorkspacePickerOption(value: 30, title: "30 days"),
             WorkspacePickerOption(value: 90, title: "90 days"),
             WorkspacePickerOption(value: 365, title: "1 year")
-        ]).frame(width: 130)
+        ], compact: true)
+        .accessibilityIdentifier("settings.historyRetentionDays")
     }
 
     @ViewBuilder
     private var defaultHandlerRow: some View {
         settingsRow(
             title: "Default web link handler",
-            detail: defaultHandlerState == .active ? "Prism receives both web-link schemes" : defaultHandlerExplanation,
+            detail: defaultHandlerState == .active ? "Let Prism handle links and route them to the right browser." : defaultHandlerExplanation,
             symbol: "link",
             tint: SettingsPalette.primary
         ) {
-            Label {
-                Text(LocalizedStringKey(defaultHandlerLabel))
-            } icon: {
+            HStack(spacing: 6) {
                 Image(systemName: defaultHandlerSymbol)
+                    .font(.system(size: 13))
+                    .frame(width: 14, height: 14)
+                Text(LocalizedStringKey(defaultHandlerLabel))
             }
             .foregroundStyle(SettingsPalette.primary)
-            .font(.system(size: 12, weight: .medium))
-            .labelStyle(.titleAndIcon)
+            .font(.system(size: 13))
         }
         if defaultHandlerState != .active {
             HStack(spacing: 8) {
@@ -287,33 +328,34 @@ struct SettingsManagementView: View {
     private var publishedInstallerRow: some View {
         settingsRow(
             title: "Published installer",
-            detail: publishedInstallerDetail,
+            detail: "Get the published installer from GitHub.",
             symbol: "square.and.arrow.down",
             tint: SettingsPalette.primary
         ) {
-            if let publishedInstaller {
-                Button("Download installer") {
+            Button {
+                if let publishedInstaller {
                     if let checker = environment.updateChecker as? GitHubUpdateChecker {
                         if GitHubPublishedInstaller.isNewer(publishedInstaller.version, than: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") == true {
                             checker.showUpdate(publishedInstaller)
                         } else { checker.checkForUpdates() }
                     } else { NSWorkspace.shared.open(publishedInstaller.downloadURL) }
+                } else {
+                    NSWorkspace.shared.open(GitHubPublishedInstaller.releasesURL)
                 }
-                .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
-                .accessibilityIdentifier("settings.downloadInstaller")
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Go to Download")
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 12))
+                        .frame(width: 14, height: 14)
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsPalette.primary)
+                .frame(minHeight: 28)
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.downloadInstaller")
         }
-    }
-
-    private var publishedInstallerDetail: String {
-        if let publishedInstaller {
-            let channel = publishedInstaller.isPrerelease ? " · " + NSLocalizedString("Public Test", comment: "Release channel") : ""
-            return "\(publishedInstaller.version)\(channel) · \(publishedInstaller.fileName)"
-        }
-        if publishedInstallerUnavailable {
-            return "Prism could not read the published installer from GitHub."
-        }
-        return "Checking the published GitHub installer…"
     }
 
     private var loginItemDetail: String {
@@ -328,11 +370,8 @@ struct SettingsManagementView: View {
     }
 
     private var updateCheckDetail: String {
-        if environment.updateChecker is GitHubUpdateChecker {
-            return "Download verified updates in Prism, then install and restart when you choose."
-        }
-        return environment.updateChecker.canCheckForUpdates
-            ? "Sparkle checks the signed appcast and asks before installing."
+        environment.updateChecker.canCheckForUpdates
+            ? "Get new features and improvements."
             : "Update checks are unavailable in this build."
     }
 
@@ -378,17 +417,20 @@ struct SettingsManagementView: View {
         detail: String,
         symbol: String,
         tint: Color,
+        detailColor: Color = SettingsPalette.tertiary,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .center, spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(LocalizedStringKey(title))
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .frame(minHeight: 20, alignment: .leading)
                 if !detail.isEmpty {
                     Text(LocalizedStringKey(detail))
                         .font(.system(size: 12))
-                        .foregroundStyle(SettingsPalette.secondary)
+                        .foregroundStyle(detailColor)
+                        .frame(minHeight: 17, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -398,8 +440,8 @@ struct SettingsManagementView: View {
                 .layoutPriority(1)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .frame(minHeight: 70)
+        .padding(.vertical, 13)
+        .frame(minHeight: 67)
     }
 
     private var automaticRulesEnabled: Binding<Bool> {
@@ -464,7 +506,7 @@ struct SettingsManagementView: View {
     private var defaultHandlerLabel: String {
         switch defaultHandlerState {
         case .active:
-            "HTTP + HTTPS active"
+            "Prism is the default"
         case .inactive:
             "Needs attention"
         case nil:
@@ -473,7 +515,7 @@ struct SettingsManagementView: View {
     }
 
     private var defaultHandlerSymbol: String {
-        defaultHandlerState == .active ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+        defaultHandlerState == .active ? "checkmark.circle" : "exclamationmark.circle"
     }
 
     private var defaultHandlerExplanation: String {
@@ -515,11 +557,29 @@ struct SettingsManagementView: View {
     private func loadPublishedInstaller() async {
         do {
             publishedInstaller = try await GitHubPublishedInstallerLookup.load()
-            publishedInstallerUnavailable = false
         } catch {
             publishedInstaller = nil
-            publishedInstallerUnavailable = true
         }
+    }
+
+    private func resetSettings() {
+        let previousLanguage = environment.settings.language
+        guard environment.resetSettingsToDefaults() else {
+            actionMessage = "Prism could not reset settings. Your previous values are still in use."
+            return
+        }
+        updateAppLanguagePreference(environment.settings.language)
+        if let loginItemService = environment.loginItemService {
+            do {
+                if [.enabled, .requiresApproval].contains(loginItemService.status()) {
+                    try loginItemService.unregisterAfterUserAction()
+                }
+            } catch {
+                actionMessage = "Prism reset its saved settings, but could not turn off launch at login."
+            }
+            loginItemState = loginItemService.status()
+        }
+        languageRestartRequired = previousLanguage != environment.settings.language && actionMessage == nil
     }
 
     private func refreshDefaultHandler() async {

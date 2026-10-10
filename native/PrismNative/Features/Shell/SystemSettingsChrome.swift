@@ -10,9 +10,10 @@ struct PageColumn<Content: View>: View {
                 VStack(alignment: .leading, spacing: 24) {
                     content()
                 }
+                .frame(maxWidth: 880, alignment: .leading)
                 .padding(.horizontal, WorkspaceLayout.contentInset)
                 .padding(.top, 32)
-                .padding(.bottom, 28)
+                .padding(.bottom, 24)
                 .frame(width: proxy.size.width, alignment: .topLeading)
             }
         }
@@ -29,12 +30,14 @@ struct SystemSettingsPageHeader: View {
         VStack(alignment: .leading, spacing: 7) {
             Text(LocalizedStringKey(title))
                 .font(WorkspaceLayout.pageTitleFont)
+                .frame(minHeight: 39, alignment: .leading)
                 .foregroundStyle(SettingsPalette.primary)
                 .accessibilityIdentifier(accessibilityIdentifier)
                 .accessibilityAddTraits(.isHeader)
             Text(LocalizedStringKey(subtitle))
                 .font(.system(size: 14))
-                .foregroundStyle(SettingsPalette.secondary)
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(minHeight: 20, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,12 +53,13 @@ struct WorkspaceSectionHeader: View {
         HStack(spacing: 7) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .font(.system(size: 14))
+                    .frame(width: 16, height: 16)
+                    .foregroundStyle(SettingsPalette.iconDefault)
                     .accessibilityHidden(true)
             }
             Text(LocalizedStringKey(title))
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let detail {
@@ -64,8 +68,8 @@ struct WorkspaceSectionHeader: View {
                     .foregroundStyle(SettingsPalette.secondary)
             }
         }
-        .foregroundStyle(SettingsPalette.primary)
-        .padding(.horizontal, 2)
+        .foregroundStyle(SettingsPalette.tertiary)
+        .frame(minHeight: 20)
     }
 }
 
@@ -77,12 +81,13 @@ struct WorkspaceSearchField: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13))
-                .foregroundStyle(SettingsPalette.secondary)
+                .font(.system(size: 16))
+                .frame(width: 16, height: 16)
+                .foregroundStyle(SettingsPalette.iconMuted)
                 .accessibilityHidden(true)
             TextField(LocalizedStringKey(placeholder), text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .focused($isFocused)
             if !text.isEmpty {
                 Button {
@@ -98,8 +103,8 @@ struct WorkspaceSearchField: View {
                 .accessibilityIdentifier("workspace.search.clear.\(placeholder)")
             }
         }
-        .padding(.horizontal, 11)
-        .frame(height: 36)
+        .padding(.horizontal, 20)
+        .frame(height: 35)
         .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
@@ -110,23 +115,29 @@ struct WorkspaceSearchField: View {
 
 struct SettingsGroup<Content: View>: View {
     @ViewBuilder var content: () -> Content
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(contrast == .increased ? SettingsPalette.borderStrong : SettingsPalette.borderSubtle, lineWidth: 1)
+        }
     }
 }
 
 struct SettingsSeparator: View {
     var leadingInset: CGFloat = 0
+    var color: Color = SettingsPalette.border
 
     var body: some View {
         Rectangle()
-            .fill(SettingsPalette.border)
+            .fill(color)
             .frame(height: 1)
             .padding(.leading, leadingInset)
             .accessibilityHidden(true)
@@ -134,21 +145,39 @@ struct SettingsSeparator: View {
 }
 
 enum SettingsPalette {
-    static let canvas = adaptive(light: 0.988, dark: 0.10)
-    static let sidebar = adaptive(light: 0.937, dark: 0.14)
-    static let group = adaptive(light: 1, dark: 0.135)
-    static let iconWell = adaptive(light: 0.965, dark: 0.19)
-    static let border = adaptive(light: 0.937, dark: 0.22)
-    static let action = adaptive(light: 0.149, dark: 0.87)
-    static let actionText = adaptive(light: 1, dark: 0.12)
-    static let switchOff = adaptive(light: 0.82, dark: 0.32)
-    static let primary = Color(nsColor: .labelColor)
-    static let secondary = adaptive(light: 0.40, dark: 0.64)
+    static let window = adaptive(light: 0xF6F6F6, dark: 0x1C1C1E)
+    static let canvas = adaptive(light: 0xFCFCFC, dark: 0x303032)
+    static let elevated = canvas
+    static let sidebar = adaptive(light: 0xEFEFEF, dark: 0x3A3A3C)
+    static let group = adaptive(light: 0xFFFFFF, dark: 0x2A2A2C)
+    static let iconWell = window
+    static let border = adaptive(light: 0xE7E7E7, dark: 0x3F3F42)
+    static let borderSubtle = adaptive(light: 0xEFEFEF, dark: 0x343437)
+    static let borderStrong = adaptive(light: 0xD7D7D7, dark: 0x5A5A5E)
+    static let action = adaptive(light: 0x262626, dark: 0xF0F0F0)
+    static let actionText = adaptive(light: 0xFFFFFF, dark: 0x111111)
+    static let switchOff = borderStrong
+    static let toggleKnob = adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let primary = adaptive(light: 0x2C2C2C, dark: 0xF2F2F2)
+    static let secondary = adaptive(light: 0x4A4A4A, dark: 0xD4D4D4)
+    static let tertiary = adaptive(light: 0x686868, dark: 0xA3A3A3)
+    static let muted = adaptive(light: 0x7A7A7A, dark: 0x8A8A8A)
+    static let danger = adaptive(light: 0xB3261E, dark: 0xFF6961)
+    static let surfacePressed = adaptive(light: 0xE7E7E7, dark: 0x48484A)
+    static let statusOK = adaptive(light: 0x3C3C3C, dark: 0xDADADA)
+    static let iconStrong = adaptive(light: 0x333333, dark: 0xE6E6E6)
+    static let iconDefault = adaptive(light: 0x777777, dark: 0xA8A8A8)
+    static let iconMuted = adaptive(light: 0x999999, dark: 0x7C7C7C)
 
-    private static func adaptive(light: CGFloat, dark: CGFloat) -> Color {
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             let value = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-            return NSColor(white: value, alpha: 1)
+            return NSColor(
+                red: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255,
+                alpha: 1
+            )
         }))
     }
 }

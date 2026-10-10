@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installGetURLHandler() {
 #if DEBUG
-        guard !DebugUITestConfiguration.isEnabled else { return }
+        guard !debugUITestMode.isUITesting else { return }
 #endif
         NSAppleEventManager.shared().setEventHandler(
             self,
@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         withReplyEvent replyEvent: NSAppleEventDescriptor
     ) {
 #if DEBUG
-        guard !DebugUITestConfiguration.isEnabled else { return }
+        guard !debugUITestMode.isUITesting else { return }
 #endif
         let senderPID = AppleEventSenderReader.copySenderPID(from: event)
         // The registered handler owns this event; AppKit does not also deliver it
@@ -127,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
 #if DEBUG
-        guard !DebugUITestConfiguration.isEnabled else { return }
+        guard !debugUITestMode.isUITesting else { return }
 #endif
         let senderPID = copyCurrentSenderPID()
         for url in urls where BootstrapLinkBuffer.accepts(url) {

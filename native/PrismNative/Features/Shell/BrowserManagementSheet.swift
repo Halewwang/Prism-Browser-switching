@@ -46,19 +46,25 @@ struct BrowserManagementSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Available browsers")
-                        .font(.system(size: 23, weight: .semibold))
-                    Text("Prism discovers installed browsers. You can also add one manually.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(SettingsPalette.secondary)
-                }
+                Text("Available browsers")
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .frame(height: 33, alignment: .leading)
                 Spacer()
-                Button("Done") { dismiss() }
-                    .buttonStyle(WorkspaceButtonStyle(kind: .quiet))
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14))
+                        .frame(width: 24, height: 33)
+                }
+                    .buttonStyle(WorkspaceButtonStyle(kind: .quiet, height: 33))
                     .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Close")
                     .accessibilityIdentifier("browsers.done")
             }
+            Text("Prism discovers installed browsers. You can also add one manually.")
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsPalette.muted)
+                .frame(height: 19, alignment: .leading)
             ScrollView {
                 SettingsGroup {
                     if browsers.isEmpty {
@@ -79,30 +85,22 @@ struct BrowserManagementSheet: View {
                     } else {
                         ForEach(Array(browsers.enumerated()), id: \.element.managementRowIdentity) { index, browser in
                             browserRow(browser)
-                            if index < browsers.count - 1 { SettingsSeparator() }
+                            if index < browsers.count - 1 { SettingsSeparator(color: SettingsPalette.sidebar) }
                         }
                     }
                 }
             }
-            .frame(maxHeight: 380)
-            if let errorMessage {
-                Label(LocalizedStringKey(errorMessage), systemImage: "exclamationmark.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("browsers.error")
-            }
+            .frame(height: 307)
             HStack(spacing: 10) {
                 Button {
                     Task { await reload() }
                 } label: {
-                    Label("Rescan", systemImage: "arrow.clockwise")
+                    Text("Rescan")
                 }
                 .disabled(isLoading)
-                .buttonStyle(WorkspaceButtonStyle(kind: .secondary))
+                .buttonStyle(WorkspaceButtonStyle(kind: .secondary, height: 39))
                 .accessibilityIdentifier("browsers.rescan")
-                Spacer()
-                Button("Add Custom Browser", systemImage: "plus") {
+                Button("browsers.addButton") {
                     Task {
                         isLoading = true
                         let result = await addCustomBrowser()
@@ -114,19 +112,30 @@ struct BrowserManagementSheet: View {
                         }
                     }
                 }
-                .buttonStyle(WorkspaceButtonStyle(kind: .primary))
+                .buttonStyle(WorkspaceButtonStyle(kind: .primary, height: 39))
                 .disabled(isLoading)
                 .accessibilityIdentifier("browsers.add")
+                Spacer()
             }
-            Text("Removing a custom entry does not uninstall the application.")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsPalette.secondary)
-            Text("Hidden browsers remain available to routing rules and fallback settings.")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsPalette.secondary)
+            Label {
+                Text(LocalizedStringKey(errorMessage ?? "Choose a browser .app in the macOS file picker."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(errorMessage == nil ? SettingsPalette.muted : SettingsPalette.danger)
+            } icon: {
+                Image(systemName: errorMessage == nil ? "folder" : "exclamationmark.circle")
+                    .foregroundStyle(SettingsPalette.iconDefault)
+            }
+            .padding(15)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(SettingsPalette.window, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityIdentifier(errorMessage == nil ? "browsers.pickerHint" : "browsers.error")
+            Text("Removing a custom entry does not uninstall the application. Detected browsers do not need to be added manually.")
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsPalette.muted)
+                .frame(height: 18, alignment: .leading)
         }
         .padding(28)
-        .frame(width: 760)
+        .frame(width: 666, height: 630)
         .background(SettingsPalette.canvas)
         .tint(SettingsPalette.primary)
         .task { await reload() }
@@ -154,50 +163,57 @@ struct BrowserManagementSheet: View {
 
     private func browserRow(_ browser: BrowserDescriptor) -> some View {
         HStack(spacing: 12) {
-            ApplicationIconView(bundleIdentifier: browser.bundleIdentifier, fallbackSymbol: "safari", side: 32)
-            VStack(alignment: .leading, spacing: 4) {
+            ApplicationIconView(bundleIdentifier: browser.bundleIdentifier, applicationURL: browser.applicationURL, fallbackSymbol: "safari", side: 28)
+            VStack(alignment: .leading, spacing: 6) {
                 Text(browser.displayName)
                     .font(.system(size: 14, weight: .medium))
-                Text(browser.applicationURL.path)
-                    .font(.system(size: 12))
                     .foregroundStyle(SettingsPalette.secondary)
+                Text(browser.origin == .custom && browser.availability != .available
+                     ? String(localized: "browsers.reselectApplication") : browser.applicationURL.path)
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsPalette.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(Text(verbatim: browser.applicationURL.path))
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Label(browser.availability == .available ? "Ready" : "Path unavailable", systemImage: browser.availability == .available ? "checkmark.circle" : "exclamationmark.circle")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsPalette.secondary)
-            Toggle("Show in selector", isOn: Binding(
-                get: { !hiddenBrowserIDs.contains(browser.id) },
-                set: { setVisible($0, browser: browser) }
-            ))
-            .toggleStyle(.checkbox)
-            .font(.system(size: 12))
-            .accessibilityIdentifier("browsers.visible.\(browser.id.rawValue)")
-            VStack(spacing: 6) {
-                Button { move(browser, offset: -1) } label: { Image(systemName: "chevron.up") }
-                    .disabled(browsers.first?.managementRowIdentity == browser.managementRowIdentity || browser.availability != .available || isLoading)
-                    .accessibilityLabel(Text(String(format: String(localized: "Move %@ earlier"), browser.displayName)))
-                    .accessibilityIdentifier("browsers.earlier.\(browser.id.rawValue)")
-                Button { move(browser, offset: 1) } label: { Image(systemName: "chevron.down") }
-                    .disabled(browsers.last?.managementRowIdentity == browser.managementRowIdentity || browser.availability != .available || isLoading)
-                    .accessibilityLabel(Text(String(format: String(localized: "Move %@ later"), browser.displayName)))
-                    .accessibilityIdentifier("browsers.later.\(browser.id.rawValue)")
-            }
-            .buttonStyle(.plain)
+            Text(browser.availability == .available ? "browsers.available" : "Path unavailable")
+                .font(.system(size: 11))
+                .foregroundStyle(browser.availability == .available ? SettingsPalette.tertiary : SettingsPalette.danger)
             if browser.origin == .custom && browser.profile == nil {
-                Button("Remove", systemImage: "minus.circle") { pendingRemoval = browser }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text(String(format: String(localized: "Remove %@"), browser.displayName)))
-                    .accessibilityIdentifier("browsers.remove.\(browser.id.rawValue)")
+                Menu { browserActions(browser) } label: {
+                    Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("More actions for \(browser.displayName)")
             }
         }
-        .padding(16)
-        .frame(minHeight: 72)
+        .padding(.horizontal, 14)
+        .frame(height: 76)
+        .contextMenu { browserActions(browser) }
+    }
+
+    @ViewBuilder
+    private func browserActions(_ browser: BrowserDescriptor) -> some View {
+        Toggle("Show in selector", isOn: Binding(
+            get: { !hiddenBrowserIDs.contains(browser.id) },
+            set: { setVisible($0, browser: browser) }
+        ))
+        .accessibilityIdentifier("browsers.visible.\(browser.id.rawValue)")
+        Button(String(format: String(localized: "Move %@ earlier"), browser.displayName)) { move(browser, offset: -1) }
+            .disabled(browsers.first?.managementRowIdentity == browser.managementRowIdentity || browser.availability != .available || isLoading)
+            .accessibilityIdentifier("browsers.earlier.\(browser.id.rawValue)")
+        Button(String(format: String(localized: "Move %@ later"), browser.displayName)) { move(browser, offset: 1) }
+            .disabled(browsers.last?.managementRowIdentity == browser.managementRowIdentity || browser.availability != .available || isLoading)
+            .accessibilityIdentifier("browsers.later.\(browser.id.rawValue)")
+        if browser.origin == .custom && browser.profile == nil {
+            Divider()
+            Button("Remove", role: .destructive) { pendingRemoval = browser }
+                .accessibilityIdentifier("browsers.remove.\(browser.id.rawValue)")
+        }
     }
 
     private func reload() async {

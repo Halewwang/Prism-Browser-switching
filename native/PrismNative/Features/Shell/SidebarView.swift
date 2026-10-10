@@ -34,6 +34,7 @@ struct AppShellDestination: Identifiable {
 
 struct SidebarView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Binding var selection: AppRoute
 
     var body: some View {
@@ -50,7 +51,7 @@ struct SidebarView: View {
                                 .frame(width: 18)
                                 .accessibilityHidden(true)
                             Text(LocalizedStringKey(destination.title))
-                                .font(.system(size: 15, weight: selection == destination.route ? .medium : .regular))
+                                .font(.system(size: 15, weight: selection == destination.route ? .semibold : .medium))
                             Spacer(minLength: 0)
                         }
                         .foregroundStyle(selection == destination.route ? SettingsPalette.primary : SettingsPalette.secondary)
@@ -58,7 +59,10 @@ struct SidebarView: View {
                         .frame(height: 42)
                         .background {
                             if selection == destination.route {
-                                RoundedRectangle(cornerRadius: 8).fill(SettingsPalette.group)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(SettingsPalette.group)
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(SettingsPalette.border, lineWidth: 1))
+                                    .shadow(color: Color.black.opacity(0.06), radius: 4, y: 2)
                             }
                         }
                         .contentShape(Rectangle())
@@ -77,7 +81,10 @@ struct SidebarView: View {
         .frame(width: WorkspaceLayout.sidebarWidth)
         .frame(maxHeight: .infinity)
         .background {
-            WorkspaceLayout.sidebarSurface.ignoresSafeArea(edges: .top)
+            (reduceTransparency ? SettingsPalette.window : WorkspaceLayout.sidebarSurface).ignoresSafeArea(edges: .top)
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(SettingsPalette.border).frame(width: 1)
         }
     }
 
@@ -89,13 +96,15 @@ struct SidebarView: View {
                 .scaledToFit()
                 .frame(width: 36, height: 36)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Prism")
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(SettingsPalette.primary)
+                    .frame(height: 30, alignment: .leading)
                 Text("Your links, in the right place")
-                    .font(.system(size: 11))
-                    .foregroundStyle(SettingsPalette.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(SettingsPalette.tertiary)
+                    .frame(height: 17, alignment: .leading)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -109,23 +118,26 @@ struct SidebarView: View {
     }
 
     private var runtimeStatus: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 7) {
                 Circle()
                     .fill(environment.settings.automaticRulesEnabled ? SettingsPalette.primary : SettingsPalette.secondary)
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
                 Text(environment.settings.automaticRulesEnabled ? "Automatic routing is on" : "Automatic routing is paused")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(SettingsPalette.primary)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SettingsPalette.secondary)
+                    .frame(height: 19, alignment: .leading)
             }
             Text("Records stay on this Mac")
-                .font(.system(size: 11))
-                .foregroundStyle(SettingsPalette.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsPalette.tertiary)
+                .frame(height: 17, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(SettingsPalette.group.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+        .background(SettingsPalette.group, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(SettingsPalette.border, lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("appShell.sidebar.routingStatus")
     }

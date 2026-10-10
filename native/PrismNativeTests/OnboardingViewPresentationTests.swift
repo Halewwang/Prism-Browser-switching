@@ -274,13 +274,22 @@ struct OnboardingViewPresentationTests {
         #expect(!presentation.actions.contains { $0.id == .startTestLink || $0.id == .retryTestLink })
     }
 
-    @Test func idleTestStepStartsTheRealTestAndKeepsFinishLaterHonest() {
+    @Test func idleTestStepOffersBrowserManagementAndTheRealTest() {
         let presentation = makePresentation(step: .testLink)
 
-        #expect(presentation.actions.map(\.id) == [.startTestLink, .finishTestLater])
-        #expect(presentation.actions.map(\.title) == ["Test Link", "Finish Later"])
+        #expect(presentation.actions.map(\.id) == [.startTestLink, .rescanBrowsers, .addCustomBrowser])
+        #expect(presentation.actions.map(\.title) == ["Test Link", "Rescan", "Add Custom Browser"])
         #expect(presentation.message.contains("selector"))
         #expect(presentation.message.contains("browser"))
+    }
+
+    @Test func acceptedTestOffersStartUsingAndRetestWithoutRetryingPersistence() {
+        let presentation = makePresentation(step: .testLink, testLinkWasAccepted: true)
+
+        #expect(presentation.actions.map(\.id) == [.finishSetup, .retryTestLink])
+        #expect(presentation.actions.map(\.title) == ["Start Using Prism", "Test Again"])
+        #expect(presentation.preferredFocusedActionID == .finishSetup)
+        #expect(!presentation.actions.contains { $0.id == .retryCompletionSave })
     }
 
     @Test(arguments: OnboardingAlert.allCasesForPresentationTests)
